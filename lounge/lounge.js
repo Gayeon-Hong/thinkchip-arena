@@ -310,6 +310,61 @@
   }
   // 손인사 신호: 채팅으로 [[hs:a,b]] 를 보내면 같은 라운지의 모두가 두 캐릭터의 손인사를 봐요
   const HS_RE = /^\[\[hs:([a-zA-Z0-9_-]{1,32}),([a-zA-Z0-9_-]{1,32})\]\]$/;
+  // ───────── 리액션: 캐릭터에게 다가가서 누르면 하트·장미·박수·야유 ─────────
+  const RX = {heart: {e: '❤️', label: '하트', expr: 'happy', say: '💕'}, rose: {e: '🌹', label: '장미', expr: 'wink', say: '🌹'}, clap: {e: '👏', label: '박수', expr: 'laugh', say: '👏👏'},
+    boo: {e: '👎', label: '우우~', expr: 'angry', say: '우우우~'}, lol: {e: '😂', label: 'ㅋㅋㅋ', expr: 'laugh', say: 'ㅋㅋㅋ'}};
+  const RX_RE = /^\[\[rx:([a-zA-Z0-9_-]{1,32}),([a-zA-Z0-9_-]{1,32}),([a-z]{2,8})\]\]$/;
+  let rxTarget = null, rxLast = 0;
+  const rxBar = document.createElement('div'); rxBar.className = 'rx-bar'; rxBar.hidden = true; labels.appendChild(rxBar);
+  function approachFor(p) {
+    const a = me.av.position, b = p.av.position, d = Math.hypot(b.x - a.x, b.z - a.z);
+    if (d > 2.6) { const k = (d - 1.6) / d; walkTo(me, a.x + (b.x - a.x) * k, a.z + (b.z - a.z) * k, () => showRx(p)); sendPose(); toast(`${p.name}님에게 다가가는 중…`); }
+    else showRx(p);
+  }
+  function showRx(p) {
+    if (!players.has(p.id)) return; rxTarget = p; rxBar.hidden = false;
+    const fr = loggedIn() && (social().friends || []).some((f) => f.pid === p.id), canAdd = loggedIn() && !fr && !(social().pending || []).includes(p.id);
+    rxBar.innerHTML = `<b>${esc(p.name)}</b><div>${Object.entries(RX).map(([k, r]) => `<button data-rx="${k}" aria-label="${r.label}">${r.e}<small>${r.label}</small></button>`).join('')}${fr ? '<button data-rx-hs="1">🤝<small>손인사</small></button>' : ''}${canAdd ? '<button data-rx-add="1">👥<small>친구</small></button>' : ''}</div>`;
+    clearTimeout(showRx.t); showRx.t = setTimeout(hideRx, 9000);
+  }
+  function hideRx() { rxTarget = null; rxBar.hidden = true; clearTimeout(showRx.t); }
+  rxBar.addEventListener('pointerdown', (e) => e.stopPropagation());
+  rxBar.addEventListener('click', async (e) => {
+    const b = e.target.closest('button'); if (!b || !rxTarget) return; const p = rxTarget;
+    clearTimeout(showRx.t); showRx.t = setTimeout(hideRx, 9000);
+    if (b.dataset.rxHs) { hideRx(); return requestHandshake(p.id); }
+    if (b.dataset.rxAdd) { try { const r = await ACC.call('request', {to: p.id}); toast(r.ok ? (r.friends.some((f) => f.pid === p.id) ? '친구가 됐어요! 🎉' : '친구 신청을 보냈어요') : socialMsg(r.error)); if (r.ok && r.friends.some((f) => f.pid === p.id)) celebrate(p.id); } catch (er) { toast('인터넷 연결을 확인해 주세요'); } return showRx(p); }
+    const k = b.dataset.rx; if (!RX[k]) return;
+    if (Date.now() - rxLast < 900) return; rxLast = Date.now(); // 연타 방지
+    if (!conn || conn.readyState !== 1) { playRx(ME, p.id, k); return; } // 오프라인이면 나만 봐요
+    sendChat(`[[rx:${ME},${p.id},${k}]]`);
+  });
+  // 날아가는 이모지: 보내는 사람 머리 위 → 받는 사람 머리 위로 포물선, 도착하면 톡 터져요
+  const emojiTex = {};
+  function emojiSprite(ch) {
+    if (!emojiTex[ch]) { const c = document.createElement('canvas'); c.width = c.height = 96; const x = c.getContext('2d'); x.font = '72px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(ch, 48, 54); emojiTex[ch] = new THREE.CanvasTexture(c); }
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({map: emojiTex[ch], transparent: true, depthWrite: false})); sp.renderOrder = 9; scene.add(sp); return sp;
+  }
+  const flyers = [];
+  function playRx(fromId, toId, k) {
+    const a = players.get(fromId), b = players.get(toId), r = RX[k]; if (!a || !b || !r) return;
+    const n = k === 'heart' ? 5 : k === 'boo' ? 3 : 3;
+    for (let i = 0; i < n; i++) { const sp = emojiSprite(r.e); sp.scale.setScalar(0.01); flyers.push({sp, a, b, t: -i * 0.12, dur: 0.85 + Math.random() * 0.25, side: (Math.random() - 0.5) * 1.4, k}); }
+    if (k === 'boo') { a.av.userData.armPose = {r: [-1.2, 0], l: [-1.2, 0]}; setTimeout(() => { if (!a.hs) a.av.userData.armPose = null; }, 900); }
+    else { a.av.userData.armPose = {r: [-2.3, 0]}; setTimeout(() => { if (!a.hs) a.av.userData.armPose = null; }, 700); } // 던지는 손짓
+    setTimeout(() => { if (!players.has(b.id)) return; setExpr(b, r.expr, 3500); say(b, r.say); }, 900);
+    if (fromId === ME || toId === ME) chatLine('', `${fromId === ME ? '나' : otherName({pid: a.id, name: a.name})} → ${toId === ME ? '나' : otherName({pid: b.id, name: b.name})} ${r.e} ${r.label}`, true);
+  }
+  function stepFlyers(dt) {
+    for (let i = flyers.length - 1; i >= 0; i--) { const f = flyers[i]; f.t += dt; if (f.t < 0) continue;
+      const u = Math.min(1, f.t / f.dur), pa = f.a.av.position, pb = f.b.av.position;
+      if (!players.has(f.a.id) || !players.has(f.b.id) || u >= 1) { if (u >= 1 && players.has(f.b.id)) { const at = pb.clone(); at.y = 2.4; spark(at, f.k === 'heart'); } scene.remove(f.sp); f.sp.material.dispose(); flyers.splice(i, 1); continue; }
+      const dx = pb.x - pa.x, dz = pb.z - pa.z, len = Math.hypot(dx, dz) || 1;
+      f.sp.position.set(pa.x + dx * u + (-dz / len) * f.side * Math.sin(u * Math.PI) * 0.5, 2.3 + Math.sin(u * Math.PI) * (f.k === 'boo' ? 0.4 : 1.3), pa.z + dz * u + (dx / len) * f.side * Math.sin(u * Math.PI) * 0.5);
+      f.sp.scale.setScalar(0.35 + 0.35 * Math.sin(Math.min(1, u * 3) * Math.PI / 2)); }
+    if (rxTarget) { if (!players.has(rxTarget.id) || Math.hypot(rxTarget.av.position.x - me.av.position.x, rxTarget.av.position.z - me.av.position.z) > 5) hideRx(); else project({x: rxTarget.av.position.x, z: rxTarget.av.position.z}, 3.55, rxBar); }
+  }
+
   function requestHandshake(pid) {
     if (!players.has(pid)) return toast('같은 라운지에 있을 때만 손인사할 수 있어요');
     if (!conn || conn.readyState !== 1) return toast('연결된 뒤에 할 수 있어요');
@@ -358,8 +413,12 @@
   canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', (e) => { pointers.delete(e.pointerId); drag = null; });
   canvas.addEventListener('wheel', (e) => { e.preventDefault(); camState.dist = Math.max(9, Math.min(34, camState.dist + e.deltaY * 0.01)); }, {passive: false});
   function onTap(cx, cy) {
-    hideHint(); if (me.hs) endHandshake(); camState.pan.set(0, 0, 0); // 걸어가면 다시 내 캐릭터 중심으로 // 손인사 중에 바닥을 누르면 멈추고 걸어가요
+    hideHint(); if (me.hs) endHandshake();
     ndc.set((cx / innerWidth) * 2 - 1, -(cy / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+    // 다른 캐릭터를 누르면: 다가가서 하트·박수·야유 같은 리액션을 보낼 수 있어요
+    const others = [...players.values()].filter((p) => p !== me), ph = ray.intersectObjects(others.map((p) => p.av), true)[0];
+    if (ph) { let o = ph.object; while (o && !others.some((p) => p.av === o)) o = o.parent; const who = others.find((p) => p.av === o); if (who) { approachFor(who); return; } }
+    hideRx(); camState.pan.set(0, 0, 0); // 걸어가면 다시 내 캐릭터 중심으로 (손인사 중에 바닥을 누르면 멈추고 걸어가요)
     const hit = ray.intersectObjects(clickables, false)[0];
     if (hit) { goToZone(hit.object.userData.zone); return; }
     const fh = ray.intersectObject(floor, false)[0];
@@ -411,7 +470,7 @@
       A.animateAvatar(p.av, t, p.target ? 'walk' : p.mood || 'idle', p.phase);
       project({x: pos.x, z: pos.z}, 2.75, p.tag); project({x: pos.x, z: pos.z}, 3.15, p.bubble);
     }
-    stepHandshake(dt);
+    stepHandshake(dt); stepFlyers(dt);
     if (secretary) { A.animateAvatar(secretary, t, 'idle', 1.3); const wp = new THREE.Vector3(); secretary.getWorldPosition(wp); project({x: wp.x, z: wp.z}, 2.75, npcTag); project({x: wp.x, z: wp.z}, 3.15, deskBubble); }
     const mz = ZONES.find((z) => z.main); if (mz.spin) mz.spin.rotation.y += dt * 0.6;
     if (furniture.tank && furniture.tank.visible) furniture.tank.children.forEach((c) => { if (c.userData.swim != null) c.position.x = Math.sin(t * 0.8 + c.userData.swim * 2) * 0.7; });
@@ -610,6 +669,7 @@
     const t = String(m.text || ''); let x;
     if ((x = /^\[\[ok:([A-Z0-9]{4,6})\]\]$/.exec(t))) { if (pending && pending.code === x[1] && m.pid !== ME) { pending.joined.add(otherName(m)); renderWaiting(); clearTimeout(pending.timer); pending.timer = setTimeout(goTable, 2500); } return false; }
     if ((x = /^\[\[cancel:([A-Z0-9]{4,6})\]\]$/.exec(t))) { hideInvite(x[1]); return false; }
+    if ((x = RX_RE.exec(t))) { if (m.pid === x[1]) playRx(x[1], x[2], x[3]); return false; }
     if ((x = HS_RE.exec(t))) { if (m.pid === x[1] && startHandshake(x[1], x[2])) { const other = x[1] === ME ? x[2] : x[2] === ME ? x[1] : null; if (other) chatLine('', `🤝 ${otherName({pid: other, name: online.get(other)})}님과 손인사!`, true); } return false; }
     JOIN_RE.lastIndex = 0; if ((x = JOIN_RE.exec(t)) && m.pid !== ME) showInvite(otherName(m), x[1], x[2]);
     JOIN_RE.lastIndex = 0; return true;
@@ -934,6 +994,8 @@
     log.addEventListener('touchend', (e) => { if (!sw) return; const dy = (e.changedTouches[0] || {}).clientY - sw.y; if (dy > 70 && Date.now() - sw.t < 600) hideChat(); sw = null; }, {passive: true});
   }
   $('chatReopen').onclick = showChat;
+  { const panel = $('chatPanel'); let tt = 0; const touched = () => { panel.classList.add('touched'); clearTimeout(tt); tt = setTimeout(() => panel.classList.remove('touched'), 2500); };
+    panel.addEventListener('pointerdown', touched, true); $('chatInput').addEventListener('focus', touched); }
   // 채팅 보내기: 서버가 0.6초 안에 연달아 온 메시지를 버려서(도배 방지) 빠르게 치면 사라졌어요 → 줄 세워 0.7초 간격으로 보내요.
   // 연결이 끊겨 있으면 내 화면에 먼저 띄우고, 다시 연결되면 보내요.
   const outbox = []; let outTimer = null, lastSent = 0;
@@ -997,7 +1059,7 @@
     } else if (m.t === 'pose') { const p = players.get(m.pid); if (p && m.pid !== ME) walkTo(p, m.x, m.z); }
     else if (m.t === 'chat') { const p = players.get(m.pid); if (m.sys) chatLine('', m.text, true); else if (handleSignal(m)) { chatLine(otherName(m), m.text); say(p, m.text); } }
     else if (m.t === 'hp') { hp = m; renderRoomLabel(); if ($('gbList')) renderGuestbook(); }
-    else if (m.t === 'chatlog') { (m.items || []).filter((c) => !/^\[\[(ok|cancel|hs):/.test(c.text || '')).slice(-6).forEach((c) => chatLine(c.sys ? '' : otherName(c), c.text, c.sys)); }
+    else if (m.t === 'chatlog') { (m.items || []).filter((c) => !/^\[\[(ok|cancel|hs|rx):/.test(c.text || '')).slice(-6).forEach((c) => chatLine(c.sys ? '' : otherName(c), c.text, c.sys)); }
     else if (m.t === 'error' && m.code === 'full') { toast('공개 라운지가 꽉 차서 옆 라운지로 옮겨요'); const n = Number((room.code || 'LNG1').slice(3)) || 1; switchRoom(null); room.code = `LNG${Math.min(9, n + 1)}`; reconnect(); }
   }
 

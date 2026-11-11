@@ -43,8 +43,10 @@ body[data-theme="day"] .ticker{background:rgba(255,255,255,.75);color:#5a4500}
 
 .chat{position:fixed;left:10px;right:78px;bottom:calc(10px + var(--safe-b));z-index:4;display:flex;flex-direction:column;gap:6px;max-width:520px}
 /* 채팅창: 손잡이를 위로 끌면 크게, 아래로 내리면 작게 → 끝까지 내리면 숨김(💬 로 다시 열기). 손잡이를 톡 누르면 작게/크게 */
-.chat-grip{align-self:stretch;height:22px;margin-bottom:-4px;display:flex;align-items:center;justify-content:center;touch-action:none;cursor:ns-resize;-webkit-user-select:none;user-select:none}
-.chat-grip i{width:44px;height:5px;border-radius:3px;background:rgba(255,255,255,.4);box-shadow:0 1px 3px rgba(0,0,0,.3);transition:width .15s,background .15s}
+/* 손잡이는 평소엔 안 보이고, 채팅창을 만지는 동안에만 살짝 나타나요 (자리는 그대로라 위 가장자리를 끌면 돼요) */
+.chat-grip{align-self:stretch;height:18px;margin-bottom:-6px;display:flex;align-items:center;justify-content:center;touch-action:none;cursor:ns-resize;-webkit-user-select:none;user-select:none}
+.chat-grip i{width:36px;height:4px;border-radius:3px;background:rgba(255,255,255,.35);opacity:0;transition:opacity .25s,width .15s,background .15s}
+.chat.touched .chat-grip i,.chat.resizing .chat-grip i,.chat-grip:hover i,.chat-grip:focus-visible i{opacity:1}
 .chat-grip:active i,.chat.resizing .chat-grip i{width:60px;background:var(--gold)}
 .chat.sized .chat-log{height:var(--chat-h);max-height:var(--chat-h)}
 .chat.will-hide{opacity:.45}
@@ -150,3 +152,11 @@ body[data-theme="day"] .veil{background:#e9ecf5;color:#1b2440}
 .sheet-sub{font-size:14px;margin:18px 0 8px}.sheet-sub small{color:var(--muted);font-weight:600;font-size:11.5px}
 .dock-right button{position:relative}
 .dock-right button.has-badge::after{content:'';position:absolute;top:4px;right:6px;width:9px;height:9px;border-radius:50%;background:#ff4d5e;border:2px solid #141a2c}
+/* 리액션 바: 캐릭터를 누르면 머리 위에 떠요 */
+.rx-bar{position:absolute;transform:translate(-50%,-100%);pointer-events:auto;background:rgba(9,14,28,.86);border:1px solid var(--line);border-radius:16px;padding:6px 7px 7px;backdrop-filter:blur(8px);box-shadow:0 10px 24px rgba(0,0,0,.35);text-align:center;z-index:5}
+.rx-bar>b{display:block;font-size:11px;color:var(--gold);margin-bottom:4px}
+.rx-bar>div{display:flex;gap:4px}
+.rx-bar button{width:46px;height:50px;border-radius:12px;background:rgba(255,255,255,.07);font-size:21px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;line-height:1}
+.rx-bar button small{font-size:9.5px;color:var(--muted);font-weight:700}
+.rx-bar button:active{transform:scale(.9);background:rgba(247,206,85,.25)}
+.pill.chips b{white-space:nowrap}
