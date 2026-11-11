@@ -23,4 +23,4 @@ new_sqlite_classes = ["User"]
 
 # 관리자 계정 공개 ID (라운지 비서 데스크의 "내 ID"). 쉼표로 여러 개. 옷·가구가 전부 열려요
 [vars]
-ADMIN_PIDS = ""
+ADMIN_PIDS = "6ed1070a82ab8dfec6e8bad6"
