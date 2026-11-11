@@ -152,7 +152,7 @@
   // 드레스룸 (전신 거울 + 행거)
   (function closet() {
     const z = ZONES.find((x) => x.closet), g = new THREE.Group(); g.position.set(z.pos[0], 0, z.pos[1]); g.rotation.y = Math.PI / 2; scene.add(g);
-    box(1.4, 2.6, 0.12, mats.gold, 0, 1.4, -0.3, g); const mirror = box(1.22, 2.42, 0.05, new THREE.MeshStandardMaterial({color: 0xcfd8ea, metalness: 1, roughness: 0.08}), 0, 1.4, -0.22, g);
+    box(1.4, 2.6, 0.12, mats.gold, 0, 1.4, -0.3, g); const mirror = box(1.22, 2.42, 0.05, new THREE.MeshStandardMaterial({color: 0xdfe8f5, metalness: 0.25, roughness: 0.12, emissive: 0x31405f, emissiveIntensity: 0.35}) /* 환경맵이 없어 금속 100%면 검게 보여서 은빛으로 */, 0, 1.4, -0.22, g);
     box(2.4, 0.06, 0.06, mats.gold, 2.0, 2.1, 0, g); box(0.06, 2.1, 0.06, mats.gold, 0.8, 1.05, 0, g); box(0.06, 2.1, 0.06, mats.gold, 3.2, 1.05, 0, g);
     [0x9d86ff, 0x3fcf9a, 0xffb34d, 0xff7a8a, 0x2c3550].forEach((c, i) => { const t = box(0.34, 0.7, 0.1, M(c, {roughness: 0.8}), 1.15 + i * 0.45, 1.65, 0, g); t.rotation.y = 0.3; });
     const sign = neon('👕 드레스룸', '#ffffff', 2.4); sign.position.set(0.9, 3.0, 0); g.add(sign); z.sign = sign;
@@ -179,6 +179,7 @@
   // ───────── 캐릭터 ─────────
   const labels = $('labels');
   const players = new Map(); // pid -> {av, name, tag, bubble, pos, target, state, bubbleTimer, exprTimer}
+  let lookAtSpeaker = null; // 최근에 말한 사람 → 다른 캐릭터들이 그쪽을 봐요
   function makeTag(text, cls) { const el = document.createElement('div'); el.className = 'name-tag ' + (cls || ''); el.textContent = text; labels.appendChild(el); return el; }
   function makeBubble() { const el = document.createElement('div'); el.className = 'bubble'; labels.appendChild(el); return el; }
   function spawn(id, name, look, x = 0, z = 3, isMe = false) {
@@ -196,10 +197,11 @@
   function say(p, text) {
     if (!p) return;
     p.bubble.textContent = String(text).slice(0, 70); p.bubble.classList.add('show');
-    clearTimeout(p.bubbleTimer); p.bubbleTimer = setTimeout(() => p.bubble.classList.remove('show'), 4500);
+    clearTimeout(p.bubbleTimer); p.bubbleTimer = setTimeout(() => p.bubble.classList.remove('show'), 6000);
+    if (p.id) lookAtSpeaker = {id: p.id, av: p.av, at: clock.elapsedTime};
     const expr = A.exprFromText(text); if (expr) setExpr(p, expr);
   }
-  function setExpr(p, expr, ms = 3800) {
+  function setExpr(p, expr, ms = 5000) {
     p.av.userData.face.set(expr); p.mood = expr === 'laugh' || expr === 'happy' ? 'cheer' : expr === 'hmm' ? 'think' : null;
     clearTimeout(p.exprTimer); p.exprTimer = setTimeout(() => { p.av.userData.face.set('happy'); p.mood = null; }, ms);
   }
@@ -264,11 +266,18 @@
         else { const step = Math.min(d, dt * 3.4); pos.x += (dx / d) * step; pos.z += (dz / d) * step; p.state = 'walk';
           const want = Math.atan2(dx, dz); let diff = want - p.av.rotation.y; diff = Math.atan2(Math.sin(diff), Math.cos(diff)); p.av.rotation.y += diff * Math.min(1, dt * 10); }
       }
+      if (!p.target) { // 서 있을 땐 카메라(또는 방금 말한 사람) 쪽으로 천천히 몸을 돌려요 — 말풍선과 표정이 잘 보이게
+        const f = lookAtSpeaker && lookAtSpeaker.id !== p.id && t - lookAtSpeaker.at < 4 ? lookAtSpeaker.av.position : camera.position;
+        let diff = Math.atan2(f.x - pos.x, f.z - pos.z) - p.av.rotation.y; diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+        p.av.rotation.y += diff * Math.min(1, dt * 2.5);
+        for (const q of players.values()) { if (q === p) continue; const dx = pos.x - q.av.position.x, dz = pos.z - q.av.position.z, d = Math.hypot(dx, dz); if (d > 0.001 && d < 1.15) { pos.x += (dx / d) * (1.15 - d) * dt * 2; pos.z += (dz / d) * (1.15 - d) * dt * 2; } } // 겹치지 않게 살짝 비켜서기
+      }
       A.animateAvatar(p.av, t, p.target ? 'walk' : p.mood || 'idle', p.phase);
       project({x: pos.x, z: pos.z}, 2.75, p.tag); project({x: pos.x, z: pos.z}, 3.15, p.bubble);
     }
     if (secretary) { A.animateAvatar(secretary, t, 'idle', 1.3); const wp = new THREE.Vector3(); secretary.getWorldPosition(wp); project({x: wp.x, z: wp.z}, 2.75, npcTag); }
     const mz = ZONES.find((z) => z.main); if (mz.spin) mz.spin.rotation.y += dt * 0.6;
+    for (const z of ZONES) if (z.sign) z.sign.visible = !camState.closeUp; // 드레스룸 클로즈업 땐 간판이 화면을 가리지 않게
     for (const z of ZONES) if (z.sign) z.sign.lookAt(camera.position.x, z.sign.getWorldPosition(v3).y, camera.position.z);
     placeCamera(false);
     renderer.render(scene, camera);
@@ -432,12 +441,12 @@
   const params = new URLSearchParams(location.search);
   const room = {code: null, public: true};
   const online = new Map();
-  let conn = null, retry = 0, retryTimer = 0, pingTimer = 0;
+  let conn = null, retry = 0, retryTimer = 0, pingTimer = 0, gotFirstState = false;
   function switchRoom(code) {
     room.public = !code; room.code = code || 'LNG1';
     $('roomLabel').textContent = room.public ? '공개 라운지' : `친구 방 · ${room.code}`;
     const u = new URL(location.href); if (room.public) u.searchParams.delete('room'); else u.searchParams.set('room', room.code); history.replaceState(null, '', u);
-    for (const id of [...players.keys()]) if (id !== ME) despawn(id); online.clear(); $('chatLog').innerHTML = '';
+    for (const id of [...players.keys()]) if (id !== ME) despawn(id); online.clear(); $('chatLog').innerHTML = ''; gotFirstState = false;
     reconnect();
   }
   function reconnect() { clearTimeout(retryTimer); if (conn) { conn.onclose = null; try { conn.close(); } catch (e) {} } retry = 0; connect(); }
@@ -460,11 +469,11 @@
         if (p.pid === ME || !p.online) continue; seen.add(p.pid);
         let pl = players.get(p.pid);
         if (pl && pl.look !== (p.look || '')) { const pos = pl.av.position.clone(); despawn(p.pid); pl = null; spawn(p.pid, p.name, p.look || '', pos.x, pos.z); }
-        else if (!pl) { const pos = p.pos || {x: (Math.random() - 0.5) * 6, z: 4 + Math.random() * 2}; pl = spawn(p.pid, p.name, p.look || '', pos.x, pos.z); if (!online.has(p.pid)) chatLine('', `${p.name}님이 라운지에 들어왔어요`, true); }
+        else if (!pl) { const pos = p.pos || {x: (Math.random() - 0.5) * 6, z: 4 + Math.random() * 2}; pl = spawn(p.pid, p.name, p.look || '', pos.x, pos.z); if (!online.has(p.pid) && gotFirstState) chatLine('', `${p.name}님이 라운지에 들어왔어요`, true); }
         pl.tag.textContent = p.name; online.set(p.pid, p.name);
       }
       for (const id of [...online.keys()]) if (!seen.has(id)) { chatLine('', `${online.get(id)}님이 나갔어요`, true); online.delete(id); despawn(id); }
-      setOnline(true); drawBoard(); setTicker();
+      gotFirstState = true; setOnline(true); drawBoard(); setTicker();
     } else if (m.t === 'pose') { const p = players.get(m.pid); if (p && m.pid !== ME) walkTo(p, m.x, m.z); }
     else if (m.t === 'chat') { const p = players.get(m.pid); if (m.sys) chatLine('', m.text, true); else { chatLine(m.name, m.text); say(p, m.text); } }
     else if (m.t === 'chatlog') { (m.items || []).slice(-6).forEach((c) => chatLine(c.name, c.text, c.sys)); }
