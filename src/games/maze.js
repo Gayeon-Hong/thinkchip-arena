@@ -22,7 +22,13 @@ export function createMaze(seed, difficulty = 'normal') {
   const stages = Array.from({length: MAZE_STAGES}, (_, s) => ({points: makePath(seed, s), ...mazeStageSize(difficulty, s)}));
   return {seed, difficulty, stages, turn: 0, score: 0, cpuScore: 0, results: [], over: false, last: null};
 }
-export function insideCorridor(stage, p) { return distToPolyline(p, stage.points) <= (stage.clear ?? stage.half); }
+// 출발 원(화면에 그린 초록 원) 안은 길로 쳐요: 원이 실제 허용 폭보다 커서, 원 가장자리를 누르고 움직이면 바로 '닿았다'고 뜨던 문제
+export const startZone = (stage) => Math.max(8, stage.half - 3);
+export function insideCorridor(stage, p) {
+  const s0 = stage.points[0];
+  if (Math.hypot(p[0] - s0[0], p[1] - s0[1]) <= startZone(stage)) return true;
+  return distToPolyline(p, stage.points) <= (stage.clear ?? stage.half);
+}
 // Judge a whole drag. trace = [[x,y,ms],...] in board coordinates.
 export function judgeTrace(stage, trace) {
   if (!trace.length) return {ok: false, reason: 'empty', progress: 0};

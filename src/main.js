@@ -211,7 +211,8 @@ function bindTracer(){const svg=document.getElementById('tracer');if(!svg||!sess
   if(session.game.over)complete();else render();};
  svg.addEventListener('pointerdown',e=>{if(done)return;e.preventDefault();try{svg.setPointerCapture(e.pointerId);}catch(_){}const p=toBoard(e);if(!p)return;pts=[p];trail.setAttribute('points',`${p[0]},${p[1]}`);if(dot){dot.setAttribute('cx',p[0]);dot.setAttribute('cy',p[1]);}
   if(kind==='maze'){const st=session.game.stages[session.game.turn];if(Math.hypot(p[0]-st.points[0][0],p[1]-st.points[0][1])>st.half+10){msg.textContent='초록 출발점에서 시작하세요';pts=null;}}});
- svg.addEventListener('pointermove',e=>{if(!pts||done)return;const p=toBoard(e);if(!p)return;pts.push(p);
+ svg.addEventListener('pointermove',e=>{if(!pts||done)return;if(e.pointerType==='mouse'&&e.buttons===0){up();return;} // PC: 마우스 버튼을 이미 뗐으면 그리기 끝 (창 밖에서 떼서 pointerup 을 놓친 경우)
+  const p=toBoard(e);if(!p)return;pts.push(p);
   trail.setAttribute('points',trail.getAttribute('points')+` ${p[0].toFixed(1)},${p[1].toFixed(1)}`);if(dot){dot.setAttribute('cx',p[0]);dot.setAttribute('cy',p[1]);}
   if(kind==='maze'){const st=session.game.stages[session.game.turn],goal=st.points.at(-1);
    if(!insideCorridor(st,p)){svg.classList.add('touched');finish();}
@@ -321,7 +322,7 @@ function beginLiveGame(myTurn){const st=live.state;live.startedRound=st.round;cl
  selectedGame=st.game;difficulty=st.level;let g=createRound(st.game,seed,st.level);let duelIdx;
  if(['gomoku','dots'].includes(st.game)){duelIdx=st.duel?.boards?.findIndex(b=>b.players.includes(livePid()));if(duelIdx<0||duelIdx===undefined){screen='live';render();return;}const bd=st.duel.boards[duelIdx];g=replayDuel(st.game,st.seed,st.level,bd);}
  session={id:st.game,mode:'live',seed,difficulty:st.level,game:g,challenger:null,botTarget:null,liveRound:st.round,lastSent:-1,duelIdx,t0:0,sel:null,flipped:false,hint:null,hintKey:null,award:0,input:[],bid:0,bet:1,preview:null,previewedStage:-1,rl:null,turn:!!st.turns};
- screen='game';rulesOpen=false;render();window.scrollTo?.(0,0);if(st.turns)startSnaps();}
+ screen='game';rulesOpen=false;render();window.scrollTo?.(0,0);fitControls();if(st.turns)startSnaps();}
 // 실시간 점수 대결 시간 제한: 남은 시간을 화면 위에 띄우고, 시간이 끝나면 지금 점수로 마감
 function liveDeadline(){const st=live?.state;if(!st||st.phase!=='playing')return 0;return st.turns?st.turns.deadline||0:st.endAt||0;}
 let limitTimer=setInterval(()=>{const dl=liveDeadline();let el=document.getElementById('liveTimer');
@@ -496,7 +497,7 @@ function stageCast(){const s=session;if(!s)return [];const foe=foeFor(s);
 function syncGameStage(){const host=document.getElementById('gameStage');
  if(!host){if(gstage&&!['game','result'].includes(screen)){gstage.destroy();gstage=null;gstageHost=null;}return;}
  if(gstage===false)return;
- if(!gstage){loadStage().then(ok=>{if(gstage||!ok){if(!ok)gstage=false;return;}const h=document.getElementById('gameStage');if(!h)return;gstage=window.ThinkChipStage.mount(h,{height:150})||false;if(gstage){gstage.setPlayers(stageCast());gstageHost=session;syncGameStage();}});return;}
+ if(!gstage){loadStage().then(ok=>{if(gstage||!ok){if(!ok)gstage=false;return;}const h=document.getElementById('gameStage');if(!h)return;gstage=window.ThinkChipStage.mount(h,{height:innerHeight<860?104:150})||false;if(gstage){gstage.setPlayers(stageCast());gstageHost=session;syncGameStage();}});return;}
  if(gstage.el.parentNode!==host)host.appendChild(gstage.el);
  const s=session;if(!s)return;if(gstageHost!==s){gstage.setPlayers(stageCast());gstageHost=s;s._st=null;}
  const my=s.game.score,foe=s.mode==='ai'&&s.botTarget===null?s.game.cpuScore:null;
@@ -604,8 +605,10 @@ function start(mode){
  session={id:selectedGame,mode,seed,difficulty,game:g,challenger,botTarget:mode==='ai'?aiTarget(selectedGame,seed,difficulty):null,flipped:false,hint:null,hintKey:null,award:0,input:[],bid:0,bet:1,preview:null,previewedStage:-1,rl:null,t0:0,sel:null};
  // 점수 대결 게임은 AI 가 먼저 실제로 플레이하는 걸 보여주고, 그다음 내 차례 (점수만 띡 나오지 않게)
  if(mode==='ai'&&AI_RUN[selectedGame]){session.aiRun=AI_RUN[selectedGame](seed,difficulty);session.botTarget=session.aiRun.score;session.rp={i:0,done:false};screen='aiturn';rulesOpen=false;render();window.scrollTo?.(0,0);startReplay();return;}
- screen='game';rulesOpen=false;render();window.scrollTo?.(0,0);
+ screen='game';rulesOpen=false;render();window.scrollTo?.(0,0);fitControls();
 }
+// 폰에서 게임을 시작하면 조작 버튼이 화면 아래로 잘리지 않게, 판 전체가 보이도록 살짝 내려줘요
+function fitControls(){setTimeout(()=>{const p=document.querySelector('.play-panel');if(!p||typeof window.scrollTo!=='function')return;const r=p.getBoundingClientRect();if(r.bottom>innerHeight)window.scrollTo({top:Math.max(0,scrollY+Math.min(r.top-8,r.bottom-innerHeight+12)),behavior:'smooth'});},120);}
 // ───────── AI 차례: AI 가 같은 판을 실제로 플레이하는 장면 (숫자 탐정·징검다리·무궁화·소수결) ─────────
 const AI_RUN={baseball:baseballBotRun,bridge:bridgeBotRun,redlight:redLightBotRun,minority:minorityBotRun};
 let replayTimer=0;
@@ -801,7 +804,7 @@ root.addEventListener('click',async e=>{
  const action=target.dataset.action;
  if(action==='login'){askLogin();return;}
  if(action==='ai-skip'&&session?.rp){stopReplay();session.rp.i=replayLen();session.rp.done=true;patchReplay();return;}
- if(action==='my-turn'&&session){stopReplay();screen='game';render();window.scrollTo?.(0,0);return;}
+ if(action==='my-turn'&&session){stopReplay();screen='game';render();window.scrollTo?.(0,0);fitControls();return;}
  if(target.disabled)return;
  if(action==='toggle-theme'){toggleTheme();render();return;}
  if(target.dataset.liveGame&&live){live.conn.send({t:'pick',game:target.dataset.liveGame,level:live.state?.level});return;}

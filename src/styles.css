@@ -497,3 +497,13 @@ body.to-lounge #app{opacity:0;transform:scale(.98);transition:opacity .24s ease,
 .live-timer{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:60;padding:6px 14px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font:700 14px system-ui;font-variant-numeric:tabular-nums;box-shadow:0 6px 18px rgba(0,0,0,.25)}
 .live-timer.urgent{color:#ff5c7a;border-color:#ff5c7a;animation:ltPulse 1s infinite}@keyframes ltPulse{50%{transform:translateX(-50%) scale(1.08)}}
 .live-timer{display:flex;align-items:center;gap:8px}.live-timer button{font:700 11.5px system-ui;padding:4px 9px;border-radius:999px;border:1px solid var(--line);background:var(--accent-soft);color:var(--accent-ink)}
+
+/* 폰 화면(세로 860px 이하): 게임 화면을 촘촘하게 — 조작 버튼이 첫 화면 안에 들어오게 */
+@media (max-height:860px){
+ .game-caption{margin:0 0 8px}.score-panel{padding:9px 16px}.score-panel strong{font-size:24px}.score-divider{height:26px}
+ .match-status{margin:6px 0 8px}.game-stage{margin:0 0 8px}
+ .play-panel{padding:13px 11px}.panel-heading{margin-bottom:10px}.panel-heading h2{font-size:15px}
+ .duel-board{margin:10px 0;gap:14px}.face-card{width:72px;height:94px;font-size:46px}.round-outcome{margin:6px 0 10px}
+ .number-choices button{min-height:44px}.trust-actions button{min-height:96px;padding:12px 6px}
+ .rl-field{height:220px}.rl-btn{min-height:80px}
+}

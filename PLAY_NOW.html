@@ -497,6 +497,16 @@ body.to-lounge #app{opacity:0;transform:scale(.98);transition:opacity .24s ease,
 .live-timer{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:60;padding:6px 14px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font:700 14px system-ui;font-variant-numeric:tabular-nums;box-shadow:0 6px 18px rgba(0,0,0,.25)}
 .live-timer.urgent{color:#ff5c7a;border-color:#ff5c7a;animation:ltPulse 1s infinite}@keyframes ltPulse{50%{transform:translateX(-50%) scale(1.08)}}
 .live-timer{display:flex;align-items:center;gap:8px}.live-timer button{font:700 11.5px system-ui;padding:4px 9px;border-radius:999px;border:1px solid var(--line);background:var(--accent-soft);color:var(--accent-ink)}
+
+/* 폰 화면(세로 860px 이하): 게임 화면을 촘촘하게 — 조작 버튼이 첫 화면 안에 들어오게 */
+@media (max-height:860px){
+ .game-caption{margin:0 0 8px}.score-panel{padding:9px 16px}.score-panel strong{font-size:24px}.score-divider{height:26px}
+ .match-status{margin:6px 0 8px}.game-stage{margin:0 0 8px}
+ .play-panel{padding:13px 11px}.panel-heading{margin-bottom:10px}.panel-heading h2{font-size:15px}
+ .duel-board{margin:10px 0;gap:14px}.face-card{width:72px;height:94px;font-size:46px}.round-outcome{margin:6px 0 10px}
+ .number-choices button{min-height:44px}.trust-actions button{min-height:96px;padding:12px 6px}
+ .rl-field{height:220px}.rl-btn{min-height:80px}
+}
 </style></head><body><div id="app"><div id="boot" style="position:fixed;inset:0;display:grid;place-content:center;justify-items:center;gap:12px;background:#0b1020;color:#a3adc4;font:13px system-ui,sans-serif;z-index:99"><div style="width:34px;height:34px;border-radius:50%;border:3px solid rgba(255,255,255,.1);border-top-color:#f7ce55;animation:bootspin .9s linear infinite"></div><p style="margin:0">라운지 준비 중…</p><style>@keyframes bootspin{to{transform:rotate(360deg)}}</style></div></div><script src="./account.js"></script><script type="module">
 // ==== app.config.js ====
 // Public app configuration only. NEVER put API keys, mTLS keys or secrets here.
@@ -949,7 +959,13 @@ function createMaze(seed, difficulty = 'normal') {
   const stages = Array.from({length: MAZE_STAGES}, (_, s) => ({points: makePath(seed, s), ...mazeStageSize(difficulty, s)}));
   return {seed, difficulty, stages, turn: 0, score: 0, cpuScore: 0, results: [], over: false, last: null};
 }
-function insideCorridor(stage, p) { return distToPolyline(p, stage.points) <= (stage.clear ?? stage.half); }
+// 출발 원(화면에 그린 초록 원) 안은 길로 쳐요: 원이 실제 허용 폭보다 커서, 원 가장자리를 누르고 움직이면 바로 '닿았다'고 뜨던 문제
+const startZone = (stage) => Math.max(8, stage.half - 3);
+function insideCorridor(stage, p) {
+  const s0 = stage.points[0];
+  if (Math.hypot(p[0] - s0[0], p[1] - s0[1]) <= startZone(stage)) return true;
+  return distToPolyline(p, stage.points) <= (stage.clear ?? stage.half);
+}
 // Judge a whole drag. trace = [[x,y,ms],...] in board coordinates.
 function judgeTrace(stage, trace) {
   if (!trace.length) return {ok: false, reason: 'empty', progress: 0};
@@ -2162,7 +2178,8 @@ function bindTracer(){const svg=document.getElementById('tracer');if(!svg||!sess
   if(session.game.over)complete();else render();};
  svg.addEventListener('pointerdown',e=>{if(done)return;e.preventDefault();try{svg.setPointerCapture(e.pointerId);}catch(_){}const p=toBoard(e);if(!p)return;pts=[p];trail.setAttribute('points',`${p[0]},${p[1]}`);if(dot){dot.setAttribute('cx',p[0]);dot.setAttribute('cy',p[1]);}
   if(kind==='maze'){const st=session.game.stages[session.game.turn];if(Math.hypot(p[0]-st.points[0][0],p[1]-st.points[0][1])>st.half+10){msg.textContent='초록 출발점에서 시작하세요';pts=null;}}});
- svg.addEventListener('pointermove',e=>{if(!pts||done)return;const p=toBoard(e);if(!p)return;pts.push(p);
+ svg.addEventListener('pointermove',e=>{if(!pts||done)return;if(e.pointerType==='mouse'&&e.buttons===0){up();return;} // PC: 마우스 버튼을 이미 뗐으면 그리기 끝 (창 밖에서 떼서 pointerup 을 놓친 경우)
+  const p=toBoard(e);if(!p)return;pts.push(p);
   trail.setAttribute('points',trail.getAttribute('points')+` ${p[0].toFixed(1)},${p[1].toFixed(1)}`);if(dot){dot.setAttribute('cx',p[0]);dot.setAttribute('cy',p[1]);}
   if(kind==='maze'){const st=session.game.stages[session.game.turn],goal=st.points.at(-1);
    if(!insideCorridor(st,p)){svg.classList.add('touched');finish();}
@@ -2272,7 +2289,7 @@ function beginLiveGame(myTurn){const st=live.state;live.startedRound=st.round;cl
  selectedGame=st.game;difficulty=st.level;let g=createRound(st.game,seed,st.level);let duelIdx;
  if(['gomoku','dots'].includes(st.game)){duelIdx=st.duel?.boards?.findIndex(b=>b.players.includes(livePid()));if(duelIdx<0||duelIdx===undefined){screen='live';render();return;}const bd=st.duel.boards[duelIdx];g=replayDuel(st.game,st.seed,st.level,bd);}
  session={id:st.game,mode:'live',seed,difficulty:st.level,game:g,challenger:null,botTarget:null,liveRound:st.round,lastSent:-1,duelIdx,t0:0,sel:null,flipped:false,hint:null,hintKey:null,award:0,input:[],bid:0,bet:1,preview:null,previewedStage:-1,rl:null,turn:!!st.turns};
- screen='game';rulesOpen=false;render();window.scrollTo?.(0,0);if(st.turns)startSnaps();}
+ screen='game';rulesOpen=false;render();window.scrollTo?.(0,0);fitControls();if(st.turns)startSnaps();}
 // 실시간 점수 대결 시간 제한: 남은 시간을 화면 위에 띄우고, 시간이 끝나면 지금 점수로 마감
 function liveDeadline(){const st=live?.state;if(!st||st.phase!=='playing')return 0;return st.turns?st.turns.deadline||0:st.endAt||0;}
 let limitTimer=setInterval(()=>{const dl=liveDeadline();let el=document.getElementById('liveTimer');
@@ -2447,7 +2464,7 @@ function stageCast(){const s=session;if(!s)return [];const foe=foeFor(s);
 function syncGameStage(){const host=document.getElementById('gameStage');
  if(!host){if(gstage&&!['game','result'].includes(screen)){gstage.destroy();gstage=null;gstageHost=null;}return;}
  if(gstage===false)return;
- if(!gstage){loadStage().then(ok=>{if(gstage||!ok){if(!ok)gstage=false;return;}const h=document.getElementById('gameStage');if(!h)return;gstage=window.ThinkChipStage.mount(h,{height:150})||false;if(gstage){gstage.setPlayers(stageCast());gstageHost=session;syncGameStage();}});return;}
+ if(!gstage){loadStage().then(ok=>{if(gstage||!ok){if(!ok)gstage=false;return;}const h=document.getElementById('gameStage');if(!h)return;gstage=window.ThinkChipStage.mount(h,{height:innerHeight<860?104:150})||false;if(gstage){gstage.setPlayers(stageCast());gstageHost=session;syncGameStage();}});return;}
  if(gstage.el.parentNode!==host)host.appendChild(gstage.el);
  const s=session;if(!s)return;if(gstageHost!==s){gstage.setPlayers(stageCast());gstageHost=s;s._st=null;}
  const my=s.game.score,foe=s.mode==='ai'&&s.botTarget===null?s.game.cpuScore:null;
@@ -2555,8 +2572,10 @@ function start(mode){
  session={id:selectedGame,mode,seed,difficulty,game:g,challenger,botTarget:mode==='ai'?aiTarget(selectedGame,seed,difficulty):null,flipped:false,hint:null,hintKey:null,award:0,input:[],bid:0,bet:1,preview:null,previewedStage:-1,rl:null,t0:0,sel:null};
  // 점수 대결 게임은 AI 가 먼저 실제로 플레이하는 걸 보여주고, 그다음 내 차례 (점수만 띡 나오지 않게)
  if(mode==='ai'&&AI_RUN[selectedGame]){session.aiRun=AI_RUN[selectedGame](seed,difficulty);session.botTarget=session.aiRun.score;session.rp={i:0,done:false};screen='aiturn';rulesOpen=false;render();window.scrollTo?.(0,0);startReplay();return;}
- screen='game';rulesOpen=false;render();window.scrollTo?.(0,0);
+ screen='game';rulesOpen=false;render();window.scrollTo?.(0,0);fitControls();
 }
+// 폰에서 게임을 시작하면 조작 버튼이 화면 아래로 잘리지 않게, 판 전체가 보이도록 살짝 내려줘요
+function fitControls(){setTimeout(()=>{const p=document.querySelector('.play-panel');if(!p||typeof window.scrollTo!=='function')return;const r=p.getBoundingClientRect();if(r.bottom>innerHeight)window.scrollTo({top:Math.max(0,scrollY+Math.min(r.top-8,r.bottom-innerHeight+12)),behavior:'smooth'});},120);}
 // ───────── AI 차례: AI 가 같은 판을 실제로 플레이하는 장면 (숫자 탐정·징검다리·무궁화·소수결) ─────────
 const AI_RUN={baseball:baseballBotRun,bridge:bridgeBotRun,redlight:redLightBotRun,minority:minorityBotRun};
 let replayTimer=0;
@@ -2752,7 +2771,7 @@ root.addEventListener('click',async e=>{
  const action=target.dataset.action;
  if(action==='login'){askLogin();return;}
  if(action==='ai-skip'&&session?.rp){stopReplay();session.rp.i=replayLen();session.rp.done=true;patchReplay();return;}
- if(action==='my-turn'&&session){stopReplay();screen='game';render();window.scrollTo?.(0,0);return;}
+ if(action==='my-turn'&&session){stopReplay();screen='game';render();window.scrollTo?.(0,0);fitControls();return;}
  if(target.disabled)return;
  if(action==='toggle-theme'){toggleTheme();render();return;}
  if(target.dataset.liveGame&&live){live.conn.send({t:'pick',game:target.dataset.liveGame,level:live.state?.level});return;}
