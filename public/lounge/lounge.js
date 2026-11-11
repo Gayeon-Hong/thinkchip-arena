@@ -241,6 +241,75 @@
     const lim = ROOM - 1.2; p.target = {x: Math.max(-lim, Math.min(lim, x)), z: Math.max(-lim, Math.min(lim, z)), then};
   }
 
+  // ───────── 친구 손인사 (영화 속 비밀 악수처럼: 하이파이브 → 손바닥 → 손등 → 로우파이브 → 주먹 → 펑!) ─────────
+  // a 의 오른손은 마주 선 b 의 왼손과 같은 쪽이라, (a.r, b.l) / (a.l, b.r) 짝으로 부딪혀요. 값 = 어깨 회전 [앞뒤, 옆]
+  const HS_BEAT = 0.42, HS_GAP = 1.05;
+  const HS_BEATS = [
+    {a: {r: [-2.65, 0], l: [-2.65, 0]}, b: {r: [-2.65, 0], l: [-2.65, 0]}, hit: [['r', 'l'], ['l', 'r']], big: true}, // 양손 하이파이브
+    {a: {r: [-1.45, 0]}, b: {l: [-1.45, 0]}, hit: [['r', 'l']]}, // 손바닥
+    {a: {l: [-1.45, 0]}, b: {r: [-1.45, 0]}, hit: [['l', 'r']]}, // 손등
+    {a: {r: [-1.45, 0]}, b: {l: [-1.45, 0]}, hit: [['r', 'l']]}, // 다시 손바닥
+    {a: {r: [-0.7, 0], l: [-0.7, 0]}, b: {r: [-0.7, 0], l: [-0.7, 0]}, hit: [['r', 'l'], ['l', 'r']]}, // 로우파이브
+    {a: {r: [-1.55, 0]}, b: {l: [-1.55, 0]}, hit: [['r', 'l']], fist: true}, // 주먹 맞대기
+    {a: {r: [-2.8, -0.75], l: [-2.8, 0.75]}, b: {r: [-2.8, -0.75], l: [-2.8, 0.75]}, boom: true}, // 펑! 양팔 활짝
+  ];
+  let hs = null; // {a, b, t0, stage: 'go'|'dance', beat}
+  const sparks = [];
+  const sparkTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'); x.translate(32, 32);
+    x.strokeStyle = '#fff6c9'; x.lineCap = 'round'; for (let i = 0; i < 8; i++) { x.lineWidth = i % 2 ? 3 : 5; x.beginPath(); x.moveTo(0, 7); x.lineTo(0, i % 2 ? 22 : 29); x.stroke(); x.rotate(Math.PI / 4); }
+    const g = x.createRadialGradient(0, 0, 0, 0, 0, 12); g.addColorStop(0, '#ffffff'); g.addColorStop(1, 'rgba(247,206,85,0)'); x.fillStyle = g; x.beginPath(); x.arc(0, 0, 12, 0, Math.PI * 2); x.fill();
+    return new THREE.CanvasTexture(c); })();
+  function spark(at, big) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({map: sparkTex, color: big ? 0xffe9a0 : 0xffffff, transparent: true, depthWrite: false, depthTest: false}));
+    sp.position.copy(at); sp.renderOrder = 10; scene.add(sp); sparks.push({sp, t: 0, size: big ? 1.1 : 0.7});
+    clap(big);
+  }
+  let audio = null;
+  function clap(big) { // 짧은 '짝' 소리 (소리를 낼 수 없는 환경이면 조용히 넘어가요)
+    try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); if (audio.state === 'suspended') audio.resume();
+      const n = Math.floor(audio.sampleRate * 0.09), buf = audio.createBuffer(1, n, audio.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, big ? 3 : 5);
+      const src = audio.createBufferSource(), f = audio.createBiquadFilter(), g = audio.createGain(); f.type = 'bandpass'; f.frequency.value = big ? 1500 : 2200; g.gain.value = big ? 0.55 : 0.4;
+      src.buffer = buf; src.connect(f); f.connect(g); g.connect(audio.destination); src.start(); } catch (e) {}
+  }
+  function startHandshake(idA, idB) {
+    const a = players.get(idA), b = players.get(idB); if (!a || !b || a === b) return false;
+    if (hs) endHandshake();
+    const pa = a.av.position, pb = b.av.position, dx = pb.x - pa.x, dz = pb.z - pa.z, d = Math.hypot(dx, dz) || 1, mx = (pa.x + pb.x) / 2, mz = (pa.z + pb.z) / 2;
+    hs = {a, b, t0: simT, stage: 'go', beat: -1}; a.hs = b.hs = hs;
+    walkTo(a, mx - (dx / d) * HS_GAP / 2, mz - (dz / d) * HS_GAP / 2); walkTo(b, mx + (dx / d) * HS_GAP / 2, mz + (dz / d) * HS_GAP / 2);
+    if (a === me || b === me) sendPose();
+    return true;
+  }
+  function endHandshake() { if (!hs) return; for (const p of [hs.a, hs.b]) { p.hs = null; p.av.userData.armPose = null; } hs = null; }
+  function stepHandshake(dt) {
+    for (let i = sparks.length - 1; i >= 0; i--) { const s = sparks[i]; s.t += dt; const k = s.t / 0.35; s.sp.scale.setScalar(s.size * (0.4 + k)); s.sp.material.opacity = Math.max(0, 1 - k); s.sp.material.rotation = k;
+      if (k >= 1) { scene.remove(s.sp); s.sp.material.dispose(); sparks.splice(i, 1); } }
+    if (!hs) return;
+    const {a, b} = hs;
+    if (!players.has(a.id) || !players.has(b.id)) return endHandshake();
+    if (hs.stage === 'go') { if ((!a.target && !b.target) || simT - hs.t0 > 3.5) { a.target = b.target = null; hs.stage = 'dance'; hs.t1 = simT; } else return; }
+    for (const [p, q] of [[a, b], [b, a]]) { // 서로 마주 보기
+      let diff = Math.atan2(q.av.position.x - p.av.position.x, q.av.position.z - p.av.position.z) - p.av.rotation.y; diff = Math.atan2(Math.sin(diff), Math.cos(diff)); p.av.rotation.y += diff * Math.min(1, dt * 12); }
+    const el = simT - hs.t1 - 0.25; if (el < 0) return; // 마주 보고 잠깐 숨 고르기
+    const i = Math.floor(el / HS_BEAT), f = el / HS_BEAT - i;
+    if (i >= HS_BEATS.length) { if (el > HS_BEATS.length * HS_BEAT + 0.5) endHandshake(); return; }
+    const B = HS_BEATS[i], w = f < 0.55 ? 1 : 1 - 0.4 * ((f - 0.55) / 0.45); // 뻗었다가 부딪힌 뒤 살짝 거두기
+    const scale = (pose) => { const o = {}; for (const k in pose) o[k] = [pose[k][0] * w, pose[k][1] * w]; return o; };
+    a.av.userData.armPose = scale(B.a); b.av.userData.armPose = scale(B.b);
+    if (f >= 0.5 && hs.beat !== i) { hs.beat = i; // 부딪히는 순간
+      if (B.boom) { for (const p of [a, b]) { setExpr(p, 'laugh', 2500); p.av.position.y = 0; } const at = a.av.position.clone().lerp(b.av.position, 0.5); at.y = 2.6; spark(at, true); setTimeout(() => spark(at.clone().add(new THREE.Vector3(0.3, -0.3, 0)), true), 90); }
+      else for (const [sa, sb] of B.hit) { const pa = A.handWorld(a.av, sa), pb = A.handWorld(b.av, sb); if (pa && pb) spark(pa.lerp(pb, 0.5), B.big || B.fist); }
+    }
+  }
+  // 손인사 신호: 채팅으로 [[hs:a,b]] 를 보내면 같은 라운지의 모두가 두 캐릭터의 손인사를 봐요
+  const HS_RE = /^\[\[hs:([a-zA-Z0-9_-]{1,32}),([a-zA-Z0-9_-]{1,32})\]\]$/;
+  function requestHandshake(pid) {
+    if (!players.has(pid)) return toast('같은 라운지에 있을 때만 손인사할 수 있어요');
+    if (!conn || conn.readyState !== 1) return toast('연결된 뒤에 할 수 있어요');
+    sendChat(`[[hs:${ME},${pid}]]`);
+  }
+
   // ───────── 카메라 (내 캐릭터를 따라감, 드래그로 회전, 핀치/휠로 확대) ─────────
   const camState = {yaw: Math.PI / 4, pitch: 0.82, dist: 15, focus: new THREE.Vector3(0, 1, 2), closeUp: false};
   function placeCamera(snap) {
@@ -271,7 +340,7 @@
   canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', (e) => { pointers.delete(e.pointerId); drag = null; });
   canvas.addEventListener('wheel', (e) => { e.preventDefault(); camState.dist = Math.max(9, Math.min(34, camState.dist + e.deltaY * 0.01)); }, {passive: false});
   function onTap(cx, cy) {
-    hideHint();
+    hideHint(); if (me.hs) endHandshake(); // 손인사 중에 바닥을 누르면 멈추고 걸어가요
     ndc.set((cx / innerWidth) * 2 - 1, -(cy / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
     const hit = ray.intersectObjects(clickables, false)[0];
     if (hit) { goToZone(hit.object.userData.zone); return; }
@@ -315,7 +384,7 @@
           avoid(p, pos, dx, dz, step);
           const want = Math.atan2(dx, dz); let diff = want - p.av.rotation.y; diff = Math.atan2(Math.sin(diff), Math.cos(diff)); p.av.rotation.y += diff * Math.min(1, dt * 10); }
       }
-      if (!p.target && !(p === me && camState.closeUp)) { // 서 있을 땐 카메라(또는 방금 말한 사람) 쪽으로 천천히 몸을 돌려요 — 말풍선과 표정이 잘 보이게
+      if (!p.target && !p.hs && !(p === me && camState.closeUp)) { // 서 있을 땐 카메라(또는 방금 말한 사람) 쪽으로 천천히 몸을 돌려요 — 말풍선과 표정이 잘 보이게
         const f = lookAtSpeaker && lookAtSpeaker.id !== p.id && t - lookAtSpeaker.at < 4 ? lookAtSpeaker.av.position : camera.position;
         let diff = Math.atan2(f.x - pos.x, f.z - pos.z) - p.av.rotation.y; diff = Math.atan2(Math.sin(diff), Math.cos(diff));
         p.av.rotation.y += diff * Math.min(1, dt * 2.5);
@@ -324,6 +393,7 @@
       A.animateAvatar(p.av, t, p.target ? 'walk' : p.mood || 'idle', p.phase);
       project({x: pos.x, z: pos.z}, 2.75, p.tag); project({x: pos.x, z: pos.z}, 3.15, p.bubble);
     }
+    stepHandshake(dt);
     if (secretary) { A.animateAvatar(secretary, t, 'idle', 1.3); const wp = new THREE.Vector3(); secretary.getWorldPosition(wp); project({x: wp.x, z: wp.z}, 2.75, npcTag); project({x: wp.x, z: wp.z}, 3.15, deskBubble); }
     const mz = ZONES.find((z) => z.main); if (mz.spin) mz.spin.rotation.y += dt * 0.6;
     if (furniture.tank && furniture.tank.visible) furniture.tank.children.forEach((c) => { if (c.userData.swim != null) c.position.x = Math.sin(t * 0.8 + c.userData.swim * 2) * 0.7; });
@@ -521,6 +591,7 @@
     const t = String(m.text || ''); let x;
     if ((x = /^\[\[ok:([A-Z0-9]{4,6})\]\]$/.exec(t))) { if (pending && pending.code === x[1] && m.pid !== ME) { pending.joined.add(otherName(m)); renderWaiting(); clearTimeout(pending.timer); pending.timer = setTimeout(goTable, 2500); } return false; }
     if ((x = /^\[\[cancel:([A-Z0-9]{4,6})\]\]$/.exec(t))) { hideInvite(x[1]); return false; }
+    if ((x = HS_RE.exec(t))) { if (m.pid === x[1] && startHandshake(x[1], x[2])) { const other = x[1] === ME ? x[2] : x[2] === ME ? x[1] : null; if (other) chatLine('', `🤝 ${otherName({pid: other, name: online.get(other)})}님과 손인사!`, true); } return false; }
     JOIN_RE.lastIndex = 0; if ((x = JOIN_RE.exec(t)) && m.pid !== ME) showInvite(otherName(m), x[1], x[2]);
     JOIN_RE.lastIndex = 0; return true;
   }
@@ -656,8 +727,9 @@
       if (b.id === 'friendLinkBtn') return shareFriendLink();
       if (b.id === 'socialRetry') return syncSocial();
       try {
-        if (d.add) { b.disabled = true; const r = await api('request', {to: d.add}); toast(r.ok ? (r.friends.some((f) => f.pid === d.add) ? '친구가 됐어요! 🎉' : '친구 신청을 보냈어요') : socialMsg(r.error)); }
-        else if (d.acc) { const r = await api('accept', {to: d.acc}); toast(r.ok ? '친구가 됐어요! 🎉' : socialMsg(r.error)); }
+        if (d.add) { b.disabled = true; const r = await api('request', {to: d.add}); const made = r.ok && r.friends.some((f) => f.pid === d.add); toast(r.ok ? (made ? '친구가 됐어요! 🎉' : '친구 신청을 보냈어요') : socialMsg(r.error)); if (made) celebrate(d.add); }
+        else if (d.acc) { const r = await api('accept', {to: d.acc}); toast(r.ok ? '친구가 됐어요! 🎉' : socialMsg(r.error)); if (r.ok) celebrate(d.acc); }
+        else if (d.hs) { closeSheet(); requestHandshake(d.hs); }
         else if (d.dec) { await api('decline', {to: d.dec}); }
         else if (d.del) { const f = social.friends.find((x) => x.pid === d.del); if (f && confirm(`${f.name}님을 친구에서 삭제할까요?`)) await api('remove', {to: d.del}); }
         else if (d.gift) { const f = social.friends.find((x) => x.pid === d.gift); if (f) return openGift(f); }
@@ -670,18 +742,19 @@
   // ───────── 친구 & 칩 선물 (서버: live-server 의 User — 오프라인이어도 신청·선물이 도착해요) ─────────
   const API = CFG.LIVE_URL ? CFG.LIVE_URL.replace(/^ws/, 'http').replace(/\/live\/?$/, '') + '/api/user' : '';
   const GIFT_AMOUNTS = [100, 300, 1000, 3000], GIFTQ_KEY = 'thinkchip:giftq';
+  const IN_TOSS = !!CFG.TOSS; // 토스 앱 빌드: 칩 선물 기능을 숨기고, 선물도 받지 않아요 (친구·손인사는 그대로)
   let social = {friends: [], requests: [], pending: [], gifts: [], sentToday: 0, giftMax: 5000}, socialState = API ? 'loading' : 'off';
   function pkey() { // 이 기기 비밀 키: 다른 사람이 내 이름(pid)으로 친구·선물을 건드리지 못하게
     try { let k = localStorage.getItem('thinkchip:pkey'); if (!k) { const a = new Uint8Array(18); crypto.getRandomValues(a); k = [...a].map((x) => x.toString(16).padStart(2, '0')).join(''); localStorage.setItem('thinkchip:pkey', k); } return k; } catch (e) { return ''; }
   }
   async function api(op, extra = {}) {
     if (!API) throw new Error('offline');
-    const res = await fetch(API, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({pid: ME, key: pkey(), name: myName(), op, ...extra})});
+    const res = await fetch(API, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({pid: ME, key: pkey(), name: myName(), toss: IN_TOSS, op, ...extra})});
     const d = await res.json().catch(() => ({error: 'server'}));
     if (d.ok) { social = d; socialState = 'ok'; renderSocialBadge(); } else if (d.error === 'key') socialState = 'key';
     return d;
   }
-  const socialMsg = (e) => ({limit: '오늘 선물 한도를 넘었어요 (하루 ⬡5,000)', notfriend: '친구에게만 선물할 수 있어요', full: '상대 선물함이 가득 찼어요', theirfull: '상대가 받은 신청이 너무 많아요', gone: '이미 처리된 신청이에요', key: '이 기기에서는 친구 기능을 쓸 수 없어요'}[e] || '잠시 후 다시 시도해 주세요');
+  const socialMsg = (e) => ({nogift: '토스 앱에서 접속한 친구에게는 선물할 수 없어요', limit: '오늘 선물 한도를 넘었어요 (하루 ⬡5,000)', notfriend: '친구에게만 선물할 수 있어요', full: '상대 선물함이 가득 찼어요', theirfull: '상대가 받은 신청이 너무 많아요', gone: '이미 처리된 신청이에요', key: '이 기기에서는 친구 기능을 쓸 수 없어요'}[e] || '잠시 후 다시 시도해 주세요');
   const giftQ = () => store.get(GIFTQ_KEY, []), setGiftQ = (q) => store.set(GIFTQ_KEY, q);
   // 선물 1건 전달: 칩은 보내기 전에 미리 빼 두고, 서버가 거절하면 돌려줘요. 연결이 끊기면 줄에 남겨 다음에 같은 id 로 다시 보내요(서버가 중복을 막아요).
   async function deliver(g) {
@@ -691,6 +764,7 @@
     const p = profile(); p.chips = (Number(p.chips) || 0) + g.amount; p.paid = (Number(p.paid) || 0) + g.amount; saveProfile(p);
     return d.error || 'fail';
   }
+  function celebrate(pid) { if (players.has(pid)) setTimeout(() => requestHandshake(pid), 400); } // 친구가 되는 순간 같은 라운지면 손인사
   async function flushGifts() { for (const g of giftQ()) await deliver(g); }
   async function sendGift(f, amount) {
     const p = profile(); if (giftable() < amount) return toast('선물할 수 있는 충전 칩이 부족해요');
@@ -707,7 +781,7 @@
     try {
       await flushGifts();
       let d = await api('hello');
-      if (d.ok && d.gifts.length) { // 받은 선물은 무료 칩으로 들어와요 (다시 선물할 수는 없어요)
+      if (d.ok && d.gifts.length && !IN_TOSS) { // 받은 선물은 무료 칩으로 들어와요 (다시 선물할 수는 없어요)
         d = await api('claim', {ids: d.gifts.map((g) => g.id)}); const got = d.claimed || [];
         for (const g of got) { addChips(g.amount); chatLine('', `🎁 ${g.name}님에게 ⬡${fmt(g.amount)} 선물을 받았어요`, true); }
         if (got.length) { const from = [...new Set(got.map((g) => g.name))]; toast(`🎁 ${from.slice(0, 2).join(', ')}${from.length > 2 ? ` 외 ${from.length - 2}명` : ''}님이 ⬡${fmt(got.reduce((a, g) => a + g.amount, 0))}을 선물했어요!`); setExpr(me, 'happy'); drawBoard(); }
@@ -728,14 +802,15 @@
       ${socialState === 'off' ? '<div class="card"><p>오프라인이라 친구 기능을 쓸 수 없어요.</p></div>' : socialState === 'net' ? '<div class="card"><p>친구 목록을 불러오지 못했어요.</p><button class="btn ghost full" id="socialRetry" style="margin-top:8px">다시 불러오기</button></div>' : socialState === 'key' ? `<div class="card"><p>${socialMsg('key')}</p></div>` : ''}
       ${rq.length ? `<div class="card"><h3>📩 받은 친구 신청 ${rq.length}</h3>${rq.map((r) => `<div class="f-row"><b>${esc(r.name)}</b><span><button class="btn gold sm" data-acc="${esc(r.pid)}">수락</button><button class="btn ghost sm" data-dec="${esc(r.pid)}">거절</button></span></div>`).join('')}</div>` : ''}
       <div class="card"><h3>👥 내 친구 ${fr.length}${socialState === 'loading' ? ' <small style="color:var(--muted)">· 불러오는 중…</small>' : ''}</h3>
-        ${fr.length ? fr.map((f) => `<div class="f-row"><b>${online.has(f.pid) ? '<i class="f-on" title="같은 라운지에 있어요"></i>' : ''}${esc(f.name)}</b><span><button class="btn gold sm" data-gift="${esc(f.pid)}">🎁 선물</button><button class="btn ghost sm" data-del="${esc(f.pid)}" aria-label="친구 삭제">✕</button></span></div>`).join('')
+        ${fr.length ? fr.map((f) => `<div class="f-row"><b>${online.has(f.pid) ? '<i class="f-on" title="같은 라운지에 있어요"></i>' : ''}${esc(f.name)}</b><span>${players.has(f.pid) ? `<button class="btn ghost sm" data-hs="${esc(f.pid)}">🤝 손인사</button>` : ''}${IN_TOSS || f.nogift ? '' : `<button class="btn gold sm" data-gift="${esc(f.pid)}">🎁 선물</button>`}<button class="btn ghost sm" data-del="${esc(f.pid)}" aria-label="친구 삭제">✕</button></span></div>`).join('')
           : '<p>아직 친구가 없어요. 아래 라운지에 있는 사람에게 신청하거나 친구 추가 링크를 보내 보세요.</p>'}
-        <p style="margin-top:8px;font-size:11.5px">선물할 수 있는 칩 <b style="color:var(--gold)">⬡${fmt(paid)}</b> · 충전한 칩만 선물할 수 있어요</p>
+        ${IN_TOSS ? '' : `<p style="margin-top:8px;font-size:11.5px">선물할 수 있는 칩 <b style="color:var(--gold)">⬡${fmt(paid)}</b> · 충전한 칩만 선물할 수 있어요</p>`}
         ${pending ? `<p style="margin-top:4px;font-size:11.5px">친구 신청 보낸 사람 ${pending}명 · 수락하면 친구가 돼요</p>` : ''}</div>
       ${here.length ? `<div class="card"><h3>지금 라운지에 있는 사람</h3>${here.slice(0, 12).map(([pid, name]) => `<div class="f-row"><b><i class="f-on"></i>${esc(otherName({pid, name}))}</b><button class="btn ghost sm" data-add="${esc(pid)}">+ 친구 신청</button></div>`).join('')}</div>` : ''}
       <button class="btn ghost full" id="friendLinkBtn" style="margin-bottom:16px">📲 친구 추가 링크 보내기</button>`;
   }
   function openGift(f) {
+    if (IN_TOSS) return;
     const paid = giftable(), left = Math.max(0, (social.giftMax || 5000) - (social.sentToday || 0));
     const can = (a) => a <= paid && a <= left;
     openSheet({kicker: 'GIFT', title: `🎁 ${f.name}님에게 선물`, html: `
@@ -859,7 +934,7 @@
     } else if (m.t === 'pose') { const p = players.get(m.pid); if (p && m.pid !== ME) walkTo(p, m.x, m.z); }
     else if (m.t === 'chat') { const p = players.get(m.pid); if (m.sys) chatLine('', m.text, true); else if (handleSignal(m)) { chatLine(otherName(m), m.text); say(p, m.text); } }
     else if (m.t === 'hp') { hp = m; renderRoomLabel(); if ($('gbList')) renderGuestbook(); }
-    else if (m.t === 'chatlog') { (m.items || []).filter((c) => !/^\[\[(ok|cancel):/.test(c.text || '')).slice(-6).forEach((c) => chatLine(c.sys ? '' : otherName(c), c.text, c.sys)); }
+    else if (m.t === 'chatlog') { (m.items || []).filter((c) => !/^\[\[(ok|cancel|hs):/.test(c.text || '')).slice(-6).forEach((c) => chatLine(c.sys ? '' : otherName(c), c.text, c.sys)); }
     else if (m.t === 'error' && m.code === 'full') { toast('공개 라운지가 꽉 차서 옆 라운지로 옮겨요'); const n = Number((room.code || 'LNG1').slice(3)) || 1; switchRoom(null); room.code = `LNG${Math.min(9, n + 1)}`; reconnect(); }
   }
 
@@ -873,7 +948,7 @@
   if (friendTo) { const u = new URL(location.href); u.searchParams.delete('friend'); u.searchParams.delete('fn'); try { history.replaceState(null, '', u); } catch (e) {} }
   (async () => {
     await syncSocial();
-    if (friendTo && friendTo !== ME && API) { try { const r = await api('request', {to: friendTo}); toast(r.ok ? (r.friends.some((f) => f.pid === friendTo) ? `${friendName || '친구'}님과 친구가 됐어요! 🎉` : `${friendName || '친구'}님에게 친구 신청을 보냈어요`) : socialMsg(r.error)); } catch (e) {} }
+    if (friendTo && friendTo !== ME && API) { try { const r = await api('request', {to: friendTo}); toast(r.ok ? (r.friends.some((f) => f.pid === friendTo) ? `${friendName || '친구'}님과 친구가 됐어요! 🎉` : `${friendName || '친구'}님에게 친구 신청을 보냈어요`) : socialMsg(r.error)); if (r.ok && r.friends.some((f) => f.pid === friendTo)) celebrate(friendTo); } catch (e) {} }
   })();
   setInterval(() => { if (!document.hidden) syncSocial(); }, 45000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) syncSocial(); });

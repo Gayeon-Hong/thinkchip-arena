@@ -87,12 +87,13 @@ export class User extends DurableObject {
   }
   async save() { await this.ctx.storage.put('u', this.u); }
   other(pid) { return this.env.USER.get(this.env.USER.idFromName(pid)); }
-  view() { const u = this.u; return {ok: true, friends: Object.entries(u.friends).map(([pid, f]) => ({pid, name: f.name})), requests: Object.entries(u.inReq).map(([pid, r]) => ({pid, name: r.name, at: r.at})), pending: Object.keys(u.outReq), gifts: u.gifts, sentToday: u.sent.day === dayKey() ? u.sent.total : 0, giftMax: GIFT_DAILY_MAX}; }
+  view() { const u = this.u; return {ok: true, friends: Object.entries(u.friends).map(([pid, f]) => ({pid, name: f.name, nogift: !!f.toss})), requests: Object.entries(u.inReq).map(([pid, r]) => ({pid, name: r.name, at: r.at})), pending: Object.keys(u.outReq), gifts: u.gifts, sentToday: u.sent.day === dayKey() ? u.sent.total : 0, giftMax: GIFT_DAILY_MAX}; }
 
   async client(b) {
     const u = this.u, h = await sha256(b.key);
     if (!u.key) { u.key = h; u.pid = b.pid; } else if (u.key !== h) return {error: 'key', status: 403};
     if (b.name) u.name = cleanName(b.name);
+    if (typeof b.toss === 'boolean' && u.toss !== b.toss) { u.toss = b.toss; for (const f of Object.keys(u.friends)) await this.other(f).tossFlag(u.pid, b.toss); } // 토스 앱 사용자는 선물을 주고받지 않아요
     const to = String(b.to || '');
     switch (b.op) {
       case 'hello': break;
@@ -101,8 +102,8 @@ export class User extends DurableObject {
         if (u.friends[to]) break;
         if (u.inReq[to]) { await this.befriend(to, u.inReq[to].name); break; } // 서로 신청 = 바로 친구
         if (Object.keys(u.friends).length >= MAX_FRIENDS) return {error: 'full', status: 400};
-        const r = await this.other(to).incoming(u.pid, u.name || '플레이어');
-        if (r.r === 'friends') { delete u.outReq[to]; u.friends[to] = {name: r.name || '친구', at: Date.now()}; break; }
+        const r = await this.other(to).incoming(u.pid, u.name || '플레이어', !!u.toss);
+        if (r.r === 'friends') { delete u.outReq[to]; u.friends[to] = {name: r.name || '친구', at: Date.now(), toss: !!r.toss}; break; }
         if (r.r === 'full') return {error: 'theirfull', status: 400};
         u.outReq[to] = Date.now();
         break;
@@ -114,6 +115,7 @@ export class User extends DurableObject {
         // 충전한 칩만 선물 가능 — 그 확인은 기기(지갑)에서 하고, 서버는 친구 여부·금액·하루 한도·중복을 막아요.
         const amount = Math.trunc(Number(b.amount)), id = String(b.id || '').slice(0, 40);
         if (!u.friends[to]) return {error: 'notfriend', status: 400};
+        if (u.toss) return {error: 'nogift', status: 400};
         if (!GIFT_AMOUNTS.includes(amount) || !/^[a-zA-Z0-9_-]{8,40}$/.test(id)) return {error: 'bad', status: 400};
         if (u.sentIds.includes(id)) return {...this.view(), dup: true}; // 같은 선물 재전송
         const today = dayKey(); if (u.sent.day !== today) u.sent = {day: today, total: 0};
@@ -135,20 +137,22 @@ export class User extends DurableObject {
   async befriend(pid, name) {
     const u = this.u; delete u.inReq[pid]; delete u.outReq[pid];
     u.friends[pid] = {name: name || '친구', at: Date.now()};
-    await this.other(pid).link(u.pid, u.name || '플레이어');
+    const r = await this.other(pid).link(u.pid, u.name || '플레이어', !!u.toss); u.friends[pid].toss = !!r?.toss;
   }
   // ── 다른 User 가 부르는 내부 메서드 ──
-  async incoming(from, name) {
-    const u = this.u, me = {name: u.name || '플레이어'};
+  async incoming(from, name, toss = false) {
+    const u = this.u, me = {name: u.name || '플레이어', toss: !!u.toss};
     if (u.friends[from]) return {r: 'friends', ...me};
-    if (u.outReq[from]) { delete u.outReq[from]; u.friends[from] = {name: cleanName(name), at: Date.now()}; await this.save(); return {r: 'friends', ...me}; } // 나도 신청해 뒀으면 바로 친구
+    if (u.outReq[from]) { delete u.outReq[from]; u.friends[from] = {name: cleanName(name), at: Date.now(), toss}; await this.save(); return {r: 'friends', ...me}; } // 나도 신청해 뒀으면 바로 친구
     if (!u.inReq[from] && Object.keys(u.inReq).length >= MAX_INBOX) return {r: 'full'};
     u.inReq[from] = {name: cleanName(name), at: Date.now()}; await this.save(); return {r: 'ok'};
   }
-  async link(pid, name) { const u = this.u; delete u.inReq[pid]; delete u.outReq[pid]; u.friends[pid] = {name: cleanName(name), at: u.friends[pid]?.at || Date.now()}; await this.save(); return 'ok'; }
+  async link(pid, name, toss = false) { const u = this.u; delete u.inReq[pid]; delete u.outReq[pid]; u.friends[pid] = {name: cleanName(name), at: u.friends[pid]?.at || Date.now(), toss}; await this.save(); return {r: 'ok', toss: !!u.toss}; }
+  async tossFlag(pid, on) { const f = this.u.friends[pid]; if (f && !!f.toss !== on) { f.toss = on; await this.save(); } return 'ok'; }
   async unlink(pid) { delete this.u.friends[pid]; await this.save(); return 'ok'; }
   async receive(g) {
     const u = this.u; if (!u.friends[g.from]) return 'notfriend';
+    if (u.toss) return 'nogift';
     if (u.gifts.some((x) => x.id === g.id)) return 'ok';
     if (u.gifts.length >= MAX_INBOX) return 'full';
     u.friends[g.from].name = cleanName(g.name);

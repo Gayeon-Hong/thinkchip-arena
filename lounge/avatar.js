@@ -125,12 +125,17 @@
   function buildTop(g, kind, color, skinM) {
     const C = mat(color, {roughness: kind === 'jacket' || kind === 'suit' ? 0.45 : 0.78, clearcoat: kind === 'jacket' ? 0.4 : 0.08});
     const torso = add(g, capsule(0.37, 0.28), C, 0, 0.86, 0); torso.scale.set(1, 1, 0.88);
-    const sleeve = (len, armColorM) => { for (const s of [-1, 1]) { const a = add(g, capsule(0.1, len), armColorM, s * 0.46, 0.92 - len / 2 + 0.1, 0); a.rotation.z = s * 0.35; } };
-    const hands = () => { for (const s of [-1, 1]) add(g, sphere(0.1, 16, 16), skinM, s * 0.56, 0.66, 0.02); };
+    // 팔은 어깨(피벗) 그룹에 달아서 손인사·하이파이브 같은 동작을 할 수 있게 해요. s = -1 오른팔, +1 왼팔 (캐릭터 기준)
+    const SH = {x: 0.4, y: 1.04}, arms = {};
+    for (const s of [-1, 1]) { const pv = new THREE.Group(); pv.position.set(s * SH.x, SH.y, 0); g.add(pv); arms[s] = pv; }
+    const armAdd = (s, geo, m, x, y, z) => add(arms[s], geo, m, x - s * SH.x, y - SH.y, z);
+    const sleeve = (len, armColorM) => { for (const s of [-1, 1]) { const a = armAdd(s, capsule(0.1, len), armColorM, s * 0.46, 0.92 - len / 2 + 0.1, 0); a.rotation.z = s * 0.35; } };
+    const hands = () => { for (const s of [-1, 1]) arms[s].userData.hand = armAdd(s, sphere(0.1, 16, 16), skinM, s * 0.56, 0.66, 0.02); };
+    g.userData.arms = {r: arms[-1], l: arms[1]};
     if (kind === 'hoodie') { sleeve(0.28, C); add(g, new THREE.TorusGeometry(0.27, 0.08, 12, 32), C, 0, 1.16, 0).rotation.x = Math.PI / 2;
       const pocket = add(g, new THREE.BoxGeometry(0.36, 0.13, 0.04), mat(color, {roughness: 0.85}), 0, 0.72, 0.3); pocket.castShadow = false;
       for (const s of [-1, 1]) add(g, capsule(0.012, 0.12), mat(0xffffff, {roughness: 0.6}), s * 0.07, 1.02, 0.32); }
-    if (kind === 'tee') { for (const s of [-1, 1]) { const a = add(g, capsule(0.11, 0.06), C, s * 0.42, 1.0, 0); a.rotation.z = s * 0.6; const arm = add(g, capsule(0.085, 0.24), skinM, s * 0.5, 0.82, 0); arm.rotation.z = s * 0.35; }
+    if (kind === 'tee') { for (const s of [-1, 1]) { const a = add(g, capsule(0.11, 0.06), C, s * 0.42, 1.0, 0); a.rotation.z = s * 0.6; const arm = armAdd(s, capsule(0.085, 0.24), skinM, s * 0.5, 0.82, 0); arm.rotation.z = s * 0.35; }
       add(g, new THREE.TorusGeometry(0.17, 0.025, 8, 32), mat(0xffffff, {roughness: 0.7}), 0, 1.13, 0.06).rotation.x = Math.PI / 2 - 0.25; }
     if (kind === 'knit') { sleeve(0.28, C); add(g, new THREE.TorusGeometry(0.22, 0.07, 12, 32), C, 0, 1.15, 0).rotation.x = Math.PI / 2;
       for (const x of [-0.13, 0.13]) for (let i = 0; i < 4; i++) add(g, sphere(0.045, 10, 8), C, x, 0.68 + i * 0.12, 0.33 - Math.abs(i - 1.5) * 0.008); }
@@ -191,7 +196,7 @@
     const face = buildFace(headG, cy - 0.02, r * 0.93, r, L);
     buildHair(headG, cy, r, L.hair, L.hairColor);
     if (L.acc && L.acc !== 'none') buildAcc(headG, L.acc, cy - 0.02, r);
-    root.userData = {look: L, body, head: headG, face};
+    root.userData = {look: L, body, head: headG, face, arms: body.userData.arms, armPose: null};
     return root;
   }
 
@@ -202,7 +207,13 @@
     body.rotation.z = state === 'walk' ? Math.sin(k * 9) * 0.06 : 0;
     head.rotation.z = state === 'idle' ? Math.sin(k * 1.3) * 0.04 : 0;
     head.rotation.x = state === 'think' ? 0.12 : 0;
+    // 팔: armPose = {r: [x, z], l: [x, z]} (어깨 회전, 라디안). 없으면 천천히 차렷 자세로 돌아와요.
+    const arms = av.userData.arms; if (!arms) return; const pose = av.userData.armPose || {};
+    for (const side of ['r', 'l']) { const want = pose[side] || [0, 0], a = arms[side];
+      a.rotation.x += (want[0] - a.rotation.x) * 0.32; a.rotation.z += (want[1] - a.rotation.z) * 0.32; }
   }
+  // 손 위치 (월드 좌표) — 하이파이브가 부딪히는 지점
+  function handWorld(av, side, out) { const a = av.userData.arms && av.userData.arms[side]; if (!a || !a.userData.hand) return null; return a.userData.hand.getWorldPosition(out || new THREE.Vector3()); }
 
   // 채팅/이모티콘 → 표정. 심리전 채팅 칠 때 캐릭터 얼굴이 바뀌어요.
   const EXPR_RULES = [
@@ -228,5 +239,5 @@
   function loadMine() { try { const v = JSON.parse(localStorage.getItem(STORE)); if (v && v.look) return {look: Object.assign({}, DEFAULT_LOOK, v.look), owned: Array.isArray(v.owned) ? v.owned : []}; } catch (e) {} return {look: Object.assign({}, DEFAULT_LOOK), owned: []}; }
   function saveMine(data) { try { localStorage.setItem(STORE, JSON.stringify(data)); localStorage.setItem('thinkchip:look', encodeLook(data.look)); } catch (e) {} } // thinkchip:look = 메인 앱 실시간 방이 서버로 보내는 내 모습
 
-  global.ThinkChipAvatar = {WARDROBE, DEFAULT_LOOK, buildAvatar, animateAvatar, exprFromText, encodeLook, decodeLook, loadMine, saveMine};
+  global.ThinkChipAvatar = {WARDROBE, DEFAULT_LOOK, buildAvatar, animateAvatar, handWorld, exprFromText, encodeLook, decodeLook, loadMine, saveMine};
 })(typeof window !== 'undefined' ? window : globalThis);
