@@ -23,7 +23,7 @@ import {createGomoku,playGomoku,gomokuAI,gomokuAdvice,GM_N} from './games/gomoku
 import {createDots,playDots,dotsAI,dotsAdvice,DB_N,DB_H,DB_V,DB_LINES} from './games/dots.js';
 import {liveAvailable,connectLive,newRoomCode,normalizeCode} from './live.js';
 import {createMinority,playMinority,minorityAdvice,minorityBotTarget,MI_ROUNDS,MI_POINT} from './games/minority.js';
-import {defaultProfile,normalizeProfile,awardRun,spendChips,awardAd,AD_DAILY_LIMIT,HINT_COST,AD_REWARD,todayKey} from './wallet.js';
+import {defaultProfile,normalizeProfile,awardRun,spendChips,awardAd,grantPaid,AD_DAILY_LIMIT,HINT_COST,AD_REWARD,todayKey} from './wallet.js';
 import {listChipPacks,buyChipPack,restoreChipOrders} from './toss.js';
 import {TOSS_CONFIG,shareInvite,showRewardedAd,initToss,bindBackHandler,exitApp,isRewardedAdSupported} from './toss.js';
 
@@ -616,7 +616,7 @@ function result(){const s=session,g=s.game,enemy=opponentScore(),victory=calcVic
 }
 let chipPacks=null,buying=false; // 콘솔에 등록된 충전 상품 (토스 앱 안에서만)
 async function loadChipPacks(){if(chipPacks!==null)return;chipPacks=[];chipPacks=await listChipPacks();if(screen==='wallet')render();}
-function grantChips(n){profile.chips+=Math.max(0,Math.trunc(n));saveProfile();return true;}
+function grantChips(n){profile=grantPaid(profile,n);saveProfile();return true;}
 function wallet(){loadChipPacks();const count=Number(profile.adCount[todayKey()]||0);return `<div class="page"><main class="shell">${header({back:true,title:'씽크칩 지갑'})}
  <section class="wallet-hero"><span class="mini-kicker">THINK CHIP WALLET</span><div class="wallet-balance"><span class="wallet-big-icon">⬡</span><strong>${fmt(profile.chips)}</strong><span>CHIP</span></div><p>도전해서 모으고, 생각이 막힐 때 힌트로 사용하세요.</p></section>
  ${chipPacks===null?'':chipPacks.length?`<div class="section-title tight"><div><span class="mini-kicker">CHIP SHOP</span><h2>씽크칩 충전</h2></div></div><div class="chip-packs">${chipPacks.map(p=>`<button class="chip-pack" data-buy="${esc(p.sku)}" ${buying?'disabled':''}><span class="cp-amt">⬡ ${fmt(p.chips)}</span><small>${esc(p.displayName||'')}</small><b>${esc(p.displayAmount||'')}</b></button>`).join('')}</div><p class="fineprint">${chipPacks[0]?.store==='ms'?'Microsoft Store 계정으로 결제돼요.':'토스페이로 결제돼요.'} 충전한 칩은 옷·방 꾸미기와 힌트에 쓸 수 있고 현금으로 바꿀 수 없어요.</p>`:''}

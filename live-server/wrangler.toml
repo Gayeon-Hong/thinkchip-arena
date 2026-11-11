@@ -11,3 +11,12 @@ class_name = "Room"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Room"]
+
+# 친구 목록·선물함 (플레이어마다 하나)
+[[durable_objects.bindings]]
+name = "USER"
+class_name = "User"
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["User"]

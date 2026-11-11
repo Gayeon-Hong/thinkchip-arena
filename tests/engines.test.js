@@ -63,3 +63,11 @@ test('보상: 힌트 차감, 칩 부족, 광고 시청 횟수 제한',()=>{
  for(let i=0;i<AD_DAILY_LIMIT;i++)p=awardAd(p,new Date('2026-11-06T09:00:00')).profile;
  assert.equal(awardAd(p,new Date('2026-11-06T09:00:00')).earned,0);
 });
+test('충전 칩: 결제한 칩만 선물 가능, 쓸 때는 무료 칩부터',async()=>{
+ const {grantPaid,spendChips,normalizeProfile,defaultProfile}=await import('../src/wallet.js');
+ let p=grantPaid(defaultProfile(),300);assert.equal(p.chips,400);assert.equal(p.paid,300);
+ p=spendChips(p,50).profile;assert.equal(p.chips,350);assert.equal(p.paid,300);
+ p=spendChips(p,200).profile;assert.equal(p.chips,150);assert.equal(p.paid,150);
+ assert.equal(normalizeProfile({chips:10,paid:500}).paid,10);
+ assert.equal(normalizeProfile({chips:10}).paid,0);
+});

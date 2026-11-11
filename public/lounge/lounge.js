@@ -21,7 +21,8 @@
   };
   function profile() { const p = store.get(PROFILE_KEY, null); return p && typeof p === 'object' ? p : {version: 2, nickname: '', chips: 100, best: {}, completed: {}, history: [], earnings: {}, adCount: {}, demoGift: false}; }
   function saveProfile(p) { store.set(PROFILE_KEY, p); renderChips(); }
-  function addChips(n) { const p = profile(); p.chips = Math.max(0, Math.trunc((Number(p.chips) || 0) + n)); saveProfile(p); return p.chips; }
+  function addChips(n) { const p = profile(); p.chips = Math.max(0, Math.trunc((Number(p.chips) || 0) + n)); p.paid = Math.min(Number(p.paid) || 0, p.chips); saveProfile(p); return p.chips; } // 쓸 때는 무료 칩부터, 충전 칩(paid)은 선물용으로 남아요
+  const giftable = () => { const p = profile(); return Math.max(0, Math.min(Number(p.paid) || 0, Number(p.chips) || 0)); };
   function pid() { try { let id = localStorage.getItem('thinkchip:pid'); if (!id) { id = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()).replace(/[^a-zA-Z0-9]/g, '').slice(0, 24); localStorage.setItem('thinkchip:pid', id); } return id; } catch (e) { return 'guest' + Math.floor(Math.random() * 1e6); } }
   const ME = pid();
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -634,20 +635,126 @@
       conn.send(JSON.stringify({t: 'gb', text: v})); $('gbInput').value = ''; toast('방명록을 남겼어요'); setExpr(me, 'happy'); };
   }
   function openFriends() {
-    openSheet({kicker: 'FRIENDS', title: '👥 친구 방', html: `
-      ${room.public ? '<div class="card"><h3>지금은 공개 라운지예요</h3><p>친구 방을 만들면 코드로 들어온 친구들만 같은 라운지에 모여요. 파티 게임을 고르면 그 친구들과 바로 같은 방에서 시작해요.</p></div>'
+    openSheet({kicker: 'FRIENDS', title: '👥 친구', html: `
+      <div id="socialBox"></div>
+      <h3 class="sheet-sub">친구 방 <small>· 코드로 들어온 사람끼리만 모이는 라운지</small></h3>
+      ${room.public ? '<div class="card"><p>친구 방을 만들면 코드로 들어온 친구들만 같은 라운지에 모여요. 파티 게임을 고르면 그 친구들과 바로 같은 방에서 시작해요.</p></div>'
         : `<div class="card"><h3>친구 방 코드</h3><div class="big-code">${room.code}</div><p>이 코드나 링크를 보내면 같은 라운지로 들어와요.</p></div><button class="btn gold full" id="shareBtn">초대 링크 보내기</button>`}
       <div class="code-row"><input id="codeInput" maxlength="6" placeholder="코드 입력" autocapitalize="characters"><button class="btn ghost" id="joinBtn">입장</button></div>
       <div style="display:flex;gap:8px;margin-top:10px"><button class="btn ${room.public ? 'gold' : 'ghost'} full" id="newRoomBtn">새 친구 방 만들기</button>${room.public ? '' : '<button class="btn ghost full" id="publicBtn">공개 라운지로</button>'}</div>
-      ${room.public ? '' : `<button class="btn ghost full" id="gbBtn" style="margin-top:8px">📖 방명록 · TODAY ${hp ? hp.today : 0}</button>`}
-      <div class="name-row" style="margin-top:14px"><div class="label-row">내 이름</div><input id="nameInput" maxlength="12" value="${esc(profile().nickname || '')}" placeholder="라운지에서 보일 이름"></div>`});
+      ${room.public ? '' : `<button class="btn ghost full" id="gbBtn" style="margin-top:8px">📖 방명록 · TODAY ${hp ? hp.today : 0}</button>`}`});
     $('codeInput').oninput = (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); };
     $('joinBtn').onclick = () => { const c = $('codeInput').value; if (c.length < 4) return toast('코드 4자리를 입력해 주세요'); switchRoom(c); closeSheet(); };
     $('newRoomBtn').onclick = () => { switchRoom(newCode()); openFriends(); };
     if ($('publicBtn')) $('publicBtn').onclick = () => { switchRoom(null); closeSheet(); };
     if ($('shareBtn')) $('shareBtn').onclick = shareRoom;
     if ($('gbBtn')) $('gbBtn').onclick = openGuestbook;
-    $('nameInput').onchange = (e) => { const p = profile(); p.nickname = e.target.value.trim().slice(0, 12); saveProfile(p); me.tag.textContent = myName(); reconnect(); toast('이름을 바꿨어요'); };
+    const box = $('socialBox');
+    box.onchange = (e) => { if (e.target.id !== 'nameInput') return; const p = profile(); p.nickname = e.target.value.trim().slice(0, 12); saveProfile(p); me.tag.textContent = myName(); reconnect(); syncSocial(); toast('이름을 바꿨어요'); };
+    box.onclick = async (e) => {
+      const b = e.target.closest('button'); if (!b) return; const d = b.dataset;
+      if (b.id === 'friendLinkBtn') return shareFriendLink();
+      if (b.id === 'socialRetry') return syncSocial();
+      try {
+        if (d.add) { b.disabled = true; const r = await api('request', {to: d.add}); toast(r.ok ? (r.friends.some((f) => f.pid === d.add) ? '친구가 됐어요! 🎉' : '친구 신청을 보냈어요') : socialMsg(r.error)); }
+        else if (d.acc) { const r = await api('accept', {to: d.acc}); toast(r.ok ? '친구가 됐어요! 🎉' : socialMsg(r.error)); }
+        else if (d.dec) { await api('decline', {to: d.dec}); }
+        else if (d.del) { const f = social.friends.find((x) => x.pid === d.del); if (f && confirm(`${f.name}님을 친구에서 삭제할까요?`)) await api('remove', {to: d.del}); }
+        else if (d.gift) { const f = social.friends.find((x) => x.pid === d.gift); if (f) return openGift(f); }
+      } catch (err) { toast('인터넷 연결을 확인해 주세요'); }
+      renderSocial();
+    };
+    renderSocial(); syncSocial();
+  }
+
+  // ───────── 친구 & 칩 선물 (서버: live-server 의 User — 오프라인이어도 신청·선물이 도착해요) ─────────
+  const API = CFG.LIVE_URL ? CFG.LIVE_URL.replace(/^ws/, 'http').replace(/\/live\/?$/, '') + '/api/user' : '';
+  const GIFT_AMOUNTS = [100, 300, 1000, 3000], GIFTQ_KEY = 'thinkchip:giftq';
+  let social = {friends: [], requests: [], pending: [], gifts: [], sentToday: 0, giftMax: 5000}, socialState = API ? 'loading' : 'off';
+  function pkey() { // 이 기기 비밀 키: 다른 사람이 내 이름(pid)으로 친구·선물을 건드리지 못하게
+    try { let k = localStorage.getItem('thinkchip:pkey'); if (!k) { const a = new Uint8Array(18); crypto.getRandomValues(a); k = [...a].map((x) => x.toString(16).padStart(2, '0')).join(''); localStorage.setItem('thinkchip:pkey', k); } return k; } catch (e) { return ''; }
+  }
+  async function api(op, extra = {}) {
+    if (!API) throw new Error('offline');
+    const res = await fetch(API, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({pid: ME, key: pkey(), name: myName(), op, ...extra})});
+    const d = await res.json().catch(() => ({error: 'server'}));
+    if (d.ok) { social = d; socialState = 'ok'; renderSocialBadge(); } else if (d.error === 'key') socialState = 'key';
+    return d;
+  }
+  const socialMsg = (e) => ({limit: '오늘 선물 한도를 넘었어요 (하루 ⬡5,000)', notfriend: '친구에게만 선물할 수 있어요', full: '상대 선물함이 가득 찼어요', theirfull: '상대가 받은 신청이 너무 많아요', gone: '이미 처리된 신청이에요', key: '이 기기에서는 친구 기능을 쓸 수 없어요'}[e] || '잠시 후 다시 시도해 주세요');
+  const giftQ = () => store.get(GIFTQ_KEY, []), setGiftQ = (q) => store.set(GIFTQ_KEY, q);
+  // 선물 1건 전달: 칩은 보내기 전에 미리 빼 두고, 서버가 거절하면 돌려줘요. 연결이 끊기면 줄에 남겨 다음에 같은 id 로 다시 보내요(서버가 중복을 막아요).
+  async function deliver(g) {
+    let d; try { d = await api('gift', {to: g.to, amount: g.amount, id: g.id}); } catch (e) { return 'retry'; }
+    setGiftQ(giftQ().filter((x) => x.id !== g.id));
+    if (d.ok) return 'ok';
+    const p = profile(); p.chips = (Number(p.chips) || 0) + g.amount; p.paid = (Number(p.paid) || 0) + g.amount; saveProfile(p);
+    return d.error || 'fail';
+  }
+  async function flushGifts() { for (const g of giftQ()) await deliver(g); }
+  async function sendGift(f, amount) {
+    const p = profile(); if (giftable() < amount) return toast('선물할 수 있는 충전 칩이 부족해요');
+    const g = {id: 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10), to: f.pid, amount, name: f.name};
+    p.chips -= amount; p.paid = (Number(p.paid) || 0) - amount; saveProfile(p); setGiftQ([...giftQ(), g]);
+    const r = await deliver(g);
+    if (r === 'ok') { toast(`🎁 ${f.name}님에게 ⬡${fmt(amount)}을 선물했어요`); setExpr(me, 'happy'); chatLine('', `🎁 ${f.name}님에게 ⬡${fmt(amount)} 선물을 보냈어요`, true); }
+    else if (r === 'retry') toast('연결이 불안정해요 · 연결되면 자동으로 보내요');
+    else toast(`선물하지 못했어요 · ${socialMsg(r)} (칩은 돌려받았어요)`);
+    drawBoard(); closeSheet(); openFriends();
+  }
+  async function syncSocial() {
+    if (!API || syncSocial.busy) return; syncSocial.busy = true;
+    try {
+      await flushGifts();
+      let d = await api('hello');
+      if (d.ok && d.gifts.length) { // 받은 선물은 무료 칩으로 들어와요 (다시 선물할 수는 없어요)
+        d = await api('claim', {ids: d.gifts.map((g) => g.id)}); const got = d.claimed || [];
+        for (const g of got) { addChips(g.amount); chatLine('', `🎁 ${g.name}님에게 ⬡${fmt(g.amount)} 선물을 받았어요`, true); }
+        if (got.length) { const from = [...new Set(got.map((g) => g.name))]; toast(`🎁 ${from.slice(0, 2).join(', ')}${from.length > 2 ? ` 외 ${from.length - 2}명` : ''}님이 ⬡${fmt(got.reduce((a, g) => a + g.amount, 0))}을 선물했어요!`); setExpr(me, 'happy'); drawBoard(); }
+      }
+      if (d.ok && d.requests.length > (syncSocial.seenReq || 0)) toast(`📩 친구 신청이 ${d.requests.length}개 와 있어요 · 👥 친구에서 확인`);
+      if (d.ok) syncSocial.seenReq = d.requests.length;
+    } catch (e) { if (socialState === 'loading') socialState = 'net'; } finally { syncSocial.busy = false; renderSocial(); }
+  }
+  function renderSocialBadge() { const b = document.querySelector('.dock-right [data-open="friends"]'); if (b) b.classList.toggle('has-badge', social.requests.length > 0); }
+  function renderSocial() {
+    const box = $('socialBox'); if (!box || $('sheet').hidden) return;
+    const fr = social.friends, rq = social.requests, known = new Set([...fr.map((f) => f.pid), ...(social.pending || [])]);
+    const here = [...online.entries()].filter(([pid]) => pid !== ME && !known.has(pid) && !rq.some((r) => r.pid === pid));
+    const pending = (social.pending || []).length, paid = giftable(), focused = document.activeElement && document.activeElement.id === 'nameInput';
+    if (focused) return; // 이름 입력 중엔 다시 그리지 않아요
+    box.innerHTML = `
+      <div class="name-row" style="margin:0 0 12px"><div class="label-row">내 이름 <small style="color:var(--muted);font-weight:600">· 바꾸면 머리 위 이름과 친구 목록 이름이 바뀌어요</small></div><input id="nameInput" maxlength="12" value="${esc(profile().nickname || '')}" placeholder="라운지에서 보일 이름"></div>
+      ${socialState === 'off' ? '<div class="card"><p>오프라인이라 친구 기능을 쓸 수 없어요.</p></div>' : socialState === 'net' ? '<div class="card"><p>친구 목록을 불러오지 못했어요.</p><button class="btn ghost full" id="socialRetry" style="margin-top:8px">다시 불러오기</button></div>' : socialState === 'key' ? `<div class="card"><p>${socialMsg('key')}</p></div>` : ''}
+      ${rq.length ? `<div class="card"><h3>📩 받은 친구 신청 ${rq.length}</h3>${rq.map((r) => `<div class="f-row"><b>${esc(r.name)}</b><span><button class="btn gold sm" data-acc="${esc(r.pid)}">수락</button><button class="btn ghost sm" data-dec="${esc(r.pid)}">거절</button></span></div>`).join('')}</div>` : ''}
+      <div class="card"><h3>👥 내 친구 ${fr.length}${socialState === 'loading' ? ' <small style="color:var(--muted)">· 불러오는 중…</small>' : ''}</h3>
+        ${fr.length ? fr.map((f) => `<div class="f-row"><b>${online.has(f.pid) ? '<i class="f-on" title="같은 라운지에 있어요"></i>' : ''}${esc(f.name)}</b><span><button class="btn gold sm" data-gift="${esc(f.pid)}">🎁 선물</button><button class="btn ghost sm" data-del="${esc(f.pid)}" aria-label="친구 삭제">✕</button></span></div>`).join('')
+          : '<p>아직 친구가 없어요. 아래 라운지에 있는 사람에게 신청하거나 친구 추가 링크를 보내 보세요.</p>'}
+        <p style="margin-top:8px;font-size:11.5px">선물할 수 있는 칩 <b style="color:var(--gold)">⬡${fmt(paid)}</b> · 충전한 칩만 선물할 수 있어요</p>
+        ${pending ? `<p style="margin-top:4px;font-size:11.5px">친구 신청 보낸 사람 ${pending}명 · 수락하면 친구가 돼요</p>` : ''}</div>
+      ${here.length ? `<div class="card"><h3>지금 라운지에 있는 사람</h3>${here.slice(0, 12).map(([pid, name]) => `<div class="f-row"><b><i class="f-on"></i>${esc(otherName({pid, name}))}</b><button class="btn ghost sm" data-add="${esc(pid)}">+ 친구 신청</button></div>`).join('')}</div>` : ''}
+      <button class="btn ghost full" id="friendLinkBtn" style="margin-bottom:16px">📲 친구 추가 링크 보내기</button>`;
+  }
+  function openGift(f) {
+    const paid = giftable(), left = Math.max(0, (social.giftMax || 5000) - (social.sentToday || 0));
+    const can = (a) => a <= paid && a <= left;
+    openSheet({kicker: 'GIFT', title: `🎁 ${f.name}님에게 선물`, html: `
+      <div class="card"><p>선물할 수 있는 칩 <b style="color:var(--gold)">⬡${fmt(paid)}</b></p>
+        <p style="font-size:11.5px;margin-top:4px">충전(결제)한 칩만 선물할 수 있어요. 게임·광고로 번 칩, 선물 받은 칩은 선물할 수 없어요. 오늘 남은 선물 한도 ⬡${fmt(left)}</p></div>
+      <div class="gift-grid">${GIFT_AMOUNTS.map((a) => `<button class="btn ${can(a) ? 'gold' : 'ghost'}" data-amt="${a}" ${can(a) ? '' : 'disabled'}>⬡${fmt(a)}</button>`).join('')}</div>
+      ${paid < GIFT_AMOUNTS[0] ? '<button class="btn ghost full" id="giftCharge" style="margin-top:10px">💳 씽크칩 충전하러 가기</button>' : ''}
+      <button class="btn ghost full" id="giftBack" style="margin-top:8px">← 친구 목록</button>
+      <p class="table-note">보낸 선물은 되돌릴 수 없어요.</p>`});
+    $('sheetBody').querySelector('.gift-grid').onclick = (e) => { const b = e.target.closest('[data-amt]'); if (!b || b.disabled) return; const a = Number(b.dataset.amt);
+      if (confirm(`${f.name}님에게 ⬡${fmt(a)} 씽크칩을 선물할까요?\n보낸 선물은 되돌릴 수 없어요.`)) { b.disabled = true; sendGift(f, a); } };
+    if ($('giftCharge')) $('giftCharge').onclick = () => { location.href = new URL('../index.html?wallet=1', location.href).href; };
+    $('giftBack').onclick = () => { closeSheet(); openFriends(); };
+  }
+  async function shareFriendLink() {
+    const u = new URL(location.pathname, location.href); u.searchParams.set('friend', ME); u.searchParams.set('fn', myName());
+    const text = `씽크칩 라운지에서 ${myName()}님과 친구 해요!`;
+    try { if (navigator.share) { await navigator.share({title: '씽크칩 친구 추가', text, url: u.href}); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+    try { await navigator.clipboard.writeText(`${text}\n${u.href}`); toast('친구 추가 링크를 복사했어요'); } catch (e) { toast('링크를 복사하지 못했어요'); }
   }
   async function shareRoom() {
     const url = new URL(`?room=${room.code}`, location.href).href, text = `씽크칩 라운지에서 만나요! 방 코드 ${room.code}`;
@@ -761,6 +868,15 @@
   renderChips(); drawBoard(); setTicker(); setInterval(setTicker, 15000);
   const startCode = (params.get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
   switchRoom(startCode.length >= 4 ? startCode : null);
+  // 친구 추가 링크(?friend=pid)로 들어오면 그 사람에게 친구 신청
+  const friendTo = (params.get('friend') || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32), friendName = (params.get('fn') || '').slice(0, 12);
+  if (friendTo) { const u = new URL(location.href); u.searchParams.delete('friend'); u.searchParams.delete('fn'); try { history.replaceState(null, '', u); } catch (e) {} }
+  (async () => {
+    await syncSocial();
+    if (friendTo && friendTo !== ME && API) { try { const r = await api('request', {to: friendTo}); toast(r.ok ? (r.friends.some((f) => f.pid === friendTo) ? `${friendName || '친구'}님과 친구가 됐어요! 🎉` : `${friendName || '친구'}님에게 친구 신청을 보냈어요`) : socialMsg(r.error)); } catch (e) {} }
+  })();
+  setInterval(() => { if (!document.hidden) syncSocial(); }, 45000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) syncSocial(); });
   if (!localStorage.getItem('thinkchip:avatar:v1')) setTimeout(() => { toast('처음 오셨네요! 드레스룸에서 내 캐릭터를 꾸며 보세요'); }, 1200);
   addEventListener('storage', (e) => { if (e.key === PROFILE_KEY) { renderChips(); drawBoard(); } });
   // 자동 테스트·영상 녹화용 (읽기 + 이동만). 게임 데이터나 칩은 바꾸지 않아요.

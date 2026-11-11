@@ -52,9 +52,109 @@ export default {
       return env.ROOM.get(env.ROOM.idFromName(code)).fetch(req);
     }
     if (url.pathname === '/' || url.pathname === '/health') return new Response('thinkchip-live ok', {headers: {'content-type': 'text/plain; charset=utf-8', 'access-control-allow-origin': '*'}});
+    if (url.pathname === '/api/user') return userApi(req, env);
     return new Response('not found', {status: 404});
   },
 };
+
+// ───────── 친구 & 칩 선물 ─────────
+// 플레이어마다 User Durable Object 하나 (pid 기준). 친구 목록·받은 신청·선물함을 서버에 보관해서
+// 상대가 오프라인이어도 신청/선물이 도착해요. 처음 접속한 기기가 비밀 키를 등록하고(TOFU), 이후엔 그 키가 있어야 해요.
+const PID_RE = /^[a-zA-Z0-9_-]{6,32}$/;
+const MAX_FRIENDS = 100, MAX_INBOX = 50;
+const GIFT_AMOUNTS = [100, 300, 1000, 3000];
+const GIFT_DAILY_MAX = 5000; // 한 사람이 하루에 보낼 수 있는 칩 (도용·사기 피해 제한)
+const CORS = {'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type'};
+const json = (body, status = 200) => new Response(JSON.stringify(body), {status, headers: {'content-type': 'application/json; charset=utf-8', ...CORS}});
+const dayKey = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); // 한국 날짜
+async function sha256(s) { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)); return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join(''); }
+
+async function userApi(req, env) {
+  if (req.method === 'OPTIONS') return new Response(null, {headers: CORS});
+  if (req.method !== 'POST') return json({error: 'method'}, 405);
+  let body; try { body = await req.json(); } catch { return json({error: 'bad'}, 400); }
+  const pid = String(body?.pid || '');
+  if (!PID_RE.test(pid) || typeof body.key !== 'string' || body.key.length < 16 || body.key.length > 64) return json({error: 'bad'}, 400);
+  // 워커는 client() 만 불러요. 다른 User 에게 보내는 내부 메서드(incoming/link/…)는 User 끼리만 불러서 밖에서 위조할 수 없어요.
+  const out = await env.USER.get(env.USER.idFromName(pid)).client(body);
+  return json(out, out.status || 200);
+}
+
+export class User extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    ctx.blockConcurrencyWhile(async () => { this.u = (await ctx.storage.get('u')) || {key: '', pid: '', name: '', friends: {}, inReq: {}, outReq: {}, gifts: [], sent: {day: '', total: 0}, sentIds: []}; });
+  }
+  async save() { await this.ctx.storage.put('u', this.u); }
+  other(pid) { return this.env.USER.get(this.env.USER.idFromName(pid)); }
+  view() { const u = this.u; return {ok: true, friends: Object.entries(u.friends).map(([pid, f]) => ({pid, name: f.name})), requests: Object.entries(u.inReq).map(([pid, r]) => ({pid, name: r.name, at: r.at})), pending: Object.keys(u.outReq), gifts: u.gifts, sentToday: u.sent.day === dayKey() ? u.sent.total : 0, giftMax: GIFT_DAILY_MAX}; }
+
+  async client(b) {
+    const u = this.u, h = await sha256(b.key);
+    if (!u.key) { u.key = h; u.pid = b.pid; } else if (u.key !== h) return {error: 'key', status: 403};
+    if (b.name) u.name = cleanName(b.name);
+    const to = String(b.to || '');
+    switch (b.op) {
+      case 'hello': break;
+      case 'request': {
+        if (!PID_RE.test(to) || to === u.pid) return {error: 'bad', status: 400};
+        if (u.friends[to]) break;
+        if (u.inReq[to]) { await this.befriend(to, u.inReq[to].name); break; } // 서로 신청 = 바로 친구
+        if (Object.keys(u.friends).length >= MAX_FRIENDS) return {error: 'full', status: 400};
+        const r = await this.other(to).incoming(u.pid, u.name || '플레이어');
+        if (r.r === 'friends') { delete u.outReq[to]; u.friends[to] = {name: r.name || '친구', at: Date.now()}; break; }
+        if (r.r === 'full') return {error: 'theirfull', status: 400};
+        u.outReq[to] = Date.now();
+        break;
+      }
+      case 'accept': { const r = u.inReq[to]; if (!r) return {error: 'gone', status: 400}; await this.befriend(to, r.name); break; }
+      case 'decline': delete u.inReq[to]; break;
+      case 'remove': if (u.friends[to]) { delete u.friends[to]; await this.other(to).unlink(u.pid); } break;
+      case 'gift': {
+        // 충전한 칩만 선물 가능 — 그 확인은 기기(지갑)에서 하고, 서버는 친구 여부·금액·하루 한도·중복을 막아요.
+        const amount = Math.trunc(Number(b.amount)), id = String(b.id || '').slice(0, 40);
+        if (!u.friends[to]) return {error: 'notfriend', status: 400};
+        if (!GIFT_AMOUNTS.includes(amount) || !/^[a-zA-Z0-9_-]{8,40}$/.test(id)) return {error: 'bad', status: 400};
+        if (u.sentIds.includes(id)) return {...this.view(), dup: true}; // 같은 선물 재전송
+        const today = dayKey(); if (u.sent.day !== today) u.sent = {day: today, total: 0};
+        if (u.sent.total + amount > GIFT_DAILY_MAX) return {error: 'limit', status: 400};
+        const r = await this.other(to).receive({id, from: u.pid, name: u.name || '플레이어', amount, at: Date.now()});
+        if (r !== 'ok') return {error: r || 'fail', status: 400};
+        u.sent.total += amount; u.sentIds = [...u.sentIds, id].slice(-100);
+        break;
+      }
+      case 'claim': { // 받은 선물 꺼내기: 서버에서 지운 것만 돌려줘서 두 번 받을 수 없어요
+        const ids = new Set((Array.isArray(b.ids) ? b.ids : []).map(String));
+        const got = u.gifts.filter((g) => ids.has(g.id)); u.gifts = u.gifts.filter((g) => !ids.has(g.id));
+        await this.save(); return {...this.view(), claimed: got};
+      }
+      default: return {error: 'op', status: 400};
+    }
+    await this.save(); return this.view();
+  }
+  async befriend(pid, name) {
+    const u = this.u; delete u.inReq[pid]; delete u.outReq[pid];
+    u.friends[pid] = {name: name || '친구', at: Date.now()};
+    await this.other(pid).link(u.pid, u.name || '플레이어');
+  }
+  // ── 다른 User 가 부르는 내부 메서드 ──
+  async incoming(from, name) {
+    const u = this.u, me = {name: u.name || '플레이어'};
+    if (u.friends[from]) return {r: 'friends', ...me};
+    if (u.outReq[from]) { delete u.outReq[from]; u.friends[from] = {name: cleanName(name), at: Date.now()}; await this.save(); return {r: 'friends', ...me}; } // 나도 신청해 뒀으면 바로 친구
+    if (!u.inReq[from] && Object.keys(u.inReq).length >= MAX_INBOX) return {r: 'full'};
+    u.inReq[from] = {name: cleanName(name), at: Date.now()}; await this.save(); return {r: 'ok'};
+  }
+  async link(pid, name) { const u = this.u; delete u.inReq[pid]; delete u.outReq[pid]; u.friends[pid] = {name: cleanName(name), at: u.friends[pid]?.at || Date.now()}; await this.save(); return 'ok'; }
+  async unlink(pid) { delete this.u.friends[pid]; await this.save(); return 'ok'; }
+  async receive(g) {
+    const u = this.u; if (!u.friends[g.from]) return 'notfriend';
+    if (u.gifts.some((x) => x.id === g.id)) return 'ok';
+    if (u.gifts.length >= MAX_INBOX) return 'full';
+    u.friends[g.from].name = cleanName(g.name);
+    u.gifts = [...u.gifts, {id: g.id, from: g.from, name: cleanName(g.name), amount: g.amount, at: g.at}]; await this.save(); return 'ok';
+  }
+}
 
 export class Room extends DurableObject {
   constructor(ctx, env) {
