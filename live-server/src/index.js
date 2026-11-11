@@ -68,6 +68,9 @@ const GIFT_DAILY_MAX = 5000; // 한 사람이 하루에 보낼 수 있는 칩
 const INITIAL_CHIPS = 100, WELCOME_BONUS = 300, ATTEND_REWARD = 30, PLAY_DAILY_CAP = 200, RUN_MAX = 150, AD_REWARD = 20, AD_DAILY_LIMIT = 5, IMPORT_MAX = 3000;
 const CHIP_PACKS = {chips_300: 300, chips_1000: 1100, chips_3000: 3500}; // app.config.js chipPacks 와 같게
 const SESSION_DAYS = 180;
+const ITEM_PRICES = {"hair:pony":[40,"포니테일"],"hair:curly":[60,"뽀글 펌"],"hair:long":[60,"긴 생머리"],"hair:spiky":[40,"삐죽 머리"],"hair:wolf":[60,"울프컷"],"hair:hime":[70,"히메컷"],"hair:dandy":[50,"댄디 투블럭"],"hair:wave":[80,"S컬 웨이브"],"top:knit":[50,"꽈배기 니트"],"top:shirt":[80,"셔츠 + 조끼"],"top:jacket":[90,"봄버 재킷"],"top:suit":[120,"블레이저"],"top:tank":[40,"나시"],"top:vneck":[70,"딥브이넥 니트"],"top:layered":[60,"레이어드 티"],"top:crop":[60,"크롭티"],"top:cardigan":[90,"오버핏 가디건"],"top:puffer":[130,"숏패딩"],"bottom:skirt":[40,"플리츠 스커트"],"bottom:jogger":[30,"트레이닝 팬츠"],"bottom:wide":[50,"와이드 슬랙스"],"bottom:cargo":[60,"카고 팬츠"],"bottom:mini":[50,"미니스커트"],"bottom:longskirt":[60,"롱스커트"],"shoes:boots":[40,"부츠"],"shoes:loafer":[40,"로퍼"],"shoes:chunky":[60,"어글리 슈즈"],"acc:glasses":[30,"동그란 안경"],"acc:sunglass":[50,"선글라스"],"acc:beanie":[40,"비니"],"acc:cap":[40,"볼캡"],"acc:headset":[70,"헤드셋"],"acc:ribbon":[30,"리본"],"acc:crown":[300,"왕관 (우승자)"],"acc:bucket":[50,"버킷햇"],"acc:earring":[40,"진주 귀걸이"],"acc:necklace":[40,"실버 목걸이"],"acc:hairpin":[30,"헤어핀"],"wall:cream":[60,"크림"],"wall:mint":[60,"민트"],"wall:pink":[60,"체리 핑크"],"wall:black":[80,"블랙"],"wall:sky":[60,"하늘"],"floor:white":[80,"화이트 우드"],"floor:marble":[100,"대리석"],"floor:walnut":[70,"월넛"],"floor:pinktile":[80,"핑크 타일"],"rug:red":[40,"레드"],"rug:green":[40,"포레스트"],"rug:purple":[40,"퍼플"],"rug:beige":[40,"베이지"],"items:arcade":[150,"아케이드 기계"],"items:trophy":[120,"트로피 장식장"],"items:tank":[130,"어항"],"items:piano":[200,"피아노"],"items:tree":[90,"반짝이 트리"],"items:bean":[70,"빈백 소파"],"items:neon":[60,"네온 하트"],"items:plants":[50,"화분 세트"]}; // 옷·가구 선물 가격표 (public/lounge 의 WARDROBE·DECOR 와 같게. 바뀌면 같이 고쳐요)
+const AVATAR_CATS = ['hair', 'top', 'bottom', 'shoes', 'acc'];
+
 // 로그인 후 돌아갈 수 있는 사이트 (다른 사이트로 세션이 새지 않게)
 const RETURN_OK = (u) => { try { const x = new URL(u); return (x.protocol === 'https:' && (/(^|\.)thinkchip-arena\.pages\.dev$/.test(x.hostname) || x.hostname === 'gayeon-hong.github.io')) || (x.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(x.hostname)); } catch { return false; } };
 const CORS = {'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type'};
@@ -229,7 +232,9 @@ export class User extends DurableObject {
       case 'save': { // 내 캐릭터·산 옷·방 꾸미기 같은 작은 저장 데이터 (기기를 바꿔도 유지)
         const k = String(b.key || ''); if (!['avatar', 'room'].includes(k)) return {error: 'bad', status: 400};
         const v = JSON.stringify(b.value ?? null); if (v.length > 6000) return {error: 'big', status: 400};
-        u.data = {...u.data, [k]: JSON.parse(v)}; break;
+        const val = JSON.parse(v), prevOwned = (u.data[k] && Array.isArray(u.data[k].owned)) ? u.data[k].owned : []; // 선물 받은 아이템이 지워지지 않게 owned 는 합쳐요
+        if (val && typeof val === 'object') val.owned = [...new Set([...prevOwned, ...(Array.isArray(val.owned) ? val.owned : [])])].slice(0, 300);
+        u.data = {...u.data, [k]: val}; break;
       }
       // ── 친구 ──
       case 'request': {
@@ -261,6 +266,18 @@ export class User extends DurableObject {
         if (r !== 'ok') { w.chips += amount; w.paid += amount; await this.save(); return {error: r || 'fail', status: 400}; }
         u.sent.total += amount; u.sentIds = [...u.sentIds, id].slice(-100); break;
       }
+      case 'giftItem': { // 친구에게 옷·가구 선물: 게임에서 번 칩으로도 돼요 (무료 칩부터 써요)
+        const key = `${String(b.cat || '')}:${String(b.id || '')}`, item = ITEM_PRICES[key], gid = String(b.gid || '').slice(0, 40);
+        if (!u.friends[to]) return {error: 'notfriend', status: 400};
+        if (u.toss || u.friends[to].toss) return {error: 'nogift', status: 400};
+        if (!item || !/^[a-zA-Z0-9_-]{8,40}$/.test(gid)) return {error: 'bad', status: 400};
+        if (u.sentIds.includes(gid)) { extra.dup = true; break; }
+        if (w.chips < item[0]) return {...this.view(), error: 'chips', status: 400};
+        w.chips -= item[0]; w.paid = Math.min(w.paid, w.chips); await this.save();
+        const r = await this.other(to).receiveItem({id: gid, from: u.pid, name: u.name || '플레이어', cat: b.cat, item: b.id, itemName: item[1], price: item[0], at: Date.now()});
+        if (r !== 'ok') { w.chips += item[0]; await this.save(); return {error: r || 'fail', status: 400}; }
+        u.sentIds = [...u.sentIds, gid].slice(-100); break;
+      }
       case 'seen': { const ids = new Set((Array.isArray(b.ids) ? b.ids : []).map(String)); u.gifts = u.gifts.filter((g) => !ids.has(g.id)); break; } // 받은 선물 알림 확인
       default: return {error: 'op', status: 400};
     }
@@ -283,6 +300,15 @@ export class User extends DurableObject {
   async link(pid, name, toss = false) { const u = this.u; delete u.inReq[pid]; delete u.outReq[pid]; u.friends[pid] = {name: cleanName(name), at: u.friends[pid]?.at || Date.now(), toss}; await this.save(); return {r: 'ok', toss: !!u.toss}; }
   async rename(pid, name) { const f = this.u.friends[pid]; if (f) { f.name = cleanName(name); await this.save(); } return 'ok'; }
   async unlink(pid) { delete this.u.friends[pid]; await this.save(); return 'ok'; }
+  async receiveItem(g) { // 받은 옷·가구는 바로 내 옷장/방 보관함에
+    const u = this.u; if (!u.friends[g.from]) return 'notfriend';
+    if (u.toss) return 'nogift';
+    if (u.gifts.some((x) => x.id === g.id)) return 'ok';
+    const slot = AVATAR_CATS.includes(g.cat) ? 'avatar' : 'room', data = {...(u.data[slot] || {})}, owned = Array.isArray(data.owned) ? data.owned : [], key = `${g.cat}:${g.item}`;
+    if (owned.includes(key)) return 'owned';
+    data.owned = [...owned, key]; u.data = {...u.data, [slot]: data}; u.friends[g.from].name = cleanName(g.name);
+    u.gifts = [...u.gifts, {id: g.id, type: 'item', from: g.from, name: cleanName(g.name), cat: g.cat, item: g.item, itemName: g.itemName, amount: 0, at: g.at}].slice(-MAX_INBOX); await this.save(); return 'ok';
+  }
   async receive(g) { // 받은 선물은 바로 지갑에 (다시 선물할 수 없는 칩) + 알림
     const u = this.u; if (!u.friends[g.from]) return 'notfriend';
     if (u.toss) return 'nogift';

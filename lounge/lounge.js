@@ -864,9 +864,9 @@
   function pullData() { // 로그인 후 처음: 계정에 저장된 게 있으면 가져오고, 없으면 이 기기 것을 올려요
     if (pulledData || !loggedIn() || !st().wallet) return; pulledData = true; const d = st().data || {};
     if (d.avatar && d.avatar.look) { const owned = [...new Set([...(d.avatar.owned || []), ...mine.owned])]; mine = {look: Object.assign({}, A.DEFAULT_LOOK, d.avatar.look), owned}; A.saveMine(mine); me.look = A.encodeLook(mine.look); rebuildMe(); sendLook(); if (owned.length > (d.avatar.owned || []).length) pushData('avatar'); }
-    else if (localStorage.getItem('thinkchip:avatar:v1')) pushData('avatar');
+    else { if (d.avatar && Array.isArray(d.avatar.owned)) { mine.owned = [...new Set([...mine.owned, ...d.avatar.owned])]; A.saveMine(mine); } if (localStorage.getItem('thinkchip:avatar:v1')) pushData('avatar'); }
     if (d.room && d.room.deco) { myRoom = {deco: Object.assign({}, DEFAULT_DECO, d.room.deco), owned: [...new Set([...(d.room.owned || []), ...myRoom.owned])]}; store.set(ROOM_KEY, myRoom); if (!decoDraft) applyDecor(room.public ? myRoom.deco : (hostDeco || myRoom.deco)); if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'deco', deco: encodeDeco(myRoom.deco)})); }
-    else if (myRoom.owned.length) pushData('room');
+    else { if (d.room && Array.isArray(d.room.owned)) { myRoom.owned = [...new Set([...myRoom.owned, ...d.room.owned])]; store.set(ROOM_KEY, myRoom); } if (myRoom.owned.length) pushData('room'); }
   }
   async function sendGift(f, amount) {
     const id = 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
@@ -875,7 +875,7 @@
     else toast(`선물하지 못했어요 · ${socialMsg(r.error)}`);
     drawBoard(); closeSheet(); openFriends();
   }
-  const socialMsg = (e) => ({nogift: '토스 앱에서 접속한 친구에게는 선물할 수 없어요', paid: '선물할 수 있는 충전 칩이 부족해요', limit: '오늘 선물 한도를 넘었어요 (하루 ⬡5,000)', notfriend: '친구에게만 선물할 수 있어요', theirfull: '상대가 받은 신청이 너무 많아요', gone: '이미 처리된 신청이에요', nouser: '아직 로그인한 적 없는 사람이에요', net: '인터넷 연결을 확인해 주세요'}[e] || '잠시 후 다시 시도해 주세요');
+  const socialMsg = (e) => ({owned: '이미 가지고 있는 아이템이에요', nogift: '토스 앱에서 접속한 친구에게는 선물할 수 없어요', paid: '선물할 수 있는 충전 칩이 부족해요', limit: '오늘 선물 한도를 넘었어요 (하루 ⬡5,000)', notfriend: '친구에게만 선물할 수 있어요', theirfull: '상대가 받은 신청이 너무 많아요', gone: '이미 처리된 신청이에요', nouser: '아직 로그인한 적 없는 사람이에요', net: '인터넷 연결을 확인해 주세요'}[e] || '잠시 후 다시 시도해 주세요');
   let seenReq = -1;
   function afterSync() { // 서버 상태가 바뀔 때마다: 받은 선물 알림, 새 친구 신청, 배지, 화면
     if (!loggedIn()) { renderChips(); renderSocialBadge(); return; }
@@ -883,8 +883,13 @@
     if (st().welcomeBonus) { const n = st().welcomeBonus; ACC.clearWelcome(); setTimeout(() => { toast(`🎉 가입 축하 보너스 +${n} 씽크칩!`); setExpr(me, 'laugh'); }, 600); }
     const so = social(), got = so.gifts || [];
     if (got.length && !afterSync.busy) { afterSync.busy = true;
-      for (const g of got) chatLine('', `🎁 ${g.name}님에게 ⬡${fmt(g.amount)} 선물을 받았어요`, true);
-      const from = [...new Set(got.map((g) => g.name))]; toast(`🎁 ${from.slice(0, 2).join(', ')}${from.length > 2 ? ` 외 ${from.length - 2}명` : ''}님이 ⬡${fmt(got.reduce((a, g) => a + g.amount, 0))}을 선물했어요!`); setExpr(me, 'happy');
+      const items = got.filter((g) => g.type === 'item'), chipsG = got.filter((g) => g.type !== 'item');
+      for (const g of chipsG) chatLine('', `🎁 ${g.name}님에게 ⬡${fmt(g.amount)} 선물을 받았어요`, true);
+      for (const g of items) { chatLine('', `🎁 ${g.name}님에게 '${g.itemName}' 선물을 받았어요`, true); const key = `${g.cat}:${g.item}`;
+        if (['hair', 'top', 'bottom', 'shoes', 'acc'].includes(g.cat)) { if (!mine.owned.includes(key)) { mine.owned = [...mine.owned, key]; A.saveMine(mine); } } else if (!myRoom.owned.includes(key)) { myRoom.owned = [...myRoom.owned, key]; store.set(ROOM_KEY, myRoom); } }
+      if (chipsG.length) { const from = [...new Set(chipsG.map((g) => g.name))]; toast(`🎁 ${from.slice(0, 2).join(', ')}${from.length > 2 ? ` 외 ${from.length - 2}명` : ''}님이 ⬡${fmt(chipsG.reduce((a, g) => a + g.amount, 0))}을 선물했어요!`); }
+      else if (items.length) toast(`🎁 ${items[0].name}님이 '${items[0].itemName}'${items.length > 1 ? ` 외 ${items.length - 1}개` : ''}를 선물했어요! 드레스룸·방 꾸미기에서 써 보세요`);
+      setExpr(me, 'happy');
       ACC.call('seen', {ids: got.map((g) => g.id)}).catch(() => {}).finally(() => { afterSync.busy = false; }); }
     const nReq = (so.requests || []).length; if (seenReq >= 0 && nReq > seenReq) toast(`📩 친구 신청이 ${nReq}개 와 있어요 · 👥 친구에서 확인`); seenReq = nReq;
     syncName(); pullData(); renderChips(); renderSocialBadge(); drawBoard(); renderSocial();
@@ -917,21 +922,33 @@
       ${here.length ? `<div class="card"><h3>지금 라운지에 있는 사람</h3>${here.slice(0, 12).map(([pid, name]) => `<div class="f-row"><b><i class="f-on"></i>${esc(otherName({pid, name}))}</b><button class="btn ghost sm" data-add="${esc(pid)}">+ 친구 신청</button></div>`).join('')}<p style="margin-top:6px;font-size:11px">로그인한 사람에게만 신청할 수 있어요.</p></div>` : ''}
       <button class="btn ghost full" id="friendLinkBtn" style="margin-bottom:16px">📲 친구 추가 링크 보내기</button>`;
   }
+  let giftTab = 'item';
   function openGift(f) {
     if (IN_TOSS || !loggedIn()) return;
-    const so = social(), paid = giftable(), left = Math.max(0, (so.giftMax || 5000) - (so.sentToday || 0));
+    const so = social(), paid = giftable(), left = Math.max(0, (so.giftMax || 5000) - (so.sentToday || 0)), chips = myChips();
     const can = (a) => a <= paid && a <= left;
-    openSheet({kicker: 'GIFT', title: `🎁 ${f.name}님에게 선물`, html: `
-      <div class="card"><p>선물할 수 있는 칩 <b style="color:var(--gold)">⬡${fmt(paid)}</b></p>
-        <p style="font-size:11.5px;margin-top:4px">충전(결제)한 칩만 선물할 수 있어요. 게임·광고로 번 칩, 선물 받은 칩은 선물할 수 없어요. 오늘 남은 선물 한도 ⬡${fmt(left)}</p></div>
-      <div class="gift-grid">${GIFT_AMOUNTS.map((a) => `<button class="btn ${can(a) ? 'gold' : 'ghost'}" data-amt="${a}" ${can(a) ? '' : 'disabled'}>⬡${fmt(a)}</button>`).join('')}</div>
-      ${paid < GIFT_AMOUNTS[0] ? '<button class="btn ghost full" id="giftCharge" style="margin-top:10px">💳 씽크칩 충전하러 가기</button>' : ''}
-      <button class="btn ghost full" id="giftBack" style="margin-top:8px">← 친구 목록</button>
-      <p class="table-note">보낸 선물은 되돌릴 수 없어요.</p>`});
-    $('sheetBody').querySelector('.gift-grid').onclick = (e) => { const b = e.target.closest('[data-amt]'); if (!b || b.disabled) return; const a = Number(b.dataset.amt);
-      if (confirm(`${f.name}님에게 ⬡${fmt(a)} 씽크칩을 선물할까요?\n보낸 선물은 되돌릴 수 없어요.`)) { b.disabled = true; sendGift(f, a); } };
-    if ($('giftCharge')) $('giftCharge').onclick = () => { location.href = new URL('../index.html?wallet=1&from=lounge', location.href).href; };
-    $('giftBack').onclick = () => { closeSheet(); openFriends(); };
+    const AV = ['hair', 'top', 'bottom', 'shoes', 'acc'], RM = ['wall', 'floor', 'rug', 'items'], CK = {hair: '헤어', top: '상의', bottom: '하의', shoes: '신발', acc: '소품', wall: '벽지', floor: '바닥', rug: '러그', items: '가구'};
+    const itemList = [...AV.flatMap((c) => W[c].filter((it) => it.price > 0).map((it) => ({c, ...it}))), ...RM.flatMap((c) => DECOR[c].filter((it) => it.price > 0).map((it) => ({c, ...it})))];
+    const tabs = `<div class="tabs" style="margin-bottom:10px"><button data-gtab="item" class="${giftTab === 'item' ? 'on' : ''}">👕 옷·가구</button><button data-gtab="chips" class="${giftTab === 'chips' ? 'on' : ''}">⬡ 칩</button></div>`;
+    const body = giftTab === 'item'
+      ? `<div class="card"><p>게임에서 모은 칩으로도 선물할 수 있어요 · 내 칩 <b style="color:var(--gold)">⬡${fmt(chips)}</b></p><p style="font-size:11.5px;margin-top:4px">친구가 이미 가진 건 선물할 수 없어요 (칩은 돌려받아요).</p></div>
+        <div class="items gift-items">${itemList.map((it) => `<button class="item" data-gi="${it.c}:${it.id}" ${it.price > chips ? 'disabled' : ''}><small style="color:var(--muted)">${CK[it.c]}</small> ${esc(it.name)}<span class="price">⬡${it.price}</span></button>`).join('')}</div>`
+      : `<div class="card"><p>선물할 수 있는 칩 <b style="color:var(--gold)">⬡${fmt(paid)}</b></p><p style="font-size:11.5px;margin-top:4px">칩 선물은 충전(결제)한 칩만 돼요. 오늘 남은 한도 ⬡${fmt(left)}</p></div>
+        <div class="gift-grid">${GIFT_AMOUNTS.map((a) => `<button class="btn ${can(a) ? 'gold' : 'ghost'}" data-amt="${a}" ${can(a) ? '' : 'disabled'}>⬡${fmt(a)}</button>`).join('')}</div>
+        ${paid < GIFT_AMOUNTS[0] ? '<button class="btn ghost full" id="giftCharge" style="margin-top:10px">💳 씽크칩 충전하러 가기</button>' : ''}`;
+    openSheet({kicker: 'GIFT', title: `🎁 ${f.name}님에게 선물`, html: `${tabs}${body}<button class="btn ghost full" id="giftBack" style="margin-top:8px">← 친구 목록</button><p class="table-note">보낸 선물은 되돌릴 수 없어요.</p>`});
+    $('sheetBody').onclick = async (e) => {
+      const b = e.target.closest('button'); if (!b || b.disabled) return;
+      if (b.dataset.gtab) { giftTab = b.dataset.gtab; return openGift(f); }
+      if (b.id === 'giftBack') { closeSheet(); return openFriends(); }
+      if (b.id === 'giftCharge') { location.href = new URL('../index.html?wallet=1&from=lounge', location.href).href; return; }
+      if (b.dataset.amt) { const a = Number(b.dataset.amt); if (confirm(`${f.name}님에게 ⬡${fmt(a)} 씽크칩을 선물할까요?\n보낸 선물은 되돌릴 수 없어요.`)) { b.disabled = true; sendGift(f, a); } return; }
+      if (b.dataset.gi) { const [c, id] = b.dataset.gi.split(':'), it = itemList.find((x) => x.c === c && x.id === id); if (!it) return;
+        if (!confirm(`${f.name}님에게 '${it.name}'(⬡${it.price})을 선물할까요?`)) return; b.disabled = true;
+        let r; try { r = await ACC.call('giftItem', {to: f.pid, cat: c, id, gid: 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9)}); } catch (er) { r = {error: 'net'}; }
+        if (r.ok) { toast(`🎁 ${f.name}님에게 '${it.name}'을 선물했어요`); setExpr(me, 'happy'); chatLine('', `🎁 ${f.name}님에게 '${it.name}' 선물을 보냈어요`, true); drawBoard(); closeSheet(); openFriends(); }
+        else { toast(r.error === 'owned' ? `${f.name}님은 이미 가지고 있어요 (칩은 돌려받았어요)` : r.error === 'chips' ? '씽크칩이 부족해요' : `선물하지 못했어요 · ${socialMsg(r.error)}`); b.disabled = false; } }
+    };
   }
   function celebrate(pid) { if (players.has(pid)) setTimeout(() => requestHandshake(pid), 400); } // 친구가 되는 순간 같은 라운지면 손인사
   async function shareFriendLink() {
