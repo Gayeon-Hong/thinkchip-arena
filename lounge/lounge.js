@@ -183,6 +183,16 @@
   // ───────── 캐릭터 ─────────
   const labels = $('labels');
   const OBST = ZONES.filter((z) => z.games || z.main).map((z) => ({x: z.pos[0], z: z.pos[1], r: z.main ? 2.0 : 1.55})); // 캐릭터가 못 지나가는 테이블 (원)
+  // 테이블을 뚫지 않고 가장자리를 따라 돌아가요. 도는 방향은 부딪힌 순간 한 번만 정해서 (매 프레임 바뀌면 제자리에서 떨어요)
+  function avoid(p, pos, dx, dz, step) {
+    for (const o of OBST) {
+      const ox = pos.x - o.x, oz = pos.z - o.z, od = Math.hypot(ox, oz); if (od >= o.r) continue;
+      const nx = od > 1e-3 ? ox / od : 1, nz = od > 1e-3 ? oz / od : 0;
+      const t = p.target; if (t && (t.side == null || t.ob !== o)) { const c = nx * dz - nz * dx; t.side = Math.abs(c) < 0.05 * Math.hypot(dx, dz) ? 1 : Math.sign(c); t.ob = o; }
+      const side = t ? t.side : 1;
+      pos.x = o.x + nx * o.r - nz * side * step; pos.z = o.z + nz * o.r + nx * side * step;
+    }
+  }
   const players = new Map(); // pid -> {av, name, tag, bubble, pos, target, state, bubbleTimer, exprTimer}
   let lookAtSpeaker = null; // 최근에 말한 사람 → 다른 캐릭터들이 그쪽을 봐요
   function makeTag(text, cls) { const el = document.createElement('div'); el.className = 'name-tag ' + (cls || ''); el.textContent = text; labels.appendChild(el); return el; }
@@ -298,10 +308,10 @@
       const pos = p.av.position;
       if (p.target) {
         const dx = p.target.x - pos.x, dz = p.target.z - pos.z, d = Math.hypot(dx, dz);
-        if (d < 0.05) { const then = p.target.then; p.target = null; p.state = 'idle'; then && then(); }
+        p.target.age = (p.target.age || 0) + dt;
+        if (d < 0.05 || p.target.age > 9) { const then = p.target.then; p.target = null; p.state = 'idle'; then && then(); } // 9초 안에 못 가면 거기서 멈추고 도착 처리
         else { const step = Math.min(d, dt * 3.4); pos.x += (dx / d) * step; pos.z += (dz / d) * step; p.state = 'walk';
-          for (const o of OBST) { const ox = pos.x - o.x, oz = pos.z - o.z, od = Math.hypot(ox, oz); // 테이블을 뚫지 않고 가장자리를 따라 돌아가요
-            if (od < o.r) { const nx = od > 0.001 ? ox / od : 1, nz = od > 0.001 ? oz / od : 0, side = (nx * dz - nz * dx) >= 0 ? 1 : -1; pos.x = o.x + nx * o.r - nz * side * step; pos.z = o.z + nz * o.r + nx * side * step; } }
+          avoid(p, pos, dx, dz, step);
           const want = Math.atan2(dx, dz); let diff = want - p.av.rotation.y; diff = Math.atan2(Math.sin(diff), Math.cos(diff)); p.av.rotation.y += diff * Math.min(1, dt * 10); }
       }
       if (!p.target && !(p === me && camState.closeUp)) { // 서 있을 땐 카메라(또는 방금 말한 사람) 쪽으로 천천히 몸을 돌려요 — 말풍선과 표정이 잘 보이게

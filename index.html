@@ -1741,8 +1741,23 @@ const GRANTED_KEY = 'thinkchip:iap:granted';
 const grantedIds = () => { try { return JSON.parse(localStorage.getItem(GRANTED_KEY)) || []; } catch { return []; } };
 const markGranted = (id) => { try { localStorage.setItem(GRANTED_KEY, JSON.stringify([...grantedIds(), id].slice(-200))); } catch {} };
 const chipsForSku = (sku) => (TOSS_CONFIG.chipPacks || []).find((p) => p.sku === sku)?.chips || 0;
+/* Microsoft Store 에 설치된 PWA: Digital Goods API + Payment Request (파트너센터 추가 기능 = 같은 SKU, '개발자 관리 소모품') */
+const MS_BILLING = 'https://store.microsoft.com/billing';
+let msSvc;
+async function msService() {
+  if (msSvc !== undefined) return msSvc;
+  msSvc = null;
+  try { if (typeof window !== 'undefined' && window.getDigitalGoodsService) msSvc = await withTimeout(window.getDigitalGoodsService(MS_BILLING), 5000); } catch { msSvc = null; }
+  return msSvc;
+}
+const msPrice = (p) => { try { return new Intl.NumberFormat('ko-KR', {style: 'currency', currency: p.currency}).format(Number(p.value)); } catch { return `${p.value} ${p.currency}`; } };
 async function listChipPacks() {
-  if (!tossState.inToss) return [];
+  if (!tossState.inToss) {
+    const svc = await msService(); if (!svc) return [];
+    try { const items = await svc.getDetails((TOSS_CONFIG.chipPacks || []).map((p) => p.sku));
+      return items.filter((i) => chipsForSku(i.itemId)).map((i) => ({sku: i.itemId, displayName: i.title, displayAmount: msPrice(i.price), chips: chipsForSku(i.itemId), store: 'ms'})).sort((a, b) => a.chips - b.chips);
+    } catch (e) { console.warn('MS getDetails failed', e); return []; }
+  }
   try {
     const sdk = await getSDK(); const res = await withTimeout(sdk?.IAP?.getProductItemList?.() ?? Promise.resolve(undefined), 6000);
     return (res?.products || []).filter((p) => chipsForSku(p.sku)).map((p) => ({...p, chips: chipsForSku(p.sku)})).sort((a, b) => a.chips - b.chips);
@@ -1750,6 +1765,18 @@ async function listChipPacks() {
 }
 /** grant(chips, orderId) 는 칩을 지갑에 넣고 true 를 돌려줘야 해요. */
 async function buyChipPack(sku, grant) {
+  if (!tossState.inToss) {
+    const svc = await msService(); if (!svc || typeof PaymentRequest === 'undefined') return {ok: false, error: '이 화면에서는 충전할 수 없어요. 토스 앱이나 Microsoft Store 앱에서 충전해 주세요.'};
+    try {
+      const res = await new PaymentRequest([{supportedMethods: MS_BILLING, data: {sku}}], {total: {label: 'total', amount: {currency: 'KRW', value: '0'}}}).show();
+      const token = res?.details?.purchaseToken || res?.details?.token || '';
+      try { await res.complete('success'); } catch {}
+      if (token && grantedIds().includes(token)) return {ok: true, chips: 0};
+      if (!grant(chipsForSku(sku), token || `ms-${Date.now()}`)) return {ok: false, error: '칩 지급에 실패했어요. 앱을 다시 열면 지급돼요.'};
+      if (token) { markGranted(token); try { await svc.consume(token); } catch (e) { console.warn('MS consume failed', e); } }
+      return {ok: true, chips: chipsForSku(sku)};
+    } catch (e) { return {ok: false, error: e?.name === 'AbortError' ? '결제를 취소했어요.' : '결제하지 못했어요.'}; }
+  }
   const sdk = await getSDK(); const iap = sdk?.IAP;
   if (!iap?.createOneTimePurchaseOrder) return {ok: false, error: '토스 앱에서만 충전할 수 있어요.'};
   if (iap.createOneTimePurchaseOrder.isSupported && !iap.createOneTimePurchaseOrder.isSupported()) return {ok: false, error: '토스 앱을 최신 버전으로 업데이트해 주세요.'};
@@ -1769,7 +1796,13 @@ async function buyChipPack(sku, grant) {
 }
 /** 앱 시작 때: 결제는 됐는데 지급 못 한 주문 지급 */
 async function restoreChipOrders(grant) {
-  if (!tossState.inToss) return 0;
+  if (!tossState.inToss) { // MS: 결제됐지만 소비(consume) 안 된 칩 = 아직 지급 못 한 것
+    const svc = await msService(); if (!svc) return 0; let total = 0;
+    try { for (const p of await svc.listPurchases()) { const chips = chipsForSku(p.itemId); if (!chips) continue;
+      if (!grantedIds().includes(p.purchaseToken)) { if (!grant(chips, p.purchaseToken)) continue; markGranted(p.purchaseToken); total += chips; }
+      try { await svc.consume(p.purchaseToken); } catch {} } } catch (e) { console.warn('MS restore failed', e); }
+    return total;
+  }
   try {
     const sdk = await getSDK(); const res = await sdk?.IAP?.getPendingOrders?.(); let total = 0;
     for (const o of res?.orders || []) {
@@ -2403,7 +2436,7 @@ async function loadChipPacks(){if(chipPacks!==null)return;chipPacks=[];chipPacks
 function grantChips(n){profile.chips+=Math.max(0,Math.trunc(n));saveProfile();return true;}
 function wallet(){loadChipPacks();const count=Number(profile.adCount[todayKey()]||0);return `<div class="page"><main class="shell">${header({back:true,title:'씽크칩 지갑'})}
  <section class="wallet-hero"><span class="mini-kicker">THINK CHIP WALLET</span><div class="wallet-balance"><span class="wallet-big-icon">⬡</span><strong>${fmt(profile.chips)}</strong><span>CHIP</span></div><p>도전해서 모으고, 생각이 막힐 때 힌트로 사용하세요.</p></section>
- ${chipPacks===null?'':chipPacks.length?`<div class="section-title tight"><div><span class="mini-kicker">CHIP SHOP</span><h2>씽크칩 충전</h2></div></div><div class="chip-packs">${chipPacks.map(p=>`<button class="chip-pack" data-buy="${esc(p.sku)}" ${buying?'disabled':''}><span class="cp-amt">⬡ ${fmt(p.chips)}</span><small>${esc(p.displayName||'')}</small><b>${esc(p.displayAmount||'')}</b></button>`).join('')}</div><p class="fineprint">토스페이로 결제돼요. 충전한 칩은 옷·방 꾸미기와 힌트에 쓸 수 있어요.</p>`:''}
+ ${chipPacks===null?'':chipPacks.length?`<div class="section-title tight"><div><span class="mini-kicker">CHIP SHOP</span><h2>씽크칩 충전</h2></div></div><div class="chip-packs">${chipPacks.map(p=>`<button class="chip-pack" data-buy="${esc(p.sku)}" ${buying?'disabled':''}><span class="cp-amt">⬡ ${fmt(p.chips)}</span><small>${esc(p.displayName||'')}</small><b>${esc(p.displayAmount||'')}</b></button>`).join('')}</div><p class="fineprint">${chipPacks[0]?.store==='ms'?'Microsoft Store 계정으로 결제돼요.':'토스페이로 결제돼요.'} 충전한 칩은 옷·방 꾸미기와 힌트에 쓸 수 있고 현금으로 바꿀 수 없어요.</p>`:''}
  <div class="section-title tight"><div><h2>씽크칩 얻기</h2></div></div>
  <div class="shop-card"><div class="shop-icon">▶</div><div><strong>보상형 광고 시청</strong><p>시청 완료 시 +${AD_REWARD}칩 · 오늘 ${count}/${AD_DAILY_LIMIT}회</p></div><button data-action="watch-ad" ${loadingAd||!TOSS_CONFIG.enableRewardedAds||count>=AD_DAILY_LIMIT?'disabled':''}>${!TOSS_CONFIG.enableRewardedAds?'연동 전':loadingAd?'준비 중':'시청'}</button></div>
  <div class="shop-card"><div class="shop-icon gift">♛</div><div><strong>AI 대결에서 이기기</strong><p>난이도에 따라 10~60칩 · 어려운 게임은 추가 보너스</p></div><button data-action="home">게임</button></div>

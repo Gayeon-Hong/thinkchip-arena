@@ -152,8 +152,23 @@ const GRANTED_KEY = 'thinkchip:iap:granted';
 const grantedIds = () => { try { return JSON.parse(localStorage.getItem(GRANTED_KEY)) || []; } catch { return []; } };
 const markGranted = (id) => { try { localStorage.setItem(GRANTED_KEY, JSON.stringify([...grantedIds(), id].slice(-200))); } catch {} };
 export const chipsForSku = (sku) => (TOSS_CONFIG.chipPacks || []).find((p) => p.sku === sku)?.chips || 0;
+/* Microsoft Store 에 설치된 PWA: Digital Goods API + Payment Request (파트너센터 추가 기능 = 같은 SKU, '개발자 관리 소모품') */
+const MS_BILLING = 'https://store.microsoft.com/billing';
+let msSvc;
+async function msService() {
+  if (msSvc !== undefined) return msSvc;
+  msSvc = null;
+  try { if (typeof window !== 'undefined' && window.getDigitalGoodsService) msSvc = await withTimeout(window.getDigitalGoodsService(MS_BILLING), 5000); } catch { msSvc = null; }
+  return msSvc;
+}
+const msPrice = (p) => { try { return new Intl.NumberFormat('ko-KR', {style: 'currency', currency: p.currency}).format(Number(p.value)); } catch { return `${p.value} ${p.currency}`; } };
 export async function listChipPacks() {
-  if (!tossState.inToss) return [];
+  if (!tossState.inToss) {
+    const svc = await msService(); if (!svc) return [];
+    try { const items = await svc.getDetails((TOSS_CONFIG.chipPacks || []).map((p) => p.sku));
+      return items.filter((i) => chipsForSku(i.itemId)).map((i) => ({sku: i.itemId, displayName: i.title, displayAmount: msPrice(i.price), chips: chipsForSku(i.itemId), store: 'ms'})).sort((a, b) => a.chips - b.chips);
+    } catch (e) { console.warn('MS getDetails failed', e); return []; }
+  }
   try {
     const sdk = await getSDK(); const res = await withTimeout(sdk?.IAP?.getProductItemList?.() ?? Promise.resolve(undefined), 6000);
     return (res?.products || []).filter((p) => chipsForSku(p.sku)).map((p) => ({...p, chips: chipsForSku(p.sku)})).sort((a, b) => a.chips - b.chips);
@@ -161,6 +176,18 @@ export async function listChipPacks() {
 }
 /** grant(chips, orderId) 는 칩을 지갑에 넣고 true 를 돌려줘야 해요. */
 export async function buyChipPack(sku, grant) {
+  if (!tossState.inToss) {
+    const svc = await msService(); if (!svc || typeof PaymentRequest === 'undefined') return {ok: false, error: '이 화면에서는 충전할 수 없어요. 토스 앱이나 Microsoft Store 앱에서 충전해 주세요.'};
+    try {
+      const res = await new PaymentRequest([{supportedMethods: MS_BILLING, data: {sku}}], {total: {label: 'total', amount: {currency: 'KRW', value: '0'}}}).show();
+      const token = res?.details?.purchaseToken || res?.details?.token || '';
+      try { await res.complete('success'); } catch {}
+      if (token && grantedIds().includes(token)) return {ok: true, chips: 0};
+      if (!grant(chipsForSku(sku), token || `ms-${Date.now()}`)) return {ok: false, error: '칩 지급에 실패했어요. 앱을 다시 열면 지급돼요.'};
+      if (token) { markGranted(token); try { await svc.consume(token); } catch (e) { console.warn('MS consume failed', e); } }
+      return {ok: true, chips: chipsForSku(sku)};
+    } catch (e) { return {ok: false, error: e?.name === 'AbortError' ? '결제를 취소했어요.' : '결제하지 못했어요.'}; }
+  }
   const sdk = await getSDK(); const iap = sdk?.IAP;
   if (!iap?.createOneTimePurchaseOrder) return {ok: false, error: '토스 앱에서만 충전할 수 있어요.'};
   if (iap.createOneTimePurchaseOrder.isSupported && !iap.createOneTimePurchaseOrder.isSupported()) return {ok: false, error: '토스 앱을 최신 버전으로 업데이트해 주세요.'};
@@ -180,7 +207,13 @@ export async function buyChipPack(sku, grant) {
 }
 /** 앱 시작 때: 결제는 됐는데 지급 못 한 주문 지급 */
 export async function restoreChipOrders(grant) {
-  if (!tossState.inToss) return 0;
+  if (!tossState.inToss) { // MS: 결제됐지만 소비(consume) 안 된 칩 = 아직 지급 못 한 것
+    const svc = await msService(); if (!svc) return 0; let total = 0;
+    try { for (const p of await svc.listPurchases()) { const chips = chipsForSku(p.itemId); if (!chips) continue;
+      if (!grantedIds().includes(p.purchaseToken)) { if (!grant(chips, p.purchaseToken)) continue; markGranted(p.purchaseToken); total += chips; }
+      try { await svc.consume(p.purchaseToken); } catch {} } } catch (e) { console.warn('MS restore failed', e); }
+    return total;
+  }
   try {
     const sdk = await getSDK(); const res = await sdk?.IAP?.getPendingOrders?.(); let total = 0;
     for (const o of res?.orders || []) {
