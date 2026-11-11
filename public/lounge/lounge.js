@@ -339,14 +339,19 @@
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), pointers = new Map();
   // 한 손가락: 캐릭터를 중심으로 시점 돌리기(좌우) · 기울이기(위아래) / 두 손가락: 벌리고 오므려 확대·축소 + 같이 밀면 화면을 옆으로 옮기기
   let drag = null, pinch0 = 0, dist0 = 0, mid0 = null;
+  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), gHit = new THREE.Vector3();
+  function groundAt(cx, cy) { ndc.set((cx / innerWidth) * 2 - 1, -(cy / innerHeight) * 2 + 1); camera.updateMatrixWorld(); ray.setFromCamera(ndc, camera); return ray.ray.intersectPlane(groundPlane, gHit) ? gHit.clone() : null; }
   const midOf = () => { const [a, b] = [...pointers.values()]; return {x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, d: Math.hypot(a.x - b.x, a.y - b.y)}; };
-  canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture?.(e.pointerId); pointers.set(e.pointerId, {x: e.clientX, y: e.clientY}); if (pointers.size === 1) drag = {x: e.clientX, y: e.clientY, yaw: camState.yaw, pitch: camState.pitch, cy: camState.closeYaw || 0, moved: false}; if (pointers.size === 2) { const m = midOf(); pinch0 = m.d; dist0 = camState.dist; mid0 = m; drag = null; } });
+  canvas.addEventListener('pointerdown', (e) => { try { canvas.setPointerCapture?.(e.pointerId); } catch (er) {} pointers.set(e.pointerId, {x: e.clientX, y: e.clientY}); if (pointers.size === 1) drag = {x: e.clientX, y: e.clientY, yaw: camState.yaw, pitch: camState.pitch, cy: camState.closeYaw || 0, moved: false}; if (pointers.size === 2) { const m = midOf(); pinch0 = m.d; dist0 = camState.dist; mid0 = m; drag = null; } });
   canvas.addEventListener('pointermove', (e) => { if (!pointers.has(e.pointerId)) return; pointers.set(e.pointerId, {x: e.clientX, y: e.clientY});
-    if (pointers.size >= 2) { const m = midOf(); camState.dist = Math.max(9, Math.min(34, dist0 * (pinch0 / Math.max(1, m.d))));
-      if (mid0 && !camState.closeUp) { const k = camState.dist * 0.0016, mdx = m.x - mid0.x, mdy = m.y - mid0.y, sy = Math.sin(camState.yaw), cy = Math.cos(camState.yaw);
-        camState.pan.x += (-cy * mdx - sy * mdy) * k; camState.pan.z += (sy * mdx - cy * mdy) * k; // 손가락을 따라 화면이 움직이게
-        const len = Math.hypot(camState.pan.x, camState.pan.z); if (len > 14) { camState.pan.x *= 14 / len; camState.pan.z *= 14 / len; } }
-      mid0 = m; return; }
+    if (pointers.size >= 2) { const m = midOf();
+      // 확대·축소: 손가락 사이가 10% 넘게 벌어지거나 오므려졌을 때만 (옮기는 중에 화면이 출렁이지 않게)
+      if (mid0 && (mid0.zoom || Math.abs(m.d / Math.max(1, pinch0) - 1) > 0.1)) { mid0.zoom = true; camState.dist = Math.max(9, Math.min(34, dist0 * (pinch0 / Math.max(1, m.d)))); }
+      // 옮기기: 두 손가락이 짚은 바닥 지점이 손가락을 그대로 따라오게 (시점은 그대로)
+      if (mid0 && !camState.closeUp) { const a = groundAt(mid0.x, mid0.y), b = groundAt(m.x, m.y);
+        if (a && b) { const dx = a.x - b.x, dz = a.z - b.z; camState.pan.x += dx; camState.pan.z += dz; camState.focus.x += dx; camState.focus.z += dz;
+          const len = Math.hypot(camState.pan.x, camState.pan.z); if (len > 16) { camState.pan.x *= 16 / len; camState.pan.z *= 16 / len; } placeCamera(false); } }
+      mid0 = Object.assign(m, {zoom: mid0 && mid0.zoom}); return; }
     if (drag) { const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.hypot(dx, dy) > 6) drag.moved = true; if (drag.moved && camState.closeUp) camState.closeYaw = drag.cy - dx * 0.01; // 꾸미는 중엔 캐릭터 둘레를 돌며 보기
       if (drag.moved && !camState.closeUp) { camState.yaw = drag.yaw - dx * 0.007; camState.pitch = Math.max(0.1, Math.min(1.4, drag.pitch + dy * 0.005)); } } }); // 좌우로 밀면 회전, 위아래로 밀면 눕혀 보기·내려다보기
   const up = (e) => { const wasTap = drag && !drag.moved && pointers.size === 1; pointers.delete(e.pointerId); if (wasTap) onTap(e.clientX, e.clientY); if (pointers.size < 2) mid0 = null; if (pointers.size === 0) drag = null; };
