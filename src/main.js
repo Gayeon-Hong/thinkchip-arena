@@ -1,7 +1,7 @@
 import {initTheme,toggleTheme,getThemePreference,resolveTheme,setTheme} from './theme.js';
 import {icon} from './icons.js';
 import {esc,fmt,newSeed} from './util.js';
-import {GAMES,GAME_BY_ID} from './catalog.js';
+import {GAMES,GAME_BY_ID,PARTY_GAMES} from './catalog.js';
 import {createFlip,playFlip,flipOptions,flipAdvice,flipValue,FLIP_LIMIT,FLIP_TOTAL,simulateFlipBot} from './games/flip.js';
 import {createBlind,playBlind,blindAdvice} from './games/blind.js';
 import {createTriad,selectTriad,skipTriad,trioAdvice,triadBotTarget} from './games/triad.js';
@@ -29,25 +29,24 @@ import {TOSS_CONFIG,shareInvite,showRewardedAd,initToss,bindBackHandler,exitApp,
 const KEY='brain-arena:mvp:v2';
 const root=document.getElementById('app');
 const params=new URLSearchParams(location.search);
-const invitedGame=GAME_BY_ID[params.get('game')] ? params.get('game') : null;
+const openGame=GAME_BY_ID[params.get('open')]?params.get('open'):null; // 3D 라운지 테이블에서 바로 게임 소개 화면으로
+const partyGame=PARTY_GAMES[params.get('party')]?params.get('party'):null; // 3D 라운지 파티 라운지에서 파티 게임 바로 시작
+const invitedGame=GAME_BY_ID[params.get('game')] ? params.get('game') : openGame;
 const invitedSeed=(params.get('seed')||'').slice(0,80);
 const rawTarget=params.get('target');
 const parsedTarget=rawTarget===null?null:Number(rawTarget);
 const invitedTarget=Number.isFinite(parsedTarget)&&parsedTarget>=0&&parsedTarget<=10000000?parsedTarget:null;
 const invitedFrom=(params.get('from')||'친구').slice(0,16);
 const invitedRoom=normalizeCode(params.get('room'));
+const fromLounge=params.get('from')==='lounge';
+const LOUNGE_URL='./lounge/'+(invitedRoom?`?room=${invitedRoom}`:'');
 let storageKey=KEY; // must exist before the first readProfile() call
 let profile=readProfile();
-let screen=invitedRoom?'live':invitedGame?'intro':'home';
+let screen=invitedRoom||partyGame?'live':invitedGame?'intro':'home';
 let live=null; // real-time room: {code, conn, state, status, error, startedRound, cd}
 let roomDraft=invitedRoom||'';
 let chatOpen=false,chatPeekTimer=null;const chatMuted=new Set();
-const LIVE_EXTRA={forehead:{id:'forehead',title:'내 단어 맞히기',short:'남의 단어는 다 보이는데 내 것만 몰라요. 인물·단어·친구 출제!',symbol:'🧠',color:'plum',genre:'파티 게임',min:2},
- liar:{id:'liar',title:'거짓말쟁이 찾기',short:'한 명만 제시어를 몰라요. 설명을 듣고 거짓말쟁이를 지목하세요.',symbol:'🕵',color:'red',genre:'파티 게임',min:3},
- nunchi:{id:'nunchi',title:'눈치 게임',short:'1부터 차례로 외쳐요. 동시에 외치거나 마지막까지 남으면 탈락!',symbol:'✋',color:'amber',genre:'파티 게임',min:2},
- vote:{id:'vote',title:'사람 소수결',short:'친구들과 둘 중 하나! 적은 쪽만 점수. 채팅으로 떠보고 배신하세요.',symbol:'⚖',color:'cyan',genre:'파티 게임',min:3},
- tele:{id:'tele',title:'마음 맞추기',short:'같은 질문에 몰래 답해요. 다 같이 똑같이 쓸수록 팀 점수 UP!',symbol:'🔮',color:'pink',genre:'협동',min:2,coop:true},
- mind:{id:'mind',title:'타이밍 맞추기',short:'말 없이 숫자를 작은 순서대로 내요. 감과 눈치로 하나 되는 협동 게임.',symbol:'⏳',color:'green',genre:'협동',min:2,coop:true}};
+const LIVE_EXTRA=PARTY_GAMES;
 const PARTY_IDS=Object.keys(LIVE_EXTRA);
 const liveGameInfo=id=>GAME_BY_ID[id]||LIVE_EXTRA[id]||GAME_BY_ID.flip;
 const CHAT_QUICK=['ㅋㅋㅋ','진짜야?','블러핑 아님','믿어봐','⭕ 맞아','❌ 아니야','🤔 애매해','다음엔 이긴다'];
@@ -91,10 +90,10 @@ function home(){
  <section class="hero arena-hero"><div class="hero-grid" aria-hidden="true"></div><div class="hero-top"><span class="kicker"><i></i> THINK. PLAY. WIN.</span><span class="edition">THE ARENA OF MINDS</span></div>
  <div class="hero-copy"><h1>읽고, 속이고,<br><em>살아남아라.</em></h1><p>숫자와 심리, 배신과 동맹.<br>단 한 번의 선택이 승부를 가른다.</p></div>
  <div class="hero-mosaic" aria-hidden="true">${mosaicTiles()}</div>
- <div class="hero-actions"><button class="hero-cta" data-action="live">아레나 입장 ${icon('arrow')}</button><button class="hero-ghost" data-action="random">랜덤 매치</button></div>
+ <div class="hero-actions"><a class="hero-cta" href="./lounge/">아레나 입장 ${icon('arrow')}</a><button class="hero-ghost" data-action="random">랜덤 매치</button></div>
  <div class="hero-bottom"><span>실시간 · 최대 8인 · ${GAMES.length+PARTY_IDS.length} GAMES</span><span>${liveAvailable()?'● LIVE':'SOLO · AI'}</span></div></section>
  ${todayCard()}
- <div class="quick-modes"><button data-action="party">🧠<span><strong>내 단어 맞히기</strong><small>모두가 아는 답, 나만 모른다</small></span>${icon('up')}</button><button data-action="random-ai">${icon('bot')}<span><strong>AI 랜덤 매치</strong><small>상대는 기다려주지 않는다</small></span>${icon('up')}</button></div>
+ <div class="quick-modes"><button data-action="live">⚡<span><strong>방 코드로 대결</strong><small>친구와 같은 판, 같은 순간</small></span>${icon('up')}</button><button data-action="random-ai">${icon('bot')}<span><strong>AI 랜덤 매치</strong><small>상대는 기다려주지 않는다</small></span>${icon('up')}</button></div>
  <div class="section-title"><div><span class="mini-kicker">PARTY · LIVE</span><h2>친구들과 파티 · 협동</h2></div><span class="section-count">${String(PARTY_IDS.length).padStart(2,'0')}</span></div>
  <div class="party-row">${Object.values(LIVE_EXTRA).map(g=>`<button class="party-card ${g.color}" data-action="party:${g.id}"><span class="party-ico">${g.symbol}</span><strong>${esc(g.title)}</strong><small>${esc(g.short)}</small><em>${g.coop?'🤝 협동 · ':''}${g.min}명+ · 실시간</em></button>`).join('')}</div>
  <div class="section-title"><div><span class="mini-kicker">PICK YOUR BATTLE</span><h2>승부를 고르세요</h2></div><span class="section-count">${String(GAMES.length).padStart(2,'0')}</span></div>
@@ -260,11 +259,11 @@ function joinLive(code,pickGame){leaveLive();const pid=livePid();
   onState:m=>onLiveState(m),
   onChat:m=>onChat(m),
   onChatLog:items=>{if(!live)return;live.chat=items;renderChatDock();},
-  onEmoji:m=>{const p=live?.state?.players?.find(x=>x.pid===m.pid);flash(`${p?esc(p.name):'누군가'} ${m.e}`);},
+  onEmoji:m=>{if(stage)stage.say(m.pid,m.e);const p=live?.state?.players?.find(x=>x.pid===m.pid);flash(`${p?esc(p.name):'누군가'} ${m.e}`);},
   onStatus:st=>{if(!live)return;live.status=st;if(screen==='live')render();},
   onError:code=>{if(!live)return;live.error=code;flash(code==='full'?'방이 꽉 찼어요 (최대 8명).':code==='lost'?'연결이 끊겼어요. 다시 입장해 주세요.':'방에 들어가지 못했어요.');if(code==='full'){leaveLive();}if(screen==='live')render();}});
  screen='live';render();}
-function leaveLive(){if(!live)return;clearInterval(live.cd);live.conn?.close();live=null;chatOpen=false;renderChatDock();}
+function leaveLive(){if(stage){stage.destroy();stage=null;}if(!live)return;clearInterval(live.cd);live.conn?.close();live=null;chatOpen=false;renderChatDock();}
 function onLiveState(m){if(!live)return;const prev=live.state;live.state=m;live.code=m.code||live.code;
  const me=m.players.find(p=>p.pid===livePid());
  if(live.pendingPick&&me?.host){live.conn.send({t:'pick',game:live.pendingPick,level:difficulty});live.pendingPick=null;}
@@ -326,11 +325,11 @@ function liveView(){
  if(!st)return head+`<section class="live-empty"><div class="live-big spin">⬡</div><h2>${live.status==='closed'?'연결하지 못했어요':'방에 연결하는 중…'}</h2><p>방 코드 <b>${esc(live.code)}</b></p>${live.status==='closed'?'<button class="btn primary full" data-action="live-join">다시 시도</button>':''}<button class="btn tertiary full" data-action="live-leave">나가기</button></section>`+foot;
  if(st.phase==='playing'&&me?.inRound&&live.startedRound!==st.round)
   return head+`<section class="live-countdown" data-game-color="${G.color}"><span class="mini-kicker">ROUND ${st.round}</span><h2>${G.symbol} ${esc(G.title)}</h2><div class="live-count" id="liveCount">3</div><p>모두 같은 판으로 동시에 시작해요!</p></section>`+foot;
- if(st.phase==='playing'&&st.game==='forehead'&&me?.inRound)return head+(st.fh?.pending?assignView(st,me):foreheadView(st,me))+foot;
- if(st.phase==='playing'&&st.party&&me?.inRound)return head+partyView(st,me)+foot;
+ if(st.phase==='playing'&&st.game==='forehead'&&me?.inRound)return head+STAGE_SLOT+(st.fh?.pending?assignView(st,me):foreheadView(st,me))+foot;
+ if(st.phase==='playing'&&st.party&&me?.inRound)return head+STAGE_SLOT+partyView(st,me)+foot;
  const isHost=!!me?.host,ps=st.players,ready=!!me?.ready,enough=ps.filter(p=>p.online).length>=2;
  const rank=liveRanking(),showRes=st.phase==='result'||(st.phase==='playing'&&(me?.done||!me?.inRound));
- return head+`<section class="live-room"><div class="live-code-row"><div><span class="mini-kicker">ROOM CODE</span><strong class="live-code">${esc(live.code)}</strong></div><button class="btn secondary" data-action="live-invite">초대하기 ↗</button></div>
+ return head+STAGE_SLOT+`<section class="live-room"><div class="live-code-row"><div><span class="mini-kicker">ROOM CODE</span><strong class="live-code">${esc(live.code)}</strong></div><button class="btn secondary" data-action="live-invite">초대하기 ↗</button></div>
  ${live.status!=='open'?`<p class="live-warn">${live.status==='reconnecting'?'연결이 잠깐 끊겨서 다시 연결하는 중…':'연결 중…'}</p>`:''}
  ${seriesPanel(st)}
  ${showRes&&rank.length?`<div class="live-result"><span class="mini-kicker">${st.phase==='result'?`ROUND ${st.round} RESULT`:'LIVE SCORES'}</span>${st.party?.kind==='liar'&&st.phase==='result'?`<p class="liar-reveal">😈 거짓말쟁이: <b>${esc(st.players.find(p=>p.pid===st.party.liar)?.name||'?')}</b> · 제시어: <b>${esc(st.party.word||'')}</b>${st.party.guess?` · 마지막 추리: '${esc(st.party.guess)}'`:''}</p>`:''}<h2>${st.phase==='result'?(st.party?.kind==='liar'?(st.party.winner==='liar'?'😈 거짓말쟁이 승리!':'🎉 시민 승리!'):LIVE_EXTRA[st.game]?.coop?(st.party?.result==='lose'?`💔 아쉬워요! 팀 점수 ${rank[0]?.score||0}점`:`🤝 팀 점수 ${rank[0]?.score||0}점!`):rank.length>1&&rank[0].score===rank[1].score?'🤝 공동 1등!':`🏆 ${esc(rank[0].name)} 승리!`):me?.inRound?'다른 친구를 기다리는 중…':st.series?.started?'이번 판은 관전 중이에요 👀':'진행 중인 판이 끝나면 같이 해요'}</h2>
@@ -401,8 +400,18 @@ function foreheadView(st,me){const f=st.fh||{words:{},solved:{},wrong:{}},mine=f
  ${mine?'':`<form class="fh-guess" id="fhForm"><input id="fhGuess" maxlength="20" placeholder="내 단어는…?" autocomplete="off" enterkeyhint="go"><button id="fhGuessBtn" type="submit">정답 도전</button></form><p class="fineprint">틀리면 ${8}초 동안 다시 도전할 수 없어요. 먼저 맞힐수록 점수가 높아요 (100·70·50·30).</p>`}
  <div class="choice-title">친구 질문에 바로 답하기</div><div class="fh-answers">${['⭕ 맞아','❌ 아니야','🤔 애매해','🔥 거의 다 왔어'].map(q=>`<button data-chat-quick="${q}">${q}</button>`).join('')}</div>
  <button class="btn tertiary full" data-action="live-leave">방 나가기</button></section>`;}
+// ── 3D 무대: 같은 방 친구들의 캐릭터 (lounge/ 의 three.js 캐릭터를 필요할 때만 불러와요) ──
+let stage=null,stageLoading=null;
+function loadStage(){if(window.ThinkChipStage)return Promise.resolve(true);if(stageLoading)return stageLoading;
+ const load=src=>new Promise((ok,no)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=no;document.head.appendChild(s);});
+ stageLoading=(window.THREE?Promise.resolve():load('./vendor/three.min.js')).then(()=>load('./lounge/avatar.js')).then(()=>load('./lounge/stage.js')).then(()=>true).catch(()=>false);return stageLoading;}
+function syncStage(){const host=document.getElementById('liveStage');if(!host||!live?.state||stage===false)return;
+ if(!stage){loadStage().then(ok=>{if(stage)return syncStage();const h=document.getElementById('liveStage');if(!ok||!h||!live){if(!ok)stage=false;return;}stage=window.ThinkChipStage.mount(h,{height:150})||false;if(stage)syncStage();});return;}
+ if(stage.el.parentNode!==host)host.appendChild(stage.el);
+ stage.setPlayers(live.state.players.filter(p=>p.online).map(p=>({pid:p.pid,name:p.name,look:p.look||'',me:p.pid===livePid(),status:p.ready?'ready':'',online:true})));}
+const STAGE_SLOT='<div id="liveStage" class="live-stage" aria-hidden="true"></div>';
 // ── 채팅 (실시간 방 안에서만) ──
-function onChat(m){if(!live)return;live.chat=[...(live.chat||[]),m].slice(-60);const mine=m.pid===livePid();
+function onChat(m){if(!live)return;if(stage&&!m.sys)stage.say(m.pid,m.text);live.chat=[...(live.chat||[]),m].slice(-60);const mine=m.pid===livePid();
  if(!chatOpen&&!mine&&!chatMuted.has(m.pid)){live.unread=(live.unread||0)+1;const pk=document.getElementById('chatPeek');if(pk){pk.textContent=m.sys?m.text:`${m.name}: ${m.text}`;pk.classList.add('show');clearTimeout(chatPeekTimer);chatPeekTimer=setTimeout(()=>pk.classList.remove('show'),3200);}}
  renderChatDock();}
 function sendChat(text){const t=String(text||'').trim();if(!t||!live)return;if(!live.conn.send({t:'chat',text:t.slice(0,80)}))flash('연결이 끊겨서 보내지 못했어요.');}
@@ -580,8 +589,9 @@ function settings(){
 }
 
 function render(){const gid=['intro','game','result'].includes(screen)?(session&&screen!=='intro'?session.id:selectedGame):null;const de=document.documentElement;if(de?.dataset){if(gid&&GAME_BY_ID[gid])de.dataset.game=GAME_BY_ID[gid].color;else delete de.dataset.game;}
- root.innerHTML=screen==='live'?liveView():screen==='home'?home():screen==='intro'?intro():screen==='game'?gameView():screen==='result'?result():screen==='wallet'?wallet():screen==='settings'?settings():records();renderToast();if(screen==='game'){bindTracer();bindRedLight();bindBridge();bindGameExtras();if(session?.mode==='live')sendLiveProgress();}if(screen==='live')liveTick();renderChatDock();}
+ root.innerHTML=screen==='live'?liveView():screen==='home'?home():screen==='intro'?intro():screen==='game'?gameView():screen==='result'?result():screen==='wallet'?wallet():screen==='settings'?settings():records();renderToast();if(screen==='game'){bindTracer();bindRedLight();bindBridge();bindGameExtras();if(session?.mode==='live')sendLiveProgress();}if(screen==='live'){liveTick();syncStage();}renderChatDock();}
 function goBack(){if(rulesOpen){rulesOpen=false;render();return true;}if(screen==='home')return false;
+ if(fromLounge&&(screen==='intro'||screen==='live')){leaveLive();location.href=LOUNGE_URL;return true;} // 라운지에서 온 사람은 라운지로 돌아가요
  if(screen==='game')setScreen(session?.mode==='live'?'live':'intro');
  else if(screen==='live'){leaveLive();setScreen('home');}else if(screen==='wallet')setScreen(previousPage==='game'?'home':previousPage);else setScreen('home');return true;}
 function setScreen(name){if(screen==='game'&&name!=='game'&&session&&!session.game.over){if(!confirm(session.mode==='live'?'이번 판을 포기할까요? 지금 점수로 기록돼요.':'진행 중인 게임을 종료하고 나갈까요? 이 판의 보상은 지급되지 않아요.'))return;
@@ -717,4 +727,4 @@ initToss().then(st=>{useUserKey(st.userKeyHash);
  if(!st.inToss&&'serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('./sw.js').catch(()=>{});
 }).catch(()=>{});
 bindBackHandler(()=>{if(goBack())return;if(confirm('게임을 종료할까요?'))void exitApp();});
-if(invitedRoom&&liveAvailable())joinLive(invitedRoom,null);
+if(liveAvailable()&&(invitedRoom||partyGame))joinLive(invitedRoom||newRoomCode(),partyGame);

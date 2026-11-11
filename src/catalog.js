@@ -19,3 +19,10 @@ export const GAMES=[
  {id:'dots',title:'땅따먹기',short:'선을 하나씩 그어 상자를 닫으면 내 땅. 세 번째 선은 조심!',genre:'1:1 전략',time:'약 3분',symbol:'⊞',color:'green',modes:['solo','ai','friend']}
 ];
 export const GAME_BY_ID=Object.fromEntries(GAMES.map(g=>[g.id,g]));
+// 실시간 파티·협동 게임 (live-server 가 진행). 3D 라운지의 파티 라운지도 이 목록을 써요.
+export const PARTY_GAMES={forehead:{id:'forehead',title:'내 단어 맞히기',short:'남의 단어는 다 보이는데 내 것만 몰라요. 인물·단어·친구 출제!',symbol:'🧠',color:'plum',genre:'파티 게임',min:2},
+ liar:{id:'liar',title:'거짓말쟁이 찾기',short:'한 명만 제시어를 몰라요. 설명을 듣고 거짓말쟁이를 지목하세요.',symbol:'🕵',color:'red',genre:'파티 게임',min:3},
+ nunchi:{id:'nunchi',title:'눈치 게임',short:'1부터 차례로 외쳐요. 동시에 외치거나 마지막까지 남으면 탈락!',symbol:'✋',color:'amber',genre:'파티 게임',min:2},
+ vote:{id:'vote',title:'사람 소수결',short:'친구들과 둘 중 하나! 적은 쪽만 점수. 채팅으로 떠보고 배신하세요.',symbol:'⚖',color:'cyan',genre:'파티 게임',min:3},
+ tele:{id:'tele',title:'마음 맞추기',short:'같은 질문에 몰래 답해요. 다 같이 똑같이 쓸수록 팀 점수 UP!',symbol:'🔮',color:'pink',genre:'협동',min:2,coop:true},
+ mind:{id:'mind',title:'타이밍 맞추기',short:'말 없이 숫자를 작은 순서대로 내요. 감과 눈치로 하나 되는 협동 게임.',symbol:'⏳',color:'green',genre:'협동',min:2,coop:true}};

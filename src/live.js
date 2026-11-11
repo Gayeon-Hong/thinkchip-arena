@@ -7,11 +7,14 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
 export const newRoomCode = () => Array.from({length: 4}, () => CODE_CHARS[(Math.random() * CODE_CHARS.length) | 0]).join('');
 export const normalizeCode = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
 
+// 3D 라운지 드레스룸에서 꾸민 내 캐릭터 (lounge/avatar.js 가 저장). 다른 사람 화면의 무대에 이 모습으로 서요.
+const myLook = () => { try { return (localStorage.getItem('thinkchip:look') || '').slice(0, 300); } catch { return ''; } };
+
 export function connectLive({code, name, pid, onState, onEmoji, onChat, onChatLog, onStatus, onError}) {
   let ws = null, closedByUser = false, tries = 0, offset = 0, timer = null, ping = null;
   const open = () => {
     onStatus?.(tries ? 'reconnecting' : 'connecting');
-    try { ws = new WebSocket(`${LIVE_URL}/${code}?pid=${encodeURIComponent(pid)}&name=${encodeURIComponent(name)}`); }
+    try { ws = new WebSocket(`${LIVE_URL}/${code}?pid=${encodeURIComponent(pid)}&name=${encodeURIComponent(name)}&look=${encodeURIComponent(myLook())}`); }
     catch { onError?.('connect'); return; }
     ws.onopen = () => { tries = 0; onStatus?.('open'); clearInterval(ping); ping = setInterval(() => send({t: 'ping'}), 20000); };
     ws.onmessage = (ev) => {

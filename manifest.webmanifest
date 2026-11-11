@@ -1,0 +1,73 @@
+{
+  "id": "/",
+  "name": "씽크칩 아레나",
+  "short_name": "씽크칩 아레나",
+  "description": "숫자 조합, 카드 추리, 심리전까지. 친구·AI와 겨루는 두뇌게임 4종.",
+  "lang": "ko",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": [
+    "standalone"
+  ],
+  "orientation": "portrait",
+  "background_color": "#0c1323",
+  "theme_color": "#233b67",
+  "categories": [
+    "games",
+    "entertainment",
+    "education"
+  ],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "screenshots/ss1.png",
+      "sizes": "636x1048",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "홈 화면"
+    },
+    {
+      "src": "screenshots/ss2.png",
+      "sizes": "636x1048",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "뒤집어 3!"
+    },
+    {
+      "src": "screenshots/ss3.png",
+      "sizes": "636x1048",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "블라인드 숫자전"
+    },
+    {
+      "src": "screenshots/wide.png",
+      "sizes": "1504x741",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "씽크칩 아레나"
+    }
+  ],
+  "prefer_related_applications": false
+}

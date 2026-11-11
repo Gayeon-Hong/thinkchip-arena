@@ -3,7 +3,8 @@
 // Every player plays the same seeded board at the same moment; the server only coordinates and relays.
 import {DurableObject} from 'cloudflare:workers';
 
-const MAX_PLAYERS = 8;
+const MAX_PLAYERS = 8, LOUNGE_MAX = 20; // LNG* = 3D 라운지 공개방 (게임 대신 함께 돌아다니는 공간)
+const cleanLook = (v) => String(v || '').replace(/[^a-z0-9.]/g, '').slice(0, 300); // lounge/avatar.js encodeLook
 const GAMES = ['flip', 'blind', 'triad', 'trust', 'baseball', 'nim', 'auction', 'maze', 'draw', 'marbles', 'redlight', 'bridge', 'minority', 'forehead', 'liar', 'nunchi', 'vote', 'sudoku', 'merge', 'stroop', 'gomoku', 'dots', 'tele', 'mind'];
 const TURN = ['gomoku', 'dots']; // 1:1 turn games: the server relays moves between the two players of each board
 const PARTY = ['forehead', 'liar', 'nunchi', 'vote', 'tele', 'mind'];
@@ -65,7 +66,7 @@ export class Room extends DurableObject {
   view(viewer) {
     const on = this.online(), host = this.hostId(on);
     const players = Object.values(this.s.players).filter((p) => on.has(p.pid) || (this.s.phase !== 'lobby' && p.inRound))
-      .sort((a, b) => a.joinedAt - b.joinedAt).map((p) => ({pid: p.pid, name: p.name, ready: p.ready, score: p.score, done: p.done, inRound: p.inRound, online: on.has(p.pid), host: p.pid === host}));
+      .sort((a, b) => a.joinedAt - b.joinedAt).map((p) => ({pid: p.pid, name: p.name, ready: p.ready, score: p.score, done: p.done, inRound: p.inRound, online: on.has(p.pid), host: p.pid === host, look: p.look || '', pos: this.pos?.[p.pid] || null}));
     const {code, phase, game, level, seed, round, startAt} = this.s;
     let fh = null;
     if (game === 'forehead' && this.s.fh && phase !== 'lobby') {
@@ -318,11 +319,11 @@ export class Room extends DurableObject {
     // Drop a stale socket from the same player (e.g. reconnect after network change).
     for (const ws of this.ctx.getWebSockets()) { if (ws !== server && ws.deserializeAttachment()?.pid === pid) { try { ws.close(4001, 'replaced'); } catch {} } }
     const on = this.online();
-    if (!this.s.players[pid] && on.size >= MAX_PLAYERS) { server.send(JSON.stringify({t: 'error', code: 'full'})); server.close(4002, 'full'); return new Response(null, {status: 101, webSocket: client}); }
+    if (!this.s.players[pid] && on.size >= (code.startsWith('LNG') ? LOUNGE_MAX : MAX_PLAYERS)) { server.send(JSON.stringify({t: 'error', code: 'full'})); server.close(4002, 'full'); return new Response(null, {status: 101, webSocket: client}); }
     if (!on.size && this.s.phase !== 'lobby') { this.s = this.fresh(); } // everyone had left: start over
     this.s.code = code;
     const p = this.s.players[pid] || {pid, joinedAt: Date.now(), ready: false, score: 0, done: false, inRound: false};
-    this.s.players[pid] = {...p, name};
+    this.s.players[pid] = {...p, name, look: cleanLook(url.searchParams.get('look'))};
     // Forget players who left long ago so the room does not fill with ghosts.
     for (const [id, q] of Object.entries(this.s.players)) if (id !== pid && !on.has(id) && !q.inRound) delete this.s.players[id];
     server.serializeAttachment({pid});
@@ -489,6 +490,14 @@ export class Room extends DurableObject {
         this.broadcast({t: 'chat', ...item});
         return;
       }
+      case 'pose': { // 라운지에서 걷는 위치. 저장하지 않고 메모리에만 두고 바로 중계해요.
+        const x = Math.max(-12, Math.min(12, Number(m.x) || 0)), z = Math.max(-12, Math.min(12, Number(m.z) || 0));
+        this.pos = this.pos || {}; this.pos[pid] = {x: Math.round(x * 100) / 100, z: Math.round(z * 100) / 100};
+        this.broadcast({t: 'pose', pid, ...this.pos[pid]});
+        return;
+      }
+      case 'look':
+        p.look = cleanLook(m.look); break; // 드레스룸에서 갈아입으면 모두에게 새 모습으로
       case 'emoji':
         if (EMOJIS.includes(m.e)) this.broadcast({t: 'emoji', pid, e: m.e});
         return;
