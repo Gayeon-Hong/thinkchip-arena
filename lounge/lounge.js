@@ -409,7 +409,9 @@
   setTimeout(hideHint, 7000);
   function chatLine(name, text, sys) {
     const el = document.createElement('div'); el.className = 'msg' + (sys ? ' sys' : ''); el.innerHTML = sys ? esc(text) : `<b>${esc(name)}</b>${esc(text).replace(JOIN_RE, (_, code, id) => `<a class="join-btn" href="${tableHref(id, code)}">🎮 참가하기</a>`)}`;
-    const log = $('chatLog'); log.appendChild(el); while (log.children.length > 30) log.firstChild.remove();
+    const log = $('chatLog'); const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+    log.appendChild(el); while (log.children.length > 60) log.firstChild.remove();
+    if (atBottom) log.scrollTop = log.scrollHeight;
     news.unshift(sys ? text : `${name}: ${String(text).replace(JOIN_RE, '').trim()}`); news = news.slice(0, 5); drawBoard();
   }
   function setTicker() {
@@ -684,6 +686,9 @@
   // 채팅 & 이모티콘
   $('chatForm').onsubmit = (e) => { e.preventDefault(); const v = $('chatInput').value.trim(); if (!v) return; $('chatInput').value = ''; sendChat(v); };
   $('emotes').onclick = (e) => { const b = e.target.closest('[data-emote]'); if (b) sendChat(b.dataset.emote); };
+  // 채팅 닫기/열기 (모바일에서 채팅이 화면을 가릴 때)
+  $('chatToggle').onclick = () => { $('chatPanel').classList.add('chat-collapsed'); $('chatPanel').hidden = true; $('chatReopen').hidden = false; };
+  $('chatReopen').onclick = () => { $('chatPanel').hidden = false; $('chatPanel').classList.remove('chat-collapsed'); $('chatReopen').hidden = true; };
   // 채팅 보내기: 서버가 0.6초 안에 연달아 온 메시지를 버려서(도배 방지) 빠르게 치면 사라졌어요 → 줄 세워 0.7초 간격으로 보내요.
   // 연결이 끊겨 있으면 내 화면에 먼저 띄우고, 다시 연결되면 보내요.
   const outbox = []; let outTimer = null, lastSent = 0;

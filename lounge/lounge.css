@@ -42,7 +42,11 @@ body[data-theme="day"] .ticker{background:rgba(255,255,255,.75);color:#5a4500}
 .hint.hide{opacity:0}
 
 .chat{position:fixed;left:10px;right:78px;bottom:calc(10px + var(--safe-b));z-index:4;display:flex;flex-direction:column;gap:6px;max-width:520px}
-.chat-log{display:flex;flex-direction:column;gap:4px;max-height:118px;overflow:hidden;mask-image:linear-gradient(to top,#000 70%,transparent);-webkit-mask-image:linear-gradient(to top,#000 70%,transparent);pointer-events:none}
+.chat.chat-collapsed .chat-log,.chat.chat-collapsed .emotes,.chat.chat-collapsed .chat-bar{display:none}
+.chat-toggle{align-self:flex-end;width:26px;height:26px;border-radius:50%;background:var(--panel);border:1px solid var(--line);color:var(--muted);font-size:12px;line-height:1;backdrop-filter:blur(8px)}
+.chat-reopen{position:fixed;left:10px;bottom:calc(10px + var(--safe-b));z-index:4;width:44px;height:44px;border-radius:50%;background:var(--panel);border:1px solid var(--line);font-size:19px;backdrop-filter:blur(8px)}
+.chat-log{display:flex;flex-direction:column;gap:4px;max-height:min(260px,40vh);overflow-y:auto;overscroll-behavior:contain;mask-image:linear-gradient(to top,#000 80%,transparent);-webkit-mask-image:linear-gradient(to top,#000 80%,transparent);pointer-events:auto;scrollbar-width:none}
+.chat-log::-webkit-scrollbar{display:none}
 .msg{align-self:flex-start;max-width:100%;font-size:12px;line-height:1.35;padding:5px 10px;border-radius:11px;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(8px);word-break:break-all}
 .msg b{color:var(--gold);margin-right:5px}.msg.sys{color:var(--muted);font-size:11px}
 .emotes{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none}.emotes::-webkit-scrollbar{display:none}

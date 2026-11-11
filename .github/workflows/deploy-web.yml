@@ -1,0 +1,46 @@
+# main 브랜치에 푸시하면 웹 버전(MS Store / PWA)을 Cloudflare Pages에 자동 배포해요.
+# scripts/deploy-web.mjs 와 같은 순서: 테스트 → 라운지/데모 빌드 → 웹 빌드 → 배포
+# 필요한 저장소 Secrets: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID
+name: Deploy web (Cloudflare Pages)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 패키지 설치
+        run: npm ci
+
+      - name: 테스트
+        run: npm test
+
+      - name: 웹 버전 빌드 (토스 SDK 끔)
+        run: |
+          node scripts/build-demo.mjs
+          npx vite build
+          node scripts/fix-dist-manifest.mjs
+        env:
+          VITE_TARGET: web
+
+      - name: Cloudflare Pages 배포
+        run: npx --yes wrangler pages deploy dist --project-name thinkchip-arena --branch main --commit-dirty=true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
