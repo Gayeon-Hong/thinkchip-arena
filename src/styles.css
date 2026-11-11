@@ -507,3 +507,8 @@ body.to-lounge #app{opacity:0;transform:scale(.98);transition:opacity .24s ease,
  .number-choices button{min-height:44px}.trust-actions button{min-height:96px;padding:12px 6px}
  .rl-field{height:220px}.rl-btn{min-height:80px}
 }
+
+/* 규칙: 예시·요령 줄은 따로 눈에 띄게, 길면 스크롤 */
+.modal-card{max-height:86vh;overflow-y:auto}
+.rule-line.rule-example{background:var(--surface-2);border-radius:12px;padding:8px 10px}.rule-line.rule-example span{background:var(--accent-soft);color:var(--accent-ink)}
+.rule-line.rule-tip p{color:var(--accent-ink);font-weight:600}.rule-line.rule-tip span{background:transparent}
