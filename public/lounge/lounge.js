@@ -22,9 +22,15 @@
   function profile() { const p = store.get(PROFILE_KEY, null); return p && typeof p === 'object' ? p : {version: 2, nickname: '', chips: 100, best: {}, completed: {}, history: [], earnings: {}, adCount: {}, demoGift: false}; }
   function saveProfile(p) { store.set(PROFILE_KEY, p); renderChips(); }
   function addChips(n) { const p = profile(); p.chips = Math.max(0, Math.trunc((Number(p.chips) || 0) + n)); p.paid = Math.min(Number(p.paid) || 0, p.chips); saveProfile(p); return p.chips; } // 쓸 때는 무료 칩부터, 충전 칩(paid)은 선물용으로 남아요
-  const giftable = () => { const p = profile(); return Math.max(0, Math.min(Number(p.paid) || 0, Number(p.chips) || 0)); };
+  // ── 계정 (public/account.js): 로그인하면 칩·산 옷·친구가 계정(서버)에 저장돼요. 로그인 안 하면 둘러보기만 ──
+  const ACC = window.ThinkChipAccount || null; if (ACC) ACC.init(CFG.LIVE_URL);
+  const acctOn = () => !!(ACC && ACC.api); // 서버 계정 사용 (오프라인 데모면 예전처럼 이 기기 지갑)
+  const loggedIn = () => acctOn() && ACC.state.loggedIn;
+  const IN_TOSS = !!CFG.TOSS; // 토스 앱 빌드: 토스 계정으로 자동 로그인, 칩 선물 없음
+  const myChips = () => acctOn() ? (loggedIn() && ACC.state.wallet ? ACC.state.wallet.chips : 0) : (Number(profile().chips) || 0);
+  const giftable = () => acctOn() ? (loggedIn() && ACC.state.wallet ? ACC.state.wallet.paid : 0) : Math.max(0, Math.min(Number(profile().paid) || 0, Number(profile().chips) || 0));
   function pid() { try { let id = localStorage.getItem('thinkchip:pid'); if (!id) { id = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()).replace(/[^a-zA-Z0-9]/g, '').slice(0, 24); localStorage.setItem('thinkchip:pid', id); } return id; } catch (e) { return 'guest' + Math.floor(Math.random() * 1e6); } }
-  const ME = pid();
+  const ME = (ACC && ACC.state.loggedIn && ACC.state.pid) || pid(); // 로그인하면 계정 id (친구 목록과 라운지 캐릭터를 맞춰요)
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   let mine = A.loadMine();
 
@@ -98,7 +104,7 @@
     c.fillStyle = '#ffffff'; c.font = '900 92px system-ui, sans-serif'; c.fillText(g ? `${g.symbol}  ${g.title}` : '오늘의 매치', 48, 178);
     c.fillStyle = '#a9b4d0'; c.font = '600 34px system-ui, sans-serif'; c.fillText(g ? (g.short || '').slice(0, 34) : '', 48, 232);
     c.fillStyle = '#41d38a'; c.font = '800 34px ui-monospace, monospace';
-    c.fillText(`● ONLINE ${online.size + 1}`, 48, 312); c.fillStyle = '#f7ce55'; c.fillText(`⬡ ${fmt(p.chips)}`, 360, 312);
+    c.fillText(`● ONLINE ${online.size + 1}`, 48, 312); c.fillStyle = '#f7ce55'; c.fillText(acctOn() && !loggedIn() ? '⬡ 로그인' : `⬡ ${fmt(myChips())}`, 360, 312);
     c.fillStyle = '#cbd5e1'; c.font = '600 30px system-ui, sans-serif'; c.fillText((news[0] || '테이블을 눌러 게임을 시작하세요').slice(0, 38), 620, 312);
     boardTex.needsUpdate = true;
   }
@@ -451,7 +457,7 @@
     const d = decoDraft, due = [];
     for (const cat of ['wall', 'floor', 'rug']) if (!decoOwned(cat, d[cat])) due.push({cat, id: d[cat], price: pick(cat, d[cat]).price});
     for (const id of d.items) if (!decoOwned('items', id)) due.push({cat: 'items', id, price: DECOR.items.find((x) => x.id === id).price});
-    const total = due.reduce((a, b) => a + b.price, 0), chips = profile().chips;
+    const total = due.reduce((a, b) => a + b.price, 0), chips = myChips();
     const tabs = [['wall', '벽지'], ['floor', '바닥'], ['rug', '러그'], ['items', '가구·소품']];
     const btn = (cat, it) => { const on = cat === 'items' ? d.items.includes(it.id) : d[cat] === it.id; const own = decoOwned(cat, it.id);
       const sw = it.c != null ? `<i style="display:block;width:100%;height:16px;border-radius:6px;margin-bottom:5px;background:#${it.c.toString(16).padStart(6, '0')}"></i>` : '';
@@ -466,16 +472,17 @@
       if (b.dataset.dtab) { decoTab = b.dataset.dtab; openRoomDeco(); return; }
       if (b.dataset.dcat === 'items') { const i = d.items.indexOf(b.dataset.did); if (i >= 0) d.items.splice(i, 1); else d.items.push(b.dataset.did); openRoomDeco(); return; }
       if (b.dataset.dcat) { d[b.dataset.dcat] = b.dataset.did; openRoomDeco(); return; }
-      if (b.id === 'decoSave') { if (total > profile().chips) return toast('씽크칩이 부족해요'); if (total) addChips(-total);
+      if (b.id === 'decoSave') { if (total > myChips() && !(acctOn() && !loggedIn())) return toast('씽크칩이 부족해요');
+        b.disabled = true; payChips(total, '방 꾸미기를 사려면 ').then((ok) => { b.disabled = false; if (!ok) return;
         myRoom.owned = [...new Set([...myRoom.owned, ...due.map((x) => `${x.cat}:${x.id}`)])]; myRoom.deco = JSON.parse(JSON.stringify(d)); store.set(ROOM_KEY, myRoom);
         if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'deco', deco: encodeDeco(myRoom.deco)}));
-        toast(total ? `구매 완료! -${total} 씽크칩` : '방을 저장했어요'); decoDraft = null; closeSheet(); drawBoard(); setTicker(); }
+        toast(total ? `구매 완료! -${total} 씽크칩` : '방을 저장했어요'); decoDraft = null; closeSheet(); drawBoard(); setTicker(); pushData('room'); }); }
     };
   }
   let hostDeco = null; // 친구 방 방장이 꾸민 방
   // ───────── UI ─────────
   function toast(msg) { const el = $('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('show'), 2600); }
-  function renderChips() { $('chips').textContent = fmt(profile().chips); }
+  function renderChips() { $('chips').textContent = acctOn() && !loggedIn() ? '로그인' : fmt(myChips()); }
   function hideHint() { $('hint').classList.add('hide'); }
   setTimeout(hideHint, 7000);
   function chatLine(name, text, sys) {
@@ -487,7 +494,7 @@
   }
   function setTicker() {
     const g = dailyGame(), p = profile(), best = Object.entries(p.best || {}).sort((a, b) => b[1] - a[1])[0];
-    const parts = [g ? `오늘의 메인 매치 · ${g.title}` : null, `접속 ${online.size + 1}명`, `내 씽크칩 ⬡${fmt(p.chips)}`, best && GAME[best[0]] ? `내 최고 기록 · ${GAME[best[0]].title} ${fmt(best[1])}점` : null, news[0] || null].filter(Boolean);
+    const parts = [g ? `오늘의 메인 매치 · ${g.title}` : null, `접속 ${online.size + 1}명`, (acctOn() && !loggedIn() ? '로그인하면 씽크칩을 모을 수 있어요' : `내 씽크칩 ⬡${fmt(myChips())}`), best && GAME[best[0]] ? `내 최고 기록 · ${GAME[best[0]].title} ${fmt(best[1])}점` : null, news[0] || null].filter(Boolean);
     $('tickerText').textContent = parts.join('   ·   ');
   }
 
@@ -612,19 +619,26 @@
   // 비서 데스크: 출석 보너스(진짜 칩 지급) + 내 기록
   const ATTEND = 30;
   function openDesk() {
-    const p = profile(), L = store.get(LOUNGE_KEY, {}), done = L.attend === today(), plays = (p.history || []).length;
+    const p = profile(), L = store.get(LOUNGE_KEY, {}), done = acctOn() ? !!(loggedIn() && ACC.state.wallet && ACC.state.wallet.attended) : L.attend === today(), plays = (p.history || []).length;
     const wins = (p.history || []).filter((h) => h.victory).length, bestList = Object.entries(p.best || {}).sort((a, b) => b[1] - a[1]).slice(0, 3);
     setExpr(players.get(ME), 'happy'); say({av: secretary, bubble: deskBubble, tag: npcTag}, done ? '오늘 출석은 이미 챙기셨어요!' : `어서 오세요, ${myName()}님! 출석 보너스 받아 가세요.`);
     openSheet({kicker: 'CONCIERGE', title: '💁 비서 데스크', html: `
       <div class="card reward"><div><h3>오늘의 출석 보너스</h3><p>${done ? '내일 다시 받을 수 있어요' : '하루 한 번 받을 수 있어요'}</p></div><strong>+${ATTEND}</strong></div>
       <button class="btn gold full" id="attendBtn" ${done ? 'disabled' : ''}>${done ? '오늘은 받았어요 ✓' : '출석 보너스 받기'}</button>
-      <div class="card" style="margin-top:12px"><h3>내 기록</h3><div class="stats"><div><b>${fmt(p.chips)}</b><small>씽크칩</small></div><div><b>${plays}</b><small>최근 플레이</small></div><div><b>${wins}</b><small>최근 승리</small></div></div>
+      <div class="card" style="margin-top:12px"><h3>내 기록</h3><div class="stats"><div><b>${acctOn() && !loggedIn() ? '-' : fmt(myChips())}</b><small>씽크칩</small></div><div><b>${plays}</b><small>최근 플레이</small></div><div><b>${wins}</b><small>최근 승리</small></div></div>
       ${bestList.length ? `<p style="margin-top:10px">${bestList.map(([id, s]) => `${esc(GAME[id]?.title || id)} <b style="color:var(--gold)">${fmt(s)}</b>`).join(' · ')}</p>` : '<p style="margin-top:10px">아직 기록이 없어요. 테이블에서 한 판 해볼까요?</p>'}</div>
       <a class="btn ghost full" style="display:grid;place-items:center;text-decoration:none;color:inherit;margin-top:8px" href="${new URL('?wallet=1&from=lounge', ARENA).href}">⬡ 씽크칩 충전 · 지갑</a>
+      ${acctOn() ? (loggedIn() ? `<p class="table-note" style="text-align:center">${ACC.state.platform === 'toss' ? '토스' : '카카오'} 계정으로 로그인됨 ${IN_TOSS ? '' : '· <a href="#" id="logoutBtn" style="color:var(--muted)">로그아웃</a>'}</p>` : '<button class="btn kakao full" id="deskLogin" style="margin-top:8px">🔑 로그인하고 칩 모으기</button>') : ''}
       <div class="name-row" style="margin:12px 0"><div class="label-row">내 이름 <small style="color:var(--muted);font-weight:600">· 바꾸면 바로 머리 위 이름이 바뀌어요</small></div><input id="deskName" maxlength="12" value="${esc(p.nickname || '')}" placeholder="라운지에서 보일 이름"></div>
       <div class="card"><h3>비서의 팁</h3><p>${['심리전 테이블에선 채팅 이모티콘으로 표정을 바꿔 블러핑해 보세요 😏', '드레스룸에서 얼굴은 무료로 바꿀 수 있어요.', '친구 방을 만들면 라운지와 파티 게임을 같은 사람들과 할 수 있어요.', '메인 매치는 매일 자정에 바뀌어요.'][new Date().getDate() % 4]}</p></div>`});
-    $('deskName').onchange = (e) => { const q = profile(); q.nickname = e.target.value.trim().slice(0, 12); saveProfile(q); me.tag.textContent = myName(); reconnect(); toast('이름을 바꿨어요'); };
-    const b = $('attendBtn'); if (b) b.onclick = () => { const L2 = store.get(LOUNGE_KEY, {}); if (L2.attend === today()) return; L2.attend = today(); store.set(LOUNGE_KEY, L2); addChips(ATTEND); toast(`출석 보너스 +${ATTEND} 씽크칩!`); setExpr(me, 'laugh'); drawBoard(); setTicker(); openDesk(); };
+    $('deskName').onchange = (e) => { const q = profile(); q.nickname = e.target.value.trim().slice(0, 12); saveProfile(q); me.tag.textContent = myName(); reconnect(); if (loggedIn()) ACC.call('hello', {name: myName()}).catch(() => {}); toast('이름을 바꿨어요'); };
+    if ($('deskLogin')) $('deskLogin').onclick = () => openLogin();
+    if ($('logoutBtn')) $('logoutBtn').onclick = (e) => { e.preventDefault(); if (confirm('로그아웃할까요? 칩과 친구는 계정에 그대로 남아 있어요.')) { ACC.logout(); location.reload(); } };
+    const b = $('attendBtn'); if (b) b.onclick = async () => {
+      if (acctOn()) { if (!loggedIn()) return openLogin('출석 보너스를 받으려면 '); b.disabled = true;
+        try { const r = await ACC.call('attend'); if (r.ok && r.earned) { toast(`출석 보너스 +${r.earned} 씽크칩!`); setExpr(me, 'laugh'); } else if (r.ok) toast('오늘은 이미 받았어요'); else toast('잠시 후 다시 시도해 주세요'); } catch (e) { toast('인터넷 연결을 확인해 주세요'); }
+        drawBoard(); setTicker(); return openDesk(); }
+      const L2 = store.get(LOUNGE_KEY, {}); if (L2.attend === today()) return; L2.attend = today(); store.set(LOUNGE_KEY, L2); addChips(ATTEND); toast(`출석 보너스 +${ATTEND} 씽크칩!`); setExpr(me, 'laugh'); drawBoard(); setTicker(); openDesk(); };
   }
   const deskBubble = makeBubble();
 
@@ -648,7 +662,7 @@
   function itemBtn(cat, it, on) { const p = it.price, own = owned(cat, it.id); return `<button class="item ${on ? 'on' : ''}" data-cat="${cat}" data-id="${it.id}">${esc(it.name)}<span class="price ${p === 0 ? 'free' : own ? 'owned' : ''}">${p === 0 ? '기본' : own ? '보유' : `⬡${p}`}</span></button>`; }
   function swatches(key, list) { return `<div class="swatches">${list.map((c) => `<button class="sw ${draft[key] === c ? 'on' : ''}" data-color="${key}" data-val="${c}" style="background:#${c.toString(16).padStart(6, '0')}" aria-label="색상"></button>`).join('')}</div>`; }
   function renderCloset() {
-    const d = draft, due = unpaid(d), total = due.reduce((a, b) => a + b.price, 0), chips = profile().chips;
+    const d = draft, due = unpaid(d), total = due.reduce((a, b) => a + b.price, 0), chips = myChips();
     let body = '';
     if (closetTab === 'face') body = `<div class="label-row">피부</div>${swatches('skin', W.colors.skin)}<div class="label-row">눈</div><div class="items">${W.eyes.map((it) => itemBtn('eyes', it, d.eyes === it.id)).join('')}</div>
       <div class="label-row">눈썹</div><div class="items">${W.brows.map((it) => itemBtn('brows', it, d.brows === it.id)).join('')}</div>
@@ -674,12 +688,15 @@
   }
   function wear() {
     const due = unpaid(draft), total = due.reduce((a, b) => a + b.price, 0);
-    if (total > profile().chips) { toast('씽크칩이 부족해요. 게임으로 모아 보세요!'); return; }
-    if (total) addChips(-total);
+    if (total > myChips() && !(acctOn() && !loggedIn())) { toast('씽크칩이 부족해요. 게임으로 모아 보세요!'); return; }
+    if (wear.busy) return; wear.busy = true;
+    payChips(total, '옷을 사려면 ').then((ok) => { wear.busy = false; if (ok) wearDone(due, total); });
+  }
+  function wearDone(due, total) {
     mine.owned = [...new Set([...mine.owned, ...due.map((x) => `${x.cat}:${x.id}`)])]; mine.look = Object.assign({}, draft); A.saveMine(mine);
     me.look = A.encodeLook(mine.look); sendLook();
     toast(total ? `구매 완료! -${total} 씽크칩` : '저장했어요'); setExpr(me, 'laugh');
-    draft = null; camState.closeUp = false; closeSheet(); rebuildMe(); drawBoard(); setTicker();
+    draft = null; camState.closeUp = false; closeSheet(); rebuildMe(); drawBoard(); setTicker(); pushData('avatar');
   }
 
   // 친구 방: 같은 코드로 들어온 사람들만 보이는 라운지 (파티 게임도 같은 방으로 이어져요)
@@ -721,97 +738,109 @@
     if ($('shareBtn')) $('shareBtn').onclick = shareRoom;
     if ($('gbBtn')) $('gbBtn').onclick = openGuestbook;
     const box = $('socialBox');
-    box.onchange = (e) => { if (e.target.id !== 'nameInput') return; const p = profile(); p.nickname = e.target.value.trim().slice(0, 12); saveProfile(p); me.tag.textContent = myName(); reconnect(); syncSocial(); toast('이름을 바꿨어요'); };
+    box.onchange = (e) => { if (e.target.id !== 'nameInput') return; const p = profile(); p.nickname = e.target.value.trim().slice(0, 12); saveProfile(p); me.tag.textContent = myName(); reconnect(); if (loggedIn()) ACC.call('hello', {name: myName()}).catch(() => {}); toast('이름을 바꿨어요'); };
     box.onclick = async (e) => {
       const b = e.target.closest('button'); if (!b) return; const d = b.dataset;
       if (b.id === 'friendLinkBtn') return shareFriendLink();
       if (b.id === 'socialRetry') return syncSocial();
+      if (b.id === 'socialLogin') return openLogin();
       try {
-        if (d.add) { b.disabled = true; const r = await api('request', {to: d.add}); const made = r.ok && r.friends.some((f) => f.pid === d.add); toast(r.ok ? (made ? '친구가 됐어요! 🎉' : '친구 신청을 보냈어요') : socialMsg(r.error)); if (made) celebrate(d.add); }
-        else if (d.acc) { const r = await api('accept', {to: d.acc}); toast(r.ok ? '친구가 됐어요! 🎉' : socialMsg(r.error)); if (r.ok) celebrate(d.acc); }
+        if (d.add) { b.disabled = true; const r = await ACC.call('request', {to: d.add}); const made = r.ok && r.friends.some((f) => f.pid === d.add); toast(r.ok ? (made ? '친구가 됐어요! 🎉' : '친구 신청을 보냈어요') : socialMsg(r.error)); if (made) celebrate(d.add); }
+        else if (d.acc) { const r = await ACC.call('accept', {to: d.acc}); toast(r.ok ? '친구가 됐어요! 🎉' : socialMsg(r.error)); if (r.ok) celebrate(d.acc); }
         else if (d.hs) { closeSheet(); requestHandshake(d.hs); }
-        else if (d.dec) { await api('decline', {to: d.dec}); }
-        else if (d.del) { const f = social.friends.find((x) => x.pid === d.del); if (f && confirm(`${f.name}님을 친구에서 삭제할까요?`)) await api('remove', {to: d.del}); }
-        else if (d.gift) { const f = social.friends.find((x) => x.pid === d.gift); if (f) return openGift(f); }
+        else if (d.dec) { await ACC.call('decline', {to: d.dec}); }
+        else if (d.del) { const f = social().friends.find((x) => x.pid === d.del); if (f && confirm(`${f.name}님을 친구에서 삭제할까요?`)) await ACC.call('remove', {to: d.del}); }
+        else if (d.gift) { const f = social().friends.find((x) => x.pid === d.gift); if (f) return openGift(f); }
       } catch (err) { toast('인터넷 연결을 확인해 주세요'); }
       renderSocial();
     };
     renderSocial(); syncSocial();
   }
 
-  // ───────── 친구 & 칩 선물 (서버: live-server 의 User — 오프라인이어도 신청·선물이 도착해요) ─────────
-  const API = CFG.LIVE_URL ? CFG.LIVE_URL.replace(/^ws/, 'http').replace(/\/live\/?$/, '') + '/api/user' : '';
-  const GIFT_AMOUNTS = [100, 300, 1000, 3000], GIFTQ_KEY = 'thinkchip:giftq';
-  const IN_TOSS = !!CFG.TOSS; // 토스 앱 빌드: 칩 선물 기능을 숨기고, 선물도 받지 않아요 (친구·손인사는 그대로)
-  let social = {friends: [], requests: [], pending: [], gifts: [], sentToday: 0, giftMax: 5000}, socialState = API ? 'loading' : 'off';
-  function pkey() { // 이 기기 비밀 키: 다른 사람이 내 이름(pid)으로 친구·선물을 건드리지 못하게
-    try { let k = localStorage.getItem('thinkchip:pkey'); if (!k) { const a = new Uint8Array(18); crypto.getRandomValues(a); k = [...a].map((x) => x.toString(16).padStart(2, '0')).join(''); localStorage.setItem('thinkchip:pkey', k); } return k; } catch (e) { return ''; }
+  // ───────── 로그인 · 서버 지갑 · 친구 · 칩 선물 (live-server User — 오프라인이어도 신청·선물이 도착해요) ─────────
+  const GIFT_AMOUNTS = [100, 300, 1000, 3000];
+  const st = () => (ACC && ACC.state) || {};
+  const social = () => st().social || {friends: [], requests: [], pending: [], gifts: [], sentToday: 0, giftMax: 5000};
+  function openLogin(why = '') {
+    openSheet({kicker: 'LOGIN', title: '🔑 로그인', html: `
+      <div class="card"><h3>${esc(why)}로그인이 필요해요</h3><p>로그인하면 씽크칩·산 옷과 가구·친구가 계정에 저장돼서 폰을 바꾸거나 앱을 지워도 그대로예요.</p></div>
+      ${IN_TOSS ? '<button class="btn gold full" id="loginGo">토스 계정으로 계속하기</button>' : '<button class="btn kakao full" id="loginGo">카카오로 로그인</button>'}
+      <p class="table-note" style="text-align:center">로그인 없이도 라운지 구경과 혼자 하는 게임은 할 수 있어요.</p>`});
+    $('loginGo').onclick = () => {
+      if (IN_TOSS) { location.href = ARENA.href; return; } // 토스 앱: 메인 앱이 토스 계정으로 로그인하고 라운지로 돌려보내요
+      if (!ACC || !ACC.loginKakao()) toast('지금은 로그인할 수 없어요. 인터넷 연결을 확인해 주세요');
+    };
   }
-  async function api(op, extra = {}) {
-    if (!API) throw new Error('offline');
-    const res = await fetch(API, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({pid: ME, key: pkey(), name: myName(), toss: IN_TOSS, op, ...extra})});
-    const d = await res.json().catch(() => ({error: 'server'}));
-    if (d.ok) { social = d; socialState = 'ok'; renderSocialBadge(); } else if (d.error === 'key') socialState = 'key';
-    return d;
+  // 칩 쓰기: 로그인 상태면 서버 지갑에서, 오프라인 데모면 이 기기 지갑에서. 성공하면 true
+  async function payChips(total, why) {
+    if (!total) return true;
+    if (!acctOn()) { if (total > myChips()) { toast('씽크칩이 부족해요'); return false; } addChips(-total); return true; }
+    if (!loggedIn()) { openLogin(why); return false; }
+    try { const r = await ACC.call('spend', {amount: total}); if (r.ok) return true; toast(r.error === 'chips' ? '씽크칩이 부족해요' : '잠시 후 다시 시도해 주세요'); }
+    catch (e) { toast('인터넷 연결을 확인해 주세요'); }
+    return false;
   }
-  const socialMsg = (e) => ({nogift: '토스 앱에서 접속한 친구에게는 선물할 수 없어요', limit: '오늘 선물 한도를 넘었어요 (하루 ⬡5,000)', notfriend: '친구에게만 선물할 수 있어요', full: '상대 선물함이 가득 찼어요', theirfull: '상대가 받은 신청이 너무 많아요', gone: '이미 처리된 신청이에요', key: '이 기기에서는 친구 기능을 쓸 수 없어요'}[e] || '잠시 후 다시 시도해 주세요');
-  const giftQ = () => store.get(GIFTQ_KEY, []), setGiftQ = (q) => store.set(GIFTQ_KEY, q);
-  // 선물 1건 전달: 칩은 보내기 전에 미리 빼 두고, 서버가 거절하면 돌려줘요. 연결이 끊기면 줄에 남겨 다음에 같은 id 로 다시 보내요(서버가 중복을 막아요).
-  async function deliver(g) {
-    let d; try { d = await api('gift', {to: g.to, amount: g.amount, id: g.id}); } catch (e) { return 'retry'; }
-    setGiftQ(giftQ().filter((x) => x.id !== g.id));
-    if (d.ok) return 'ok';
-    const p = profile(); p.chips = (Number(p.chips) || 0) + g.amount; p.paid = (Number(p.paid) || 0) + g.amount; saveProfile(p);
-    return d.error || 'fail';
+  // 내 캐릭터·방을 계정에 저장 (기기를 바꿔도 산 옷·가구 유지)
+  function pushData(key) { if (!loggedIn()) return; const value = key === 'avatar' ? {look: mine.look, owned: mine.owned} : {deco: myRoom.deco, owned: myRoom.owned}; ACC.call('save', {key, value}).catch(() => {}); }
+  let pulledData = false;
+  function pullData() { // 로그인 후 처음: 계정에 저장된 게 있으면 가져오고, 없으면 이 기기 것을 올려요
+    if (pulledData || !loggedIn() || !st().wallet) return; pulledData = true; const d = st().data || {};
+    if (d.avatar && d.avatar.look) { const owned = [...new Set([...(d.avatar.owned || []), ...mine.owned])]; mine = {look: Object.assign({}, A.DEFAULT_LOOK, d.avatar.look), owned}; A.saveMine(mine); me.look = A.encodeLook(mine.look); rebuildMe(); sendLook(); if (owned.length > (d.avatar.owned || []).length) pushData('avatar'); }
+    else if (localStorage.getItem('thinkchip:avatar:v1')) pushData('avatar');
+    if (d.room && d.room.deco) { myRoom = {deco: Object.assign({}, DEFAULT_DECO, d.room.deco), owned: [...new Set([...(d.room.owned || []), ...myRoom.owned])]}; store.set(ROOM_KEY, myRoom); if (!decoDraft) applyDecor(room.public ? myRoom.deco : (hostDeco || myRoom.deco)); if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'deco', deco: encodeDeco(myRoom.deco)})); }
+    else if (myRoom.owned.length) pushData('room');
   }
-  function celebrate(pid) { if (players.has(pid)) setTimeout(() => requestHandshake(pid), 400); } // 친구가 되는 순간 같은 라운지면 손인사
-  async function flushGifts() { for (const g of giftQ()) await deliver(g); }
   async function sendGift(f, amount) {
-    const p = profile(); if (giftable() < amount) return toast('선물할 수 있는 충전 칩이 부족해요');
-    const g = {id: 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10), to: f.pid, amount, name: f.name};
-    p.chips -= amount; p.paid = (Number(p.paid) || 0) - amount; saveProfile(p); setGiftQ([...giftQ(), g]);
-    const r = await deliver(g);
-    if (r === 'ok') { toast(`🎁 ${f.name}님에게 ⬡${fmt(amount)}을 선물했어요`); setExpr(me, 'happy'); chatLine('', `🎁 ${f.name}님에게 ⬡${fmt(amount)} 선물을 보냈어요`, true); }
-    else if (r === 'retry') toast('연결이 불안정해요 · 연결되면 자동으로 보내요');
-    else toast(`선물하지 못했어요 · ${socialMsg(r)} (칩은 돌려받았어요)`);
+    const id = 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    let r; try { r = await ACC.call('gift', {to: f.pid, amount, id}); } catch (e) { r = {error: 'net'}; }
+    if (r.ok) { toast(`🎁 ${f.name}님에게 ⬡${fmt(amount)}을 선물했어요`); setExpr(me, 'happy'); chatLine('', `🎁 ${f.name}님에게 ⬡${fmt(amount)} 선물을 보냈어요`, true); }
+    else toast(`선물하지 못했어요 · ${socialMsg(r.error)}`);
     drawBoard(); closeSheet(); openFriends();
   }
-  async function syncSocial() {
-    if (!API || syncSocial.busy) return; syncSocial.busy = true;
-    try {
-      await flushGifts();
-      let d = await api('hello');
-      if (d.ok && d.gifts.length && !IN_TOSS) { // 받은 선물은 무료 칩으로 들어와요 (다시 선물할 수는 없어요)
-        d = await api('claim', {ids: d.gifts.map((g) => g.id)}); const got = d.claimed || [];
-        for (const g of got) { addChips(g.amount); chatLine('', `🎁 ${g.name}님에게 ⬡${fmt(g.amount)} 선물을 받았어요`, true); }
-        if (got.length) { const from = [...new Set(got.map((g) => g.name))]; toast(`🎁 ${from.slice(0, 2).join(', ')}${from.length > 2 ? ` 외 ${from.length - 2}명` : ''}님이 ⬡${fmt(got.reduce((a, g) => a + g.amount, 0))}을 선물했어요!`); setExpr(me, 'happy'); drawBoard(); }
-      }
-      if (d.ok && d.requests.length > (syncSocial.seenReq || 0)) toast(`📩 친구 신청이 ${d.requests.length}개 와 있어요 · 👥 친구에서 확인`);
-      if (d.ok) syncSocial.seenReq = d.requests.length;
-    } catch (e) { if (socialState === 'loading') socialState = 'net'; } finally { syncSocial.busy = false; renderSocial(); }
+  const socialMsg = (e) => ({nogift: '토스 앱에서 접속한 친구에게는 선물할 수 없어요', paid: '선물할 수 있는 충전 칩이 부족해요', limit: '오늘 선물 한도를 넘었어요 (하루 ⬡5,000)', notfriend: '친구에게만 선물할 수 있어요', theirfull: '상대가 받은 신청이 너무 많아요', gone: '이미 처리된 신청이에요', nouser: '아직 로그인한 적 없는 사람이에요', net: '인터넷 연결을 확인해 주세요'}[e] || '잠시 후 다시 시도해 주세요');
+  let seenReq = -1;
+  function afterSync() { // 서버 상태가 바뀔 때마다: 받은 선물 알림, 새 친구 신청, 배지, 화면
+    if (!loggedIn()) { renderChips(); renderSocialBadge(); return; }
+    if (st().pid && st().pid !== ME) { location.reload(); return; } // 방금 로그인: 계정 id 로 다시 접속
+    const so = social(), got = so.gifts || [];
+    if (got.length && !afterSync.busy) { afterSync.busy = true;
+      for (const g of got) chatLine('', `🎁 ${g.name}님에게 ⬡${fmt(g.amount)} 선물을 받았어요`, true);
+      const from = [...new Set(got.map((g) => g.name))]; toast(`🎁 ${from.slice(0, 2).join(', ')}${from.length > 2 ? ` 외 ${from.length - 2}명` : ''}님이 ⬡${fmt(got.reduce((a, g) => a + g.amount, 0))}을 선물했어요!`); setExpr(me, 'happy');
+      ACC.call('seen', {ids: got.map((g) => g.id)}).catch(() => {}).finally(() => { afterSync.busy = false; }); }
+    const nReq = (so.requests || []).length; if (seenReq >= 0 && nReq > seenReq) toast(`📩 친구 신청이 ${nReq}개 와 있어요 · 👥 친구에서 확인`); seenReq = nReq;
+    syncName(); pullData(); renderChips(); renderSocialBadge(); drawBoard(); renderSocial();
   }
-  function renderSocialBadge() { const b = document.querySelector('.dock-right [data-open="friends"]'); if (b) b.classList.toggle('has-badge', social.requests.length > 0); }
+  let nameSynced = false;
+  function syncName() { // 새 기기에서 처음이면 계정 이름을 쓰고, 아니면 이 기기에서 정한 이름을 계정에 올려요
+    if (nameSynced || !st().wallet) return; nameSynced = true; const server = st().name || '';
+    if (firstName && server) { const p = profile(); p.nickname = server; saveProfile(p); me.tag.textContent = myName(); reconnect(); }
+    else if (server !== myName()) ACC.call('hello', {name: myName()}).catch(() => {});
+  }
+  function syncSocial() { if (loggedIn()) ACC.refresh(); }
+  function renderSocialBadge() { const b = document.querySelector('.dock-right [data-open="friends"]'); if (b) b.classList.toggle('has-badge', loggedIn() && (social().requests || []).length > 0); }
   function renderSocial() {
     const box = $('socialBox'); if (!box || $('sheet').hidden) return;
-    const fr = social.friends, rq = social.requests, known = new Set([...fr.map((f) => f.pid), ...(social.pending || [])]);
+    if (document.activeElement && document.activeElement.id === 'nameInput') return; // 이름 입력 중엔 다시 그리지 않아요
+    const nameRow = `<div class="name-row" style="margin:0 0 12px"><div class="label-row">내 이름 <small style="color:var(--muted);font-weight:600">· 바꾸면 머리 위 이름과 친구 목록 이름이 바뀌어요</small></div><input id="nameInput" maxlength="12" value="${esc(profile().nickname || '')}" placeholder="라운지에서 보일 이름"></div>`;
+    if (!acctOn()) { box.innerHTML = nameRow + '<div class="card"><p>오프라인이라 친구 기능을 쓸 수 없어요.</p></div>'; return; }
+    if (!loggedIn()) { box.innerHTML = nameRow + `<div class="card"><h3>👥 친구</h3><p>로그인하면 친구를 맺고, 손인사하고, ${IN_TOSS ? '함께 놀 수 있어요' : '칩을 선물할 수 있어요'}.</p></div><button class="btn kakao full" id="socialLogin" style="margin-bottom:16px">🔑 로그인하기</button>`; return; }
+    const so = social(), fr = so.friends || [], rq = so.requests || [], known = new Set([...fr.map((f) => f.pid), ...(so.pending || [])]);
     const here = [...online.entries()].filter(([pid]) => pid !== ME && !known.has(pid) && !rq.some((r) => r.pid === pid));
-    const pending = (social.pending || []).length, paid = giftable(), focused = document.activeElement && document.activeElement.id === 'nameInput';
-    if (focused) return; // 이름 입력 중엔 다시 그리지 않아요
-    box.innerHTML = `
-      <div class="name-row" style="margin:0 0 12px"><div class="label-row">내 이름 <small style="color:var(--muted);font-weight:600">· 바꾸면 머리 위 이름과 친구 목록 이름이 바뀌어요</small></div><input id="nameInput" maxlength="12" value="${esc(profile().nickname || '')}" placeholder="라운지에서 보일 이름"></div>
-      ${socialState === 'off' ? '<div class="card"><p>오프라인이라 친구 기능을 쓸 수 없어요.</p></div>' : socialState === 'net' ? '<div class="card"><p>친구 목록을 불러오지 못했어요.</p><button class="btn ghost full" id="socialRetry" style="margin-top:8px">다시 불러오기</button></div>' : socialState === 'key' ? `<div class="card"><p>${socialMsg('key')}</p></div>` : ''}
+    const pending = (so.pending || []).length, paid = giftable();
+    box.innerHTML = nameRow + `
+      ${st().wallet ? '' : `<div class="card"><p>${st().offline ? '친구 목록을 불러오지 못했어요.' : '불러오는 중…'}</p>${st().offline ? '<button class="btn ghost full" id="socialRetry" style="margin-top:8px">다시 불러오기</button>' : ''}</div>`}
       ${rq.length ? `<div class="card"><h3>📩 받은 친구 신청 ${rq.length}</h3>${rq.map((r) => `<div class="f-row"><b>${esc(r.name)}</b><span><button class="btn gold sm" data-acc="${esc(r.pid)}">수락</button><button class="btn ghost sm" data-dec="${esc(r.pid)}">거절</button></span></div>`).join('')}</div>` : ''}
-      <div class="card"><h3>👥 내 친구 ${fr.length}${socialState === 'loading' ? ' <small style="color:var(--muted)">· 불러오는 중…</small>' : ''}</h3>
+      <div class="card"><h3>👥 내 친구 ${fr.length}</h3>
         ${fr.length ? fr.map((f) => `<div class="f-row"><b>${online.has(f.pid) ? '<i class="f-on" title="같은 라운지에 있어요"></i>' : ''}${esc(f.name)}</b><span>${players.has(f.pid) ? `<button class="btn ghost sm" data-hs="${esc(f.pid)}">🤝 손인사</button>` : ''}${IN_TOSS || f.nogift ? '' : `<button class="btn gold sm" data-gift="${esc(f.pid)}">🎁 선물</button>`}<button class="btn ghost sm" data-del="${esc(f.pid)}" aria-label="친구 삭제">✕</button></span></div>`).join('')
           : '<p>아직 친구가 없어요. 아래 라운지에 있는 사람에게 신청하거나 친구 추가 링크를 보내 보세요.</p>'}
         ${IN_TOSS ? '' : `<p style="margin-top:8px;font-size:11.5px">선물할 수 있는 칩 <b style="color:var(--gold)">⬡${fmt(paid)}</b> · 충전한 칩만 선물할 수 있어요</p>`}
         ${pending ? `<p style="margin-top:4px;font-size:11.5px">친구 신청 보낸 사람 ${pending}명 · 수락하면 친구가 돼요</p>` : ''}</div>
-      ${here.length ? `<div class="card"><h3>지금 라운지에 있는 사람</h3>${here.slice(0, 12).map(([pid, name]) => `<div class="f-row"><b><i class="f-on"></i>${esc(otherName({pid, name}))}</b><button class="btn ghost sm" data-add="${esc(pid)}">+ 친구 신청</button></div>`).join('')}</div>` : ''}
+      ${here.length ? `<div class="card"><h3>지금 라운지에 있는 사람</h3>${here.slice(0, 12).map(([pid, name]) => `<div class="f-row"><b><i class="f-on"></i>${esc(otherName({pid, name}))}</b><button class="btn ghost sm" data-add="${esc(pid)}">+ 친구 신청</button></div>`).join('')}<p style="margin-top:6px;font-size:11px">로그인한 사람에게만 신청할 수 있어요.</p></div>` : ''}
       <button class="btn ghost full" id="friendLinkBtn" style="margin-bottom:16px">📲 친구 추가 링크 보내기</button>`;
   }
   function openGift(f) {
-    if (IN_TOSS) return;
-    const paid = giftable(), left = Math.max(0, (social.giftMax || 5000) - (social.sentToday || 0));
+    if (IN_TOSS || !loggedIn()) return;
+    const so = social(), paid = giftable(), left = Math.max(0, (so.giftMax || 5000) - (so.sentToday || 0));
     const can = (a) => a <= paid && a <= left;
     openSheet({kicker: 'GIFT', title: `🎁 ${f.name}님에게 선물`, html: `
       <div class="card"><p>선물할 수 있는 칩 <b style="color:var(--gold)">⬡${fmt(paid)}</b></p>
@@ -822,10 +851,12 @@
       <p class="table-note">보낸 선물은 되돌릴 수 없어요.</p>`});
     $('sheetBody').querySelector('.gift-grid').onclick = (e) => { const b = e.target.closest('[data-amt]'); if (!b || b.disabled) return; const a = Number(b.dataset.amt);
       if (confirm(`${f.name}님에게 ⬡${fmt(a)} 씽크칩을 선물할까요?\n보낸 선물은 되돌릴 수 없어요.`)) { b.disabled = true; sendGift(f, a); } };
-    if ($('giftCharge')) $('giftCharge').onclick = () => { location.href = new URL('../index.html?wallet=1', location.href).href; };
+    if ($('giftCharge')) $('giftCharge').onclick = () => { location.href = new URL('../index.html?wallet=1&from=lounge', location.href).href; };
     $('giftBack').onclick = () => { closeSheet(); openFriends(); };
   }
+  function celebrate(pid) { if (players.has(pid)) setTimeout(() => requestHandshake(pid), 400); } // 친구가 되는 순간 같은 라운지면 손인사
   async function shareFriendLink() {
+    if (!loggedIn()) return openLogin('친구 추가 링크를 보내려면 ');
     const u = new URL(location.pathname, location.href); u.searchParams.set('friend', ME); u.searchParams.set('fn', myName());
     const text = `씽크칩 라운지에서 ${myName()}님과 친구 해요!`;
     try { if (navigator.share) { await navigator.share({title: '씽크칩 친구 추가', text, url: u.href}); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
@@ -840,7 +871,7 @@
   const newCode = () => Array.from({length: 4}, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
 
   document.querySelector('.dock-right').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; ({games: openGames, closet: () => goToZone(ZONES.find((z) => z.closet)), desk: () => goToZone(ZONES.find((z) => z.desk)), friends: openFriends, room: openRoomDeco})[b.dataset.open]?.(); };
-  $('chipsBtn').onclick = openDesk;
+  $('chipsBtn').onclick = () => (acctOn() && !loggedIn() ? openLogin() : openDesk());
   // 왼쪽 위 로고: 라운지를 떠나지 않고 방 정보·이동 메뉴를 열어요 (예전엔 옛 홈으로 나가서 돌아올 길이 없었어요)
   $('brandBtn').onclick = (e) => { e.preventDefault(); openSheet({kicker: room.public ? 'PUBLIC LOUNGE' : 'FRIEND ROOM', title: room.public ? '🌐 공개 라운지' : `👥 친구 방 · ${room.code}`, html: `
     <div class="card"><p>${room.public ? '누구나 들어올 수 있는 라운지예요. 친구들끼리만 모이려면 친구 방을 만들어 보세요.' : '방 코드로 들어온 친구들만 있는 라운지예요. 방장이 꾸민 방이 보여요.'}</p></div>
@@ -943,13 +974,19 @@
   renderChips(); drawBoard(); setTicker(); setInterval(setTicker, 15000);
   const startCode = (params.get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
   switchRoom(startCode.length >= 4 ? startCode : null);
-  // 친구 추가 링크(?friend=pid)로 들어오면 그 사람에게 친구 신청
-  const friendTo = (params.get('friend') || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32), friendName = (params.get('fn') || '').slice(0, 12);
-  if (friendTo) { const u = new URL(location.href); u.searchParams.delete('friend'); u.searchParams.delete('fn'); try { history.replaceState(null, '', u); } catch (e) {} }
-  (async () => {
-    await syncSocial();
-    if (friendTo && friendTo !== ME && API) { try { const r = await api('request', {to: friendTo}); toast(r.ok ? (r.friends.some((f) => f.pid === friendTo) ? `${friendName || '친구'}님과 친구가 됐어요! 🎉` : `${friendName || '친구'}님에게 친구 신청을 보냈어요`) : socialMsg(r.error)); if (r.ok && r.friends.some((f) => f.pid === friendTo)) celebrate(friendTo); } catch (e) {} }
-  })();
+  // 친구 추가 링크(?friend=pid)로 들어오면 그 사람에게 친구 신청 (로그인 전이면 기억해 뒀다가 로그인 후에)
+  const PF_KEY = 'thinkchip:pendingFriend';
+  { const friendTo = (params.get('friend') || '').replace(/[^a-f0-9]/g, '').slice(0, 24), friendName = (params.get('fn') || '').slice(0, 12);
+    if (params.has('friend')) { const u = new URL(location.href); u.searchParams.delete('friend'); u.searchParams.delete('fn'); try { history.replaceState(null, '', u); } catch (e) {} }
+    if (friendTo.length === 24) { store.set(PF_KEY, {to: friendTo, name: friendName}); if (acctOn() && !loggedIn()) setTimeout(() => openLogin(`${friendName || '친구'}님과 친구를 맺으려면 `), 900); } }
+  async function pendingFriend() {
+    const pf = store.get(PF_KEY, null); if (!pf || !loggedIn() || !st().wallet) return; store.set(PF_KEY, null); if (pf.to === ME) return;
+    try { const r = await ACC.call('request', {to: pf.to}); const made = r.ok && r.friends.some((f) => f.pid === pf.to);
+      toast(r.ok ? (made ? `${pf.name || '친구'}님과 친구가 됐어요! 🎉` : `${pf.name || '친구'}님에게 친구 신청을 보냈어요`) : socialMsg(r.error)); if (made) celebrate(pf.to); } catch (e) {}
+  }
+  if (ACC) ACC.onChange(() => { afterSync(); pendingFriend(); });
+  if (ACC && ACC.state.loginError) setTimeout(() => toast(ACC.state.loginError === 'cancel' ? '로그인을 취소했어요' : '로그인하지 못했어요. 다시 시도해 주세요'), 800);
+  if (ACC && ACC.state.justLoggedIn) setTimeout(() => toast('로그인했어요! 이제 칩과 친구가 계정에 저장돼요 🎉'), 1200);
   setInterval(() => { if (!document.hidden) syncSocial(); }, 45000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) syncSocial(); });
   if (!localStorage.getItem('thinkchip:avatar:v1')) setTimeout(() => { toast('처음 오셨네요! 드레스룸에서 내 캐릭터를 꾸며 보세요'); }, 1200);

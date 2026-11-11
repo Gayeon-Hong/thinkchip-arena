@@ -53,86 +53,208 @@ export default {
     }
     if (url.pathname === '/' || url.pathname === '/health') return new Response('thinkchip-live ok', {headers: {'content-type': 'text/plain; charset=utf-8', 'access-control-allow-origin': '*'}});
     if (url.pathname === '/api/user') return userApi(req, env);
+    if (url.pathname.startsWith('/auth/')) return authApi(req, env, url);
     return new Response('not found', {status: 404});
   },
 };
 
-// ───────── 친구 & 칩 선물 ─────────
-// 플레이어마다 User Durable Object 하나 (pid 기준). 친구 목록·받은 신청·선물함을 서버에 보관해서
-// 상대가 오프라인이어도 신청/선물이 도착해요. 처음 접속한 기기가 비밀 키를 등록하고(TOFU), 이후엔 그 키가 있어야 해요.
-const PID_RE = /^[a-zA-Z0-9_-]{6,32}$/;
+// ───────── 계정 · 서버 지갑 · 친구 · 칩 선물 ─────────
+// 로그인: 웹/MS Store = 카카오, 토스 앱 = 토스 사용자 키. 로그인하면 서명된 세션 토큰을 줘요 (서버에 세션 저장 없음).
+// 계정마다 공개 id(pid = HMAC(비밀, 계정))로 User Durable Object 하나: 지갑(칩)·친구·선물함·저장 데이터.
+const PID_RE = /^[a-f0-9]{24}$/;
 const MAX_FRIENDS = 100, MAX_INBOX = 50;
 const GIFT_AMOUNTS = [100, 300, 1000, 3000];
-const GIFT_DAILY_MAX = 5000; // 한 사람이 하루에 보낼 수 있는 칩 (도용·사기 피해 제한)
+const GIFT_DAILY_MAX = 5000; // 한 사람이 하루에 보낼 수 있는 칩
+const INITIAL_CHIPS = 100, ATTEND_REWARD = 30, PLAY_DAILY_CAP = 200, RUN_MAX = 150, AD_REWARD = 20, AD_DAILY_LIMIT = 5, IMPORT_MAX = 3000;
+const CHIP_PACKS = {chips_300: 300, chips_1000: 1100, chips_3000: 3500}; // app.config.js chipPacks 와 같게
+const SESSION_DAYS = 180;
+// 로그인 후 돌아갈 수 있는 사이트 (다른 사이트로 세션이 새지 않게)
+const RETURN_OK = (u) => { try { const x = new URL(u); return (x.protocol === 'https:' && (/(^|\.)thinkchip-arena\.pages\.dev$/.test(x.hostname) || x.hostname === 'gayeon-hong.github.io')) || (x.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(x.hostname)); } catch { return false; } };
 const CORS = {'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, OPTIONS', 'access-control-allow-headers': 'content-type'};
 const json = (body, status = 200) => new Response(JSON.stringify(body), {status, headers: {'content-type': 'application/json; charset=utf-8', ...CORS}});
 const dayKey = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10); // 한국 날짜
-async function sha256(s) { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)); return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join(''); }
+const enc = new TextEncoder();
+const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const b64uStr = (str) => b64u(enc.encode(str)), unb64uStr = (s) => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)));
+const hex = (buf) => [...new Uint8Array(buf)].map((x) => x.toString(16).padStart(2, '0')).join('');
+let secretCache = null;
+async function secret(env) { // SESSION_SECRET 이 없으면 처음 한 번 만들어 보관해요
+  if (secretCache) return secretCache;
+  const raw = env.SESSION_SECRET || await env.USER.get(env.USER.idFromName('__config__')).secret();
+  secretCache = await crypto.subtle.importKey('raw', enc.encode(raw), {name: 'HMAC', hash: 'SHA-256'}, false, ['sign']);
+  return secretCache;
+}
+const hmac = async (env, msg) => b64u(await crypto.subtle.sign('HMAC', await secret(env), enc.encode(msg)));
+const pidOf = async (env, acct) => hex(await crypto.subtle.sign('HMAC', await secret(env), enc.encode('pid:' + acct))).slice(0, 24);
+async function makeSession(env, acct, platform) {
+  const body = b64uStr(JSON.stringify({a: acct, p: platform, e: Date.now() + SESSION_DAYS * 864e5}));
+  return `${body}.${await hmac(env, 's:' + body)}`;
+}
+async function readSession(env, token) {
+  const [body, sig] = String(token || '').split('.');
+  if (!body || !sig || sig !== await hmac(env, 's:' + body)) return null;
+  try { const d = JSON.parse(unb64uStr(body)); return d.e > Date.now() && d.a ? d : null; } catch { return null; }
+}
+async function issue(env, acct, platform, name) {
+  const pid = await pidOf(env, acct), token = await makeSession(env, acct, platform);
+  await env.USER.get(env.USER.idFromName(pid)).init(pid, acct, platform, name || '');
+  return {token, pid};
+}
+const page = (html, status = 200) => new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:system-ui;background:#101226;color:#eef;display:grid;place-items:center;min-height:90vh;text-align:center">${html}</body>`, {status, headers: {'content-type': 'text/html; charset=utf-8'}});
+
+async function authApi(req, env, url) {
+  const origin = `${url.protocol}//${url.host}`, redirectUri = `${origin}/auth/kakao/callback`;
+  if (url.pathname === '/auth/kakao/start') {
+    const ret = url.searchParams.get('return') || '';
+    if (!RETURN_OK(ret)) return page('잘못된 요청이에요.', 400);
+    if (!env.KAKAO_REST_KEY) return page('카카오 로그인이 아직 설정되지 않았어요.', 503);
+    const st = b64uStr(JSON.stringify({r: ret, t: Date.now()})), state = `${st}.${await hmac(env, 'k:' + st)}`;
+    const q = new URLSearchParams({client_id: env.KAKAO_REST_KEY, redirect_uri: redirectUri, response_type: 'code', state});
+    return Response.redirect(`https://kauth.kakao.com/oauth/authorize?${q}`, 302);
+  }
+  if (url.pathname === '/auth/kakao/callback') {
+    const [st, sig] = String(url.searchParams.get('state') || '').split('.');
+    let ret = ''; try { if (st && sig === await hmac(env, 'k:' + st)) { const d = JSON.parse(unb64uStr(st)); if (Date.now() - d.t < 15 * 60e3 && RETURN_OK(d.r)) ret = d.r; } } catch {}
+    if (!ret) return page('로그인 요청이 만료됐어요. 다시 시도해 주세요.', 400);
+    const back = (hash) => Response.redirect(`${ret.split('#')[0]}#${hash}`, 302);
+    const code = url.searchParams.get('code'); if (!code) return back('login=cancel');
+    const tk = await fetch('https://kauth.kakao.com/oauth/token', {method: 'POST', headers: {'content-type': 'application/x-www-form-urlencoded;charset=utf-8'},
+      body: new URLSearchParams({grant_type: 'authorization_code', client_id: env.KAKAO_REST_KEY, redirect_uri: redirectUri, code, ...(env.KAKAO_CLIENT_SECRET ? {client_secret: env.KAKAO_CLIENT_SECRET} : {})})}).then((r) => r.json()).catch(() => null);
+    if (!tk?.access_token) return back('login=fail');
+    const me = await fetch('https://kapi.kakao.com/v2/user/me', {headers: {authorization: `Bearer ${tk.access_token}`}}).then((r) => r.json()).catch(() => null);
+    if (!me?.id) return back('login=fail');
+    const nick = me.kakao_account?.profile?.nickname || me.properties?.nickname || '';
+    const {token} = await issue(env, `kakao:${me.id}`, 'kakao', nick);
+    return back(`session=${encodeURIComponent(token)}`);
+  }
+  if (url.pathname === '/auth/dev' && env.DEV_LOGIN === '1') { // 로컬 테스트 전용 (wrangler dev --var DEV_LOGIN:1). 배포 서버엔 없음
+    const n = String(url.searchParams.get('name') || 'dev').replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
+    const {token} = await issue(env, `dev:${n}`, 'kakao', n); return json({ok: true, token});
+  }
+  if (url.pathname === '/auth/toss') { // 토스 앱: 토스가 주는 사용자 식별 해시 (앱별로 다르고 남이 알 수 없어요)
+    if (req.method === 'OPTIONS') return new Response(null, {headers: CORS});
+    let b; try { b = await req.json(); } catch { return json({error: 'bad'}, 400); }
+    const h = String(b?.hash || ''); if (!/^[A-Za-z0-9+/=_-]{16,200}$/.test(h)) return json({error: 'bad'}, 400);
+    const {token} = await issue(env, `toss:${h}`, 'toss', String(b.name || ''));
+    return json({ok: true, token});
+  }
+  return new Response('not found', {status: 404});
+}
 
 async function userApi(req, env) {
   if (req.method === 'OPTIONS') return new Response(null, {headers: CORS});
   if (req.method !== 'POST') return json({error: 'method'}, 405);
   let body; try { body = await req.json(); } catch { return json({error: 'bad'}, 400); }
-  const pid = String(body?.pid || '');
-  if (!PID_RE.test(pid) || typeof body.key !== 'string' || body.key.length < 16 || body.key.length > 64) return json({error: 'bad'}, 400);
-  // 워커는 client() 만 불러요. 다른 User 에게 보내는 내부 메서드(incoming/link/…)는 User 끼리만 불러서 밖에서 위조할 수 없어요.
-  const out = await env.USER.get(env.USER.idFromName(pid)).client(body);
+  const ses = await readSession(env, body?.token);
+  if (!ses) return json({error: 'login', status: 401}, 401);
+  const pid = await pidOf(env, ses.a);
+  // 워커는 client() 만 불러요. 다른 User 에게 보내는 내부 메서드(incoming/link/receive …)는 User 끼리만 불러서 밖에서 위조할 수 없어요.
+  const out = await env.USER.get(env.USER.idFromName(pid)).client({...body, pid, toss: ses.p === 'toss'});
   return json(out, out.status || 200);
 }
+
+const freshUser = () => ({pid: '', acct: '', platform: '', name: '', toss: false, friends: {}, inReq: {}, outReq: {}, gifts: [], sent: {day: '', total: 0}, sentIds: [],
+  w: {chips: INITIAL_CHIPS, paid: 0, done: [], earn: {day: '', total: 0}, ad: {day: '', count: 0}, orders: [], imported: false}, data: {}});
 
 export class User extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
-    ctx.blockConcurrencyWhile(async () => { this.u = (await ctx.storage.get('u')) || {key: '', pid: '', name: '', friends: {}, inReq: {}, outReq: {}, gifts: [], sent: {day: '', total: 0}, sentIds: []}; });
+    ctx.blockConcurrencyWhile(async () => { this.u = Object.assign(freshUser(), (await ctx.storage.get('u')) || {}); if (!this.u.w) this.u.w = freshUser().w; });
   }
   async save() { await this.ctx.storage.put('u', this.u); }
+  async secret() { let s = await this.ctx.storage.get('secret'); if (!s) { const a = new Uint8Array(32); crypto.getRandomValues(a); s = hex(a); await this.ctx.storage.put('secret', s); } return s; }
+  async init(pid, acct, platform, name) { const u = this.u; u.pid = pid; u.acct = acct; u.platform = platform; u.toss = platform === 'toss'; if (!u.name && name) u.name = cleanName(name); await this.save(); return 'ok'; }
   other(pid) { return this.env.USER.get(this.env.USER.idFromName(pid)); }
-  view() { const u = this.u; return {ok: true, friends: Object.entries(u.friends).map(([pid, f]) => ({pid, name: f.name, nogift: !!f.toss})), requests: Object.entries(u.inReq).map(([pid, r]) => ({pid, name: r.name, at: r.at})), pending: Object.keys(u.outReq), gifts: u.gifts, sentToday: u.sent.day === dayKey() ? u.sent.total : 0, giftMax: GIFT_DAILY_MAX}; }
+  wallet() { const w = this.u.w, d = dayKey(); return {chips: w.chips, paid: Math.min(w.paid, w.chips), earnedToday: w.earn.day === d ? w.earn.total : 0, earnCap: PLAY_DAILY_CAP, adsToday: w.ad.day === d ? w.ad.count : 0, adLimit: AD_DAILY_LIMIT, attended: w.attend === d, imported: w.imported}; }
+  view(extra = {}) { const u = this.u; return {ok: true, pid: u.pid, name: u.name, platform: u.platform, wallet: this.wallet(), data: u.data,
+    friends: Object.entries(u.friends).map(([pid, f]) => ({pid, name: f.name, nogift: !!f.toss})), requests: Object.entries(u.inReq).map(([pid, r]) => ({pid, name: r.name, at: r.at})),
+    pending: Object.keys(u.outReq), gifts: u.gifts, sentToday: u.sent.day === dayKey() ? u.sent.total : 0, giftMax: GIFT_DAILY_MAX, ...extra}; }
+  addChips(n, paid = false) { const w = this.u.w; w.chips = Math.min(9999999, w.chips + n); if (paid) w.paid += n; }
 
   async client(b) {
-    const u = this.u, h = await sha256(b.key);
-    if (!u.key) { u.key = h; u.pid = b.pid; } else if (u.key !== h) return {error: 'key', status: 403};
-    if (b.name) u.name = cleanName(b.name);
-    if (typeof b.toss === 'boolean' && u.toss !== b.toss) { u.toss = b.toss; for (const f of Object.keys(u.friends)) await this.other(f).tossFlag(u.pid, b.toss); } // 토스 앱 사용자는 선물을 주고받지 않아요
-    const to = String(b.to || '');
+    const u = this.u, w = u.w, today = dayKey();
+    if (!u.pid) u.pid = b.pid;
+    if (typeof b.name === 'string' && b.name.trim() && cleanName(b.name) !== u.name) { // 이름을 바꾸면 친구들 목록에도
+      u.name = cleanName(b.name); for (const f of Object.keys(u.friends)) { try { await this.other(f).rename(u.pid, u.name); } catch {} } }
+    if (u.toss !== !!b.toss) u.toss = !!b.toss;
+    const to = String(b.to || ''), extra = {};
     switch (b.op) {
       case 'hello': break;
+      // ── 지갑 ──
+      case 'earn': { // 게임 보상: 같은 판(key)은 한 번만, 하루 200칩까지
+        const key = String(b.key || '').slice(0, 120), amount = Math.max(0, Math.min(RUN_MAX, Math.trunc(Number(b.amount) || 0)));
+        if (!key) return {error: 'bad', status: 400};
+        if (w.done.includes(key)) { extra.earned = 0; extra.reason = 'duplicate'; break; }
+        if (w.earn.day !== today) w.earn = {day: today, total: 0};
+        const earned = Math.max(0, Math.min(amount, PLAY_DAILY_CAP - w.earn.total));
+        w.done = [...w.done, key].slice(-500); w.earn.total += earned; this.addChips(earned);
+        extra.earned = earned; extra.reason = earned ? 'ok' : 'cap'; break;
+      }
+      case 'ad': {
+        if (w.ad.day !== today) w.ad = {day: today, count: 0};
+        if (w.ad.count >= AD_DAILY_LIMIT) { extra.earned = 0; extra.reason = 'limit'; break; }
+        w.ad.count += 1; this.addChips(AD_REWARD); extra.earned = AD_REWARD; extra.reason = 'ok'; break;
+      }
+      case 'attend': { // 라운지 비서 데스크 출석 보너스 (하루 한 번)
+        if (w.attend === today) { extra.earned = 0; break; }
+        w.attend = today; this.addChips(ATTEND_REWARD); extra.earned = ATTEND_REWARD; break;
+      }
+      case 'spend': { // 힌트·옷·가구 구매 — 무료 칩부터 써요
+        const amount = Math.trunc(Number(b.amount));
+        if (!(amount > 0 && amount <= 1000000)) return {error: 'bad', status: 400};
+        if (w.chips < amount) return {...this.view(), error: 'chips', status: 400};
+        w.chips -= amount; w.paid = Math.min(w.paid, w.chips); break;
+      }
+      case 'purchase': { // 결제 완료된 주문 지급 (같은 주문은 한 번만). 영수증 서버 검증은 다음 단계
+        const chips = CHIP_PACKS[b.sku], id = String(b.orderId || '').slice(0, 200);
+        if (!chips || !id) return {error: 'bad', status: 400};
+        if (w.orders.includes(id)) { extra.granted = 0; break; }
+        w.orders = [...w.orders, id].slice(-500); this.addChips(chips, true); extra.granted = chips; break;
+      }
+      case 'import': { // 로그인 전 이 기기에 모은 칩을 처음 한 번 계정으로 옮겨요 (최대 3,000, 선물은 안 되는 칩으로)
+        if (w.imported) { extra.imported = 0; break; }
+        const n = Math.max(0, Math.min(IMPORT_MAX, Math.trunc(Number(b.chips) || 0)));
+        w.imported = true; this.addChips(n); extra.imported = n; break;
+      }
+      case 'save': { // 내 캐릭터·산 옷·방 꾸미기 같은 작은 저장 데이터 (기기를 바꿔도 유지)
+        const k = String(b.key || ''); if (!['avatar', 'room'].includes(k)) return {error: 'bad', status: 400};
+        const v = JSON.stringify(b.value ?? null); if (v.length > 6000) return {error: 'big', status: 400};
+        u.data = {...u.data, [k]: JSON.parse(v)}; break;
+      }
+      // ── 친구 ──
       case 'request': {
         if (!PID_RE.test(to) || to === u.pid) return {error: 'bad', status: 400};
         if (u.friends[to]) break;
         if (u.inReq[to]) { await this.befriend(to, u.inReq[to].name); break; } // 서로 신청 = 바로 친구
         if (Object.keys(u.friends).length >= MAX_FRIENDS) return {error: 'full', status: 400};
         const r = await this.other(to).incoming(u.pid, u.name || '플레이어', !!u.toss);
+        if (r.r === 'nouser') return {error: 'nouser', status: 400};
         if (r.r === 'friends') { delete u.outReq[to]; u.friends[to] = {name: r.name || '친구', at: Date.now(), toss: !!r.toss}; break; }
         if (r.r === 'full') return {error: 'theirfull', status: 400};
-        u.outReq[to] = Date.now();
-        break;
+        u.outReq[to] = Date.now(); break;
       }
       case 'accept': { const r = u.inReq[to]; if (!r) return {error: 'gone', status: 400}; await this.befriend(to, r.name); break; }
       case 'decline': delete u.inReq[to]; break;
       case 'remove': if (u.friends[to]) { delete u.friends[to]; await this.other(to).unlink(u.pid); } break;
+      // ── 선물: 충전(결제)한 칩만, 서버 지갑에서 바로 옮겨요 ──
       case 'gift': {
-        // 충전한 칩만 선물 가능 — 그 확인은 기기(지갑)에서 하고, 서버는 친구 여부·금액·하루 한도·중복을 막아요.
         const amount = Math.trunc(Number(b.amount)), id = String(b.id || '').slice(0, 40);
         if (!u.friends[to]) return {error: 'notfriend', status: 400};
         if (u.toss) return {error: 'nogift', status: 400};
         if (!GIFT_AMOUNTS.includes(amount) || !/^[a-zA-Z0-9_-]{8,40}$/.test(id)) return {error: 'bad', status: 400};
-        if (u.sentIds.includes(id)) return {...this.view(), dup: true}; // 같은 선물 재전송
-        const today = dayKey(); if (u.sent.day !== today) u.sent = {day: today, total: 0};
+        if (u.sentIds.includes(id)) { extra.dup = true; break; }
+        if (Math.min(w.paid, w.chips) < amount) return {...this.view(), error: 'paid', status: 400};
+        if (u.sent.day !== today) u.sent = {day: today, total: 0};
         if (u.sent.total + amount > GIFT_DAILY_MAX) return {error: 'limit', status: 400};
+        w.chips -= amount; w.paid -= amount; await this.save(); // 먼저 빼고, 상대가 못 받으면 돌려줘요
         const r = await this.other(to).receive({id, from: u.pid, name: u.name || '플레이어', amount, at: Date.now()});
-        if (r !== 'ok') return {error: r || 'fail', status: 400};
-        u.sent.total += amount; u.sentIds = [...u.sentIds, id].slice(-100);
-        break;
+        if (r !== 'ok') { w.chips += amount; w.paid += amount; await this.save(); return {error: r || 'fail', status: 400}; }
+        u.sent.total += amount; u.sentIds = [...u.sentIds, id].slice(-100); break;
       }
-      case 'claim': { // 받은 선물 꺼내기: 서버에서 지운 것만 돌려줘서 두 번 받을 수 없어요
-        const ids = new Set((Array.isArray(b.ids) ? b.ids : []).map(String));
-        const got = u.gifts.filter((g) => ids.has(g.id)); u.gifts = u.gifts.filter((g) => !ids.has(g.id));
-        await this.save(); return {...this.view(), claimed: got};
-      }
+      case 'seen': { const ids = new Set((Array.isArray(b.ids) ? b.ids : []).map(String)); u.gifts = u.gifts.filter((g) => !ids.has(g.id)); break; } // 받은 선물 알림 확인
       default: return {error: 'op', status: 400};
     }
-    await this.save(); return this.view();
+    await this.save(); return this.view(extra);
   }
   async befriend(pid, name) {
     const u = this.u; delete u.inReq[pid]; delete u.outReq[pid];
@@ -141,22 +263,22 @@ export class User extends DurableObject {
   }
   // ── 다른 User 가 부르는 내부 메서드 ──
   async incoming(from, name, toss = false) {
-    const u = this.u, me = {name: u.name || '플레이어', toss: !!u.toss};
+    const u = this.u; if (!u.pid) return {r: 'nouser'}; // 로그인한 적 없는 사람
+    const me = {name: u.name || '플레이어', toss: !!u.toss};
     if (u.friends[from]) return {r: 'friends', ...me};
     if (u.outReq[from]) { delete u.outReq[from]; u.friends[from] = {name: cleanName(name), at: Date.now(), toss}; await this.save(); return {r: 'friends', ...me}; } // 나도 신청해 뒀으면 바로 친구
     if (!u.inReq[from] && Object.keys(u.inReq).length >= MAX_INBOX) return {r: 'full'};
     u.inReq[from] = {name: cleanName(name), at: Date.now()}; await this.save(); return {r: 'ok'};
   }
   async link(pid, name, toss = false) { const u = this.u; delete u.inReq[pid]; delete u.outReq[pid]; u.friends[pid] = {name: cleanName(name), at: u.friends[pid]?.at || Date.now(), toss}; await this.save(); return {r: 'ok', toss: !!u.toss}; }
-  async tossFlag(pid, on) { const f = this.u.friends[pid]; if (f && !!f.toss !== on) { f.toss = on; await this.save(); } return 'ok'; }
+  async rename(pid, name) { const f = this.u.friends[pid]; if (f) { f.name = cleanName(name); await this.save(); } return 'ok'; }
   async unlink(pid) { delete this.u.friends[pid]; await this.save(); return 'ok'; }
-  async receive(g) {
+  async receive(g) { // 받은 선물은 바로 지갑에 (다시 선물할 수 없는 칩) + 알림
     const u = this.u; if (!u.friends[g.from]) return 'notfriend';
     if (u.toss) return 'nogift';
     if (u.gifts.some((x) => x.id === g.id)) return 'ok';
-    if (u.gifts.length >= MAX_INBOX) return 'full';
-    u.friends[g.from].name = cleanName(g.name);
-    u.gifts = [...u.gifts, {id: g.id, from: g.from, name: cleanName(g.name), amount: g.amount, at: g.at}]; await this.save(); return 'ok';
+    u.friends[g.from].name = cleanName(g.name); this.addChips(g.amount);
+    u.gifts = [...u.gifts, {id: g.id, from: g.from, name: cleanName(g.name), amount: g.amount, at: g.at}].slice(-MAX_INBOX); await this.save(); return 'ok';
   }
 }
 

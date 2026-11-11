@@ -10,7 +10,7 @@ for(const file of order){
  code+=`\n// ==== ${file} ====\n${source}\n`;
 }
 const css=await readFile(resolve(base,'src/styles.css'),'utf8');
-const html=`<!doctype html><html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1"><meta name="theme-color" content="#101226"><meta name="description" content="3D 라운지에서 친구들과 모여 심리전·두뇌 퍼즐·파티 게임을 즐기는 씽크칩 아레나"><link rel="manifest" href="./manifest.webmanifest"><link rel="icon" type="image/png" href="./icons/favicon-48.png"><link rel="apple-touch-icon" href="./icons/apple-touch-icon.png"><title>씽크칩 아레나 - 두뇌게임</title><style>${css}</style></head><body><div id="app"></div><script type="module">${code.replaceAll('</script','<\\/script')}</script></body></html>`;
+const html=`<!doctype html><html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1"><meta name="theme-color" content="#101226"><meta name="description" content="3D 라운지에서 친구들과 모여 심리전·두뇌 퍼즐·파티 게임을 즐기는 씽크칩 아레나"><link rel="manifest" href="./manifest.webmanifest"><link rel="icon" type="image/png" href="./icons/favicon-48.png"><link rel="apple-touch-icon" href="./icons/apple-touch-icon.png"><title>씽크칩 아레나 - 두뇌게임</title><style>${css}</style></head><body><div id="app"></div><script src="./account.js"></script><script type="module">${code.replaceAll('</script','<\\/script')}</script></body></html>`;
 await writeFile(resolve(base,'PLAY_NOW.html'),html);
 console.log('PLAY_NOW.html generated:',html.length,'characters');
 
@@ -28,7 +28,7 @@ for (const dir of ['lounge', 'vendor', 'icons', 'screenshots']) {
   await mkdir(resolve(base, dir), {recursive: true});
   await cp(resolve(base, 'public', dir), resolve(base, dir), {recursive: true});
 }
-for (const f of ['privacy.html', 'sw.js']) await cp(resolve(base, 'public', f), resolve(base, f));
+for (const f of ['privacy.html', 'sw.js', 'account.js']) await cp(resolve(base, 'public', f), resolve(base, f));
 // public/manifest 는 Cloudflare(사이트 루트) 기준 절대경로. vite 가 manifest 를 assets/ 로 옮겨도 아이콘이 깨지지 않게.
 // GitHub Pages 는 /thinkchip-arena/ 아래라서 루트 사본은 상대경로로 바꿔 둔다.
 const man = JSON.parse(await readFile(resolve(base, 'public/manifest.webmanifest'), 'utf8'));

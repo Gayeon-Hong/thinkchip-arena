@@ -28,5 +28,15 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: 카카오 로그인 키를 서버 비밀값으로 (GitHub Secrets → Worker)
+        working-directory: live-server
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          KAKAO_REST_KEY: ${{ secrets.KAKAO_REST_KEY }}
+          KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
+        run: |
+          if [ -n "$KAKAO_REST_KEY" ]; then printf '%s' "$KAKAO_REST_KEY" | npx --yes wrangler@4 secret put KAKAO_REST_KEY; else echo "KAKAO_REST_KEY 없음 (카카오 로그인 꺼짐)"; fi
+          if [ -n "$KAKAO_CLIENT_SECRET" ]; then printf '%s' "$KAKAO_CLIENT_SECRET" | npx --yes wrangler@4 secret put KAKAO_CLIENT_SECRET; fi
       - name: 서버 응답 확인
         run: curl -fsS https://thinkchip-live.000000000078.workers.dev/health
