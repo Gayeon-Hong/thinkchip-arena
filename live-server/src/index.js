@@ -65,7 +65,7 @@ const PID_RE = /^[a-f0-9]{24}$/;
 const MAX_FRIENDS = 100, MAX_INBOX = 50;
 const GIFT_AMOUNTS = [100, 300, 1000, 3000];
 const GIFT_DAILY_MAX = 5000; // 한 사람이 하루에 보낼 수 있는 칩
-const INITIAL_CHIPS = 100, ATTEND_REWARD = 30, PLAY_DAILY_CAP = 200, RUN_MAX = 150, AD_REWARD = 20, AD_DAILY_LIMIT = 5, IMPORT_MAX = 3000;
+const INITIAL_CHIPS = 100, WELCOME_BONUS = 300, ATTEND_REWARD = 30, PLAY_DAILY_CAP = 200, RUN_MAX = 150, AD_REWARD = 20, AD_DAILY_LIMIT = 5, IMPORT_MAX = 3000;
 const CHIP_PACKS = {chips_300: 300, chips_1000: 1100, chips_3000: 3500}; // app.config.js chipPacks 와 같게
 const SESSION_DAYS = 180;
 // 로그인 후 돌아갈 수 있는 사이트 (다른 사이트로 세션이 새지 않게)
@@ -178,6 +178,7 @@ export class User extends DurableObject {
       u.name = cleanName(b.name); for (const f of Object.keys(u.friends)) { try { await this.other(f).rename(u.pid, u.name); } catch {} } }
     if (u.toss !== !!b.toss) u.toss = !!b.toss;
     const to = String(b.to || ''), extra = {};
+    if (!w.welcomed) { w.welcomed = true; this.addChips(WELCOME_BONUS); extra.welcome = WELCOME_BONUS; } // 회원가입(첫 로그인) 보상
     switch (b.op) {
       case 'hello': break;
       // ── 지갑 ──

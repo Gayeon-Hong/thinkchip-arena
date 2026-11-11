@@ -19,7 +19,7 @@
   let API = '', subs = [];
   const cached = (() => { try { return JSON.parse(ls.get(CKEY)) || null; } catch (e) { return null; } })();
   const state = {ready: false, loggedIn: !!ls.get(SKEY), pid: '', name: '', platform: '', wallet: null, social: null, data: {}, ...(cached && ls.get(SKEY) ? cached : {})};
-  state.ready = false;
+  state.ready = false; state.welcomeBonus = Number(ls.get('thinkchip:welcome')) || 0;
   const emit = () => { ls.set(CKEY, state.loggedIn ? JSON.stringify({pid: state.pid, name: state.name, platform: state.platform, wallet: state.wallet, data: state.data}) : null); for (const f of subs) { try { f(state); } catch (e) { console.warn(e); } } };
 
   // 카카오 로그인에서 돌아오면 주소 끝(#session=…)에 세션이 붙어 와요
@@ -43,6 +43,7 @@
     const res = await fetch(`${API}/api/user`, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({token, op, ...extra})});
     const d = await res.json().catch(() => ({error: 'server'}));
     if (d.error === 'login') { logout(); return d; } // 세션 만료
+    if (d.welcome) { state.welcomeBonus = d.welcome; ls.set('thinkchip:welcome', String(d.welcome)); } // 회원가입 보상: 화면에서 한 번 보여주고 clearWelcome()
     if (d.ok) { apply(d); state.ready = true; emit(); } else if (d.wallet) { apply({...d, ok: true}); emit(); }
     return d;
   }
@@ -72,5 +73,5 @@
     refresh();
   }
   addEventListener('storage', (e) => { if (e.key === SKEY && !e.newValue) logout(); else if (e.key === CKEY && e.newValue) { try { Object.assign(state, JSON.parse(e.newValue)); for (const f of subs) f(state); } catch (er) {} } });
-  global.ThinkChipAccount = {state, init, call, refresh, loginKakao, loginToss, logout, onChange(fn) { subs.push(fn); return () => { subs = subs.filter((x) => x !== fn); }; }, get api() { return API; }, hasSession: () => !!ls.get(SKEY)};
+  global.ThinkChipAccount = {state, init, call, refresh, loginKakao, loginToss, logout, onChange(fn) { subs.push(fn); return () => { subs = subs.filter((x) => x !== fn); }; }, get api() { return API; }, clearWelcome() { state.welcomeBonus = 0; ls.set('thinkchip:welcome', null); }, hasSession: () => !!ls.get(SKEY)};
 })(typeof window !== 'undefined' ? window : globalThis);

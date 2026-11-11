@@ -317,9 +317,10 @@
   }
 
   // ───────── 카메라 (내 캐릭터를 따라감, 드래그로 회전, 핀치/휠로 확대) ─────────
-  const camState = {yaw: Math.PI / 4, pitch: 0.82, dist: 15, focus: new THREE.Vector3(0, 1, 2), closeUp: false};
+  const camState = {yaw: Math.PI / 4, pitch: 0.82, dist: 15, focus: new THREE.Vector3(0, 1, 2), closeUp: false, pan: new THREE.Vector3()};
   function placeCamera(snap) {
-    const want = camState.closeUp ? new THREE.Vector3(me.av.position.x, 1.35, me.av.position.z) : new THREE.Vector3(me.av.position.x * 0.6, 1, me.av.position.z * 0.6 + 1);
+    // 카메라는 내 캐릭터를 중심으로 돌아요 (두 손가락으로 옮긴 만큼 pan)
+    const want = camState.closeUp ? new THREE.Vector3(me.av.position.x, 1.35, me.av.position.z) : new THREE.Vector3(me.av.position.x + camState.pan.x, 1, me.av.position.z + camState.pan.z);
     camState.focus.lerp(want, snap ? 1 : 0.08);
     const sheetCover = camState.closeUp && !$('sheet').hidden ? Math.min($('sheet').getBoundingClientRect().height, innerHeight * 0.6) : 0, d = camState.closeUp ? 7.2 * Math.max(1, Math.min(2.4, innerHeight / Math.max(1, innerHeight - sheetCover))) * 0.82 : camState.dist, pitch = camState.closeUp ? 0.22 : camState.pitch, yaw = camState.closeUp ? (camState.closeBase || 0) + (camState.closeYaw || 0) : camState.yaw;
     camera.position.set(camState.focus.x + Math.sin(yaw) * Math.cos(pitch) * d, camState.focus.y + Math.sin(pitch) * d, camState.focus.z + Math.cos(yaw) * Math.cos(pitch) * d);
@@ -336,17 +337,23 @@
 
   // 입력: 탭 = 이동/선택, 드래그 = 회전, 핀치/휠 = 확대
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), pointers = new Map();
-  let drag = null, pinch0 = 0, dist0 = 0;
-  canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture?.(e.pointerId); pointers.set(e.pointerId, {x: e.clientX, y: e.clientY}); if (pointers.size === 1) drag = {x: e.clientX, y: e.clientY, yaw: camState.yaw, pitch: camState.pitch, cy: camState.closeYaw || 0, moved: false}; if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); dist0 = camState.dist; drag = null; } });
+  // 한 손가락: 캐릭터를 중심으로 시점 돌리기(좌우) · 기울이기(위아래) / 두 손가락: 벌리고 오므려 확대·축소 + 같이 밀면 화면을 옆으로 옮기기
+  let drag = null, pinch0 = 0, dist0 = 0, mid0 = null;
+  const midOf = () => { const [a, b] = [...pointers.values()]; return {x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, d: Math.hypot(a.x - b.x, a.y - b.y)}; };
+  canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture?.(e.pointerId); pointers.set(e.pointerId, {x: e.clientX, y: e.clientY}); if (pointers.size === 1) drag = {x: e.clientX, y: e.clientY, yaw: camState.yaw, pitch: camState.pitch, cy: camState.closeYaw || 0, moved: false}; if (pointers.size === 2) { const m = midOf(); pinch0 = m.d; dist0 = camState.dist; mid0 = m; drag = null; } });
   canvas.addEventListener('pointermove', (e) => { if (!pointers.has(e.pointerId)) return; pointers.set(e.pointerId, {x: e.clientX, y: e.clientY});
-    if (pointers.size === 2) { const [a, b] = [...pointers.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y); camState.dist = Math.max(9, Math.min(34, dist0 * (pinch0 / Math.max(1, d)))); return; }
+    if (pointers.size >= 2) { const m = midOf(); camState.dist = Math.max(9, Math.min(34, dist0 * (pinch0 / Math.max(1, m.d))));
+      if (mid0 && !camState.closeUp) { const k = camState.dist * 0.0016, mdx = m.x - mid0.x, mdy = m.y - mid0.y, sy = Math.sin(camState.yaw), cy = Math.cos(camState.yaw);
+        camState.pan.x += (-cy * mdx - sy * mdy) * k; camState.pan.z += (sy * mdx - cy * mdy) * k; // 손가락을 따라 화면이 움직이게
+        const len = Math.hypot(camState.pan.x, camState.pan.z); if (len > 14) { camState.pan.x *= 14 / len; camState.pan.z *= 14 / len; } }
+      mid0 = m; return; }
     if (drag) { const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.hypot(dx, dy) > 6) drag.moved = true; if (drag.moved && camState.closeUp) camState.closeYaw = drag.cy - dx * 0.01; // 꾸미는 중엔 캐릭터 둘레를 돌며 보기
-      if (drag.moved && !camState.closeUp) { camState.yaw = drag.yaw - dx * 0.006; camState.pitch = Math.max(0.12, Math.min(1.35, drag.pitch + dy * 0.004)); } } }); // 좌우로 밀면 회전, 위아래로 밀면 눕혀 보기·내려다보기
-  const up = (e) => { const wasTap = drag && !drag.moved && pointers.size === 1; pointers.delete(e.pointerId); if (wasTap) onTap(e.clientX, e.clientY); if (pointers.size === 0) drag = null; };
+      if (drag.moved && !camState.closeUp) { camState.yaw = drag.yaw - dx * 0.007; camState.pitch = Math.max(0.1, Math.min(1.4, drag.pitch + dy * 0.005)); } } }); // 좌우로 밀면 회전, 위아래로 밀면 눕혀 보기·내려다보기
+  const up = (e) => { const wasTap = drag && !drag.moved && pointers.size === 1; pointers.delete(e.pointerId); if (wasTap) onTap(e.clientX, e.clientY); if (pointers.size < 2) mid0 = null; if (pointers.size === 0) drag = null; };
   canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', (e) => { pointers.delete(e.pointerId); drag = null; });
   canvas.addEventListener('wheel', (e) => { e.preventDefault(); camState.dist = Math.max(9, Math.min(34, camState.dist + e.deltaY * 0.01)); }, {passive: false});
   function onTap(cx, cy) {
-    hideHint(); if (me.hs) endHandshake(); // 손인사 중에 바닥을 누르면 멈추고 걸어가요
+    hideHint(); if (me.hs) endHandshake(); camState.pan.set(0, 0, 0); // 걸어가면 다시 내 캐릭터 중심으로 // 손인사 중에 바닥을 누르면 멈추고 걸어가요
     ndc.set((cx / innerWidth) * 2 - 1, -(cy / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
     const hit = ray.intersectObjects(clickables, false)[0];
     if (hit) { goToZone(hit.object.userData.zone); return; }
@@ -802,6 +809,7 @@
   function afterSync() { // 서버 상태가 바뀔 때마다: 받은 선물 알림, 새 친구 신청, 배지, 화면
     if (!loggedIn()) { renderChips(); renderSocialBadge(); return; }
     if (st().pid && st().pid !== ME) { location.reload(); return; } // 방금 로그인: 계정 id 로 다시 접속
+    if (st().welcomeBonus) { const n = st().welcomeBonus; ACC.clearWelcome(); setTimeout(() => { toast(`🎉 가입 축하 보너스 +${n} 씽크칩!`); setExpr(me, 'laugh'); }, 600); }
     const so = social(), got = so.gifts || [];
     if (got.length && !afterSync.busy) { afterSync.busy = true;
       for (const g of got) chatLine('', `🎁 ${g.name}님에게 ⬡${fmt(g.amount)} 선물을 받았어요`, true);
@@ -899,9 +907,28 @@
   // 채팅 & 이모티콘
   $('chatForm').onsubmit = (e) => { e.preventDefault(); const v = $('chatInput').value.trim(); if (!v) return; $('chatInput').value = ''; sendChat(v); };
   $('emotes').onclick = (e) => { const b = e.target.closest('[data-emote]'); if (b) sendChat(b.dataset.emote); };
-  // 채팅 닫기/열기 (모바일에서 채팅이 화면을 가릴 때)
-  $('chatToggle').onclick = () => { $('chatPanel').classList.add('chat-collapsed'); $('chatPanel').hidden = true; $('chatReopen').hidden = false; };
-  $('chatReopen').onclick = () => { $('chatPanel').hidden = false; $('chatPanel').classList.remove('chat-collapsed'); $('chatReopen').hidden = true; };
+  // 채팅창 크기: 손잡이를 위로 끌면 크게, 아래로 내리면 작게, 끝까지 내리면 숨기고 💬 를 누르면 다시 떠요. 손잡이를 톡 누르면 작게↔크게
+  const CHAT_MIN = 56, chatMax = () => Math.round(innerHeight * 0.62), CHAT_KEY = 'thinkchip:chatH';
+  function setChatH(h) { const el = $('chatPanel'); if (h == null) { el.classList.remove('sized'); el.style.removeProperty('--chat-h'); return; } el.classList.add('sized'); el.style.setProperty('--chat-h', `${Math.round(Math.max(CHAT_MIN, Math.min(chatMax(), h)))}px`); }
+  function hideChat() { $('chatPanel').hidden = true; $('chatReopen').hidden = false; store.set(CHAT_KEY, {h: store.get(CHAT_KEY, {}).h, hidden: true}); }
+  function showChat() { $('chatPanel').hidden = false; $('chatReopen').hidden = true; const log = $('chatLog'); log.scrollTop = log.scrollHeight; store.set(CHAT_KEY, {h: store.get(CHAT_KEY, {}).h, hidden: false}); }
+  { const saved = store.get(CHAT_KEY, {}); if (saved.h) setChatH(saved.h); if (saved.hidden) hideChat(); }
+  { const grip = $('chatGrip'), panel = $('chatPanel'); let drag = null;
+    grip.addEventListener('pointerdown', (e) => { drag = {y: e.clientY, h: $('chatLog').getBoundingClientRect().height, moved: false}; panel.classList.add('resizing'); try { grip.setPointerCapture(e.pointerId); } catch (er) {} e.preventDefault(); });
+    grip.addEventListener('pointermove', (e) => { if (!drag) return; const dy = e.clientY - drag.y; if (Math.abs(dy) > 4) drag.moved = true; if (!drag.moved) return;
+      const h = drag.h - dy; setChatH(h); panel.classList.toggle('will-hide', h < CHAT_MIN - 10); const log = $('chatLog'); log.scrollTop = log.scrollHeight; });
+    const end = (e) => { if (!drag) return; const d = drag; drag = null; panel.classList.remove('resizing', 'will-hide');
+      if (!d.moved) { const cur = $('chatLog').getBoundingClientRect().height, big = cur < innerHeight * 0.3; setChatH(big ? innerHeight * 0.45 : 110); store.set(CHAT_KEY, {h: big ? innerHeight * 0.45 : 110}); return; } // 톡: 작게↔크게
+      const h = d.h - (e.clientY - d.y); if (h < CHAT_MIN - 10) { setChatH(d.h); hideChat(); toast('채팅을 숨겼어요 · 💬 를 누르면 다시 떠요'); return; }
+      store.set(CHAT_KEY, {h: Math.max(CHAT_MIN, Math.min(chatMax(), h))}); };
+    grip.addEventListener('pointerup', end); grip.addEventListener('pointercancel', end);
+    grip.addEventListener('keydown', (e) => { const cur = $('chatLog').getBoundingClientRect().height; if (e.key === 'ArrowUp') setChatH(cur + 40); else if (e.key === 'ArrowDown') { if (cur - 40 < CHAT_MIN) hideChat(); else setChatH(cur - 40); } });
+    // 채팅 목록을 맨 아래까지 본 상태에서 한 번 더 아래로 쓸어내리면(손가락을 아래로) 채팅을 숨겨요
+    const log = $('chatLog'); let sw = null;
+    log.addEventListener('touchstart', (e) => { sw = log.scrollTop <= 0 || log.scrollHeight <= log.clientHeight + 2 ? {y: e.touches[0].clientY, t: Date.now()} : null; }, {passive: true});
+    log.addEventListener('touchend', (e) => { if (!sw) return; const dy = (e.changedTouches[0] || {}).clientY - sw.y; if (dy > 70 && Date.now() - sw.t < 600) hideChat(); sw = null; }, {passive: true});
+  }
+  $('chatReopen').onclick = showChat;
   // 채팅 보내기: 서버가 0.6초 안에 연달아 온 메시지를 버려서(도배 방지) 빠르게 치면 사라졌어요 → 줄 세워 0.7초 간격으로 보내요.
   // 연결이 끊겨 있으면 내 화면에 먼저 띄우고, 다시 연결되면 보내요.
   const outbox = []; let outTimer = null, lastSent = 0;

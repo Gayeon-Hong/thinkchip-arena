@@ -2634,7 +2634,7 @@ render();
 if(directMode){if(directLevel)difficulty=directLevel;start(directMode);}
 if(params.get('wallet')==='1'){screen='wallet';render();}
 // Toss: safe area, user key (per-account records), ad preload; Android back -> in-app back, exit confirm on home.
-if(ACC)ACC.onChange(()=>{flushPurchases();if(['home','wallet','result','intro','records'].includes(screen))render();});
+if(ACC)ACC.onChange(()=>{if(ACC.state.welcomeBonus&&!wantLounge){flash(`🎉 가입 축하 보너스 +${ACC.state.welcomeBonus} 씽크칩!`);ACC.clearWelcome();}flushPurchases();if(['home','wallet','result','intro','records'].includes(screen))render();});
 initToss().then(async st=>{useUserKey(st.userKeyHash);
  if(st.inToss&&st.userKeyHash&&ACC)await ACC.loginToss(st.userKeyHash,profile.nickname); // 토스 앱 = 토스 계정으로 자동 로그인
  const restoring=restoreChipOrders((n,id)=>grantChips(n,id)).then(n=>{if(n){flash(`결제된 ⬡ ${fmt(n)} 씽크칩을 지급했어요`);render();}});

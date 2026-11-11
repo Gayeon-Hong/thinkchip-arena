@@ -42,8 +42,13 @@ body[data-theme="day"] .ticker{background:rgba(255,255,255,.75);color:#5a4500}
 .hint.hide{opacity:0}
 
 .chat{position:fixed;left:10px;right:78px;bottom:calc(10px + var(--safe-b));z-index:4;display:flex;flex-direction:column;gap:6px;max-width:520px}
-.chat.chat-collapsed .chat-log,.chat.chat-collapsed .emotes,.chat.chat-collapsed .chat-bar{display:none}
-.chat-toggle{align-self:flex-end;width:26px;height:26px;border-radius:50%;background:var(--panel);border:1px solid var(--line);color:var(--muted);font-size:12px;line-height:1;backdrop-filter:blur(8px)}
+/* 채팅창: 손잡이를 위로 끌면 크게, 아래로 내리면 작게 → 끝까지 내리면 숨김(💬 로 다시 열기). 손잡이를 톡 누르면 작게/크게 */
+.chat-grip{align-self:stretch;height:22px;margin-bottom:-4px;display:flex;align-items:center;justify-content:center;touch-action:none;cursor:ns-resize;-webkit-user-select:none;user-select:none}
+.chat-grip i{width:44px;height:5px;border-radius:3px;background:rgba(255,255,255,.4);box-shadow:0 1px 3px rgba(0,0,0,.3);transition:width .15s,background .15s}
+.chat-grip:active i,.chat.resizing .chat-grip i{width:60px;background:var(--gold)}
+.chat.sized .chat-log{height:var(--chat-h);max-height:var(--chat-h)}
+.chat.will-hide{opacity:.45}
+.chat-log>:first-child{margin-top:auto}
 .chat-reopen{position:fixed;left:10px;bottom:calc(10px + var(--safe-b));z-index:4;width:44px;height:44px;border-radius:50%;background:var(--panel);border:1px solid var(--line);font-size:19px;backdrop-filter:blur(8px)}
 .chat-log{display:flex;flex-direction:column;gap:4px;max-height:min(260px,40vh);overflow-y:auto;overscroll-behavior:contain;mask-image:linear-gradient(to top,#000 80%,transparent);-webkit-mask-image:linear-gradient(to top,#000 80%,transparent);pointer-events:auto;scrollbar-width:none}
 .chat-log::-webkit-scrollbar{display:none}
