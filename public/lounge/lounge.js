@@ -738,7 +738,7 @@
   function renderCloset() {
     const d = draft, due = unpaid(d), total = due.reduce((a, b) => a + b.price, 0), chips = myChips();
     let body = '';
-    if (closetTab === 'face') body = `<div class="label-row">피부</div>${swatches('skin', W.colors.skin)}<div class="label-row">눈</div><div class="items">${W.eyes.map((it) => itemBtn('eyes', it, d.eyes === it.id)).join('')}</div>
+    if (closetTab === 'face') body = `<div class="label-row">체형</div><div class="items">${W.body.map((it) => itemBtn('body', it, (d.body || 'f') === it.id)).join('')}</div><div class="label-row">피부</div>${swatches('skin', W.colors.skin)}<div class="label-row">눈</div><div class="items">${W.eyes.map((it) => itemBtn('eyes', it, d.eyes === it.id)).join('')}</div>
       <div class="label-row">눈썹</div><div class="items">${W.brows.map((it) => itemBtn('brows', it, d.brows === it.id)).join('')}</div>
       <div class="label-row">볼터치</div><div class="items"><button class="item ${d.blush ? 'on' : ''}" data-blush="1">있음<span class="price free">무료</span></button><button class="item ${!d.blush ? 'on' : ''}" data-blush="0">없음<span class="price free">무료</span></button></div>`;
     else {

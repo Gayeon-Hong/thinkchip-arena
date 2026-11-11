@@ -11,30 +11,36 @@
       {id: 'bob', name: '단발', price: 0}, {id: 'part', name: '가르마', price: 0}, {id: 'buns', name: '양갈래 번', price: 0},
       {id: 'pony', name: '포니테일', price: 40}, {id: 'curly', name: '뽀글 펌', price: 60}, {id: 'long', name: '긴 생머리', price: 60},
       {id: 'buzz', name: '짧은 머리', price: 0}, {id: 'spiky', name: '삐죽 머리', price: 40},
+      {id: 'wolf', name: '울프컷', price: 60}, {id: 'hime', name: '히메컷', price: 70}, {id: 'dandy', name: '댄디 투블럭', price: 50}, {id: 'wave', name: 'S컬 웨이브', price: 80},
     ],
     top: [
       {id: 'hoodie', name: '후디', price: 0}, {id: 'tee', name: '반팔 티', price: 0}, {id: 'knit', name: '꽈배기 니트', price: 50},
       {id: 'shirt', name: '셔츠 + 조끼', price: 80}, {id: 'jacket', name: '봄버 재킷', price: 90}, {id: 'suit', name: '블레이저', price: 120},
+      {id: 'tank', name: '나시', price: 40}, {id: 'vneck', name: '딥브이넥 니트', price: 70}, {id: 'layered', name: '레이어드 티', price: 60},
+      {id: 'crop', name: '크롭티', price: 60}, {id: 'cardigan', name: '오버핏 가디건', price: 90}, {id: 'puffer', name: '숏패딩', price: 130},
     ],
     bottom: [
       {id: 'jeans', name: '청바지', price: 0}, {id: 'shorts', name: '반바지', price: 0}, {id: 'skirt', name: '플리츠 스커트', price: 40},
       {id: 'jogger', name: '트레이닝 팬츠', price: 30},
+      {id: 'wide', name: '와이드 슬랙스', price: 50}, {id: 'cargo', name: '카고 팬츠', price: 60}, {id: 'mini', name: '미니스커트', price: 50}, {id: 'longskirt', name: '롱스커트', price: 60},
     ],
     eyes: [{id: 'round', name: '동글눈', price: 0}, {id: 'sparkle', name: '반짝눈', price: 0}, {id: 'sleepy', name: '나른눈', price: 0}, {id: 'cat', name: '고양이눈', price: 0}, {id: 'dot', name: '점눈', price: 0}],
     brows: [{id: 'soft', name: '보통 눈썹', price: 0}, {id: 'bold', name: '진한 눈썹', price: 0}, {id: 'none', name: '눈썹 없음', price: 0}],
-    shoes: [{id: 'sneaker', name: '스니커즈', price: 0}, {id: 'boots', name: '부츠', price: 40}, {id: 'loafer', name: '로퍼', price: 40}],
+    shoes: [{id: 'sneaker', name: '스니커즈', price: 0}, {id: 'boots', name: '부츠', price: 40}, {id: 'loafer', name: '로퍼', price: 40}, {id: 'chunky', name: '어글리 슈즈', price: 60}],
+    body: [{id: 'f', name: '여자', price: 0}, {id: 'm', name: '남자', price: 0}],
     acc: [
       {id: 'none', name: '없음', price: 0}, {id: 'glasses', name: '동그란 안경', price: 30}, {id: 'sunglass', name: '선글라스', price: 50},
       {id: 'beanie', name: '비니', price: 40}, {id: 'cap', name: '볼캡', price: 40}, {id: 'headset', name: '헤드셋', price: 70},
       {id: 'ribbon', name: '리본', price: 30}, {id: 'crown', name: '왕관 (우승자)', price: 300},
+      {id: 'bucket', name: '버킷햇', price: 50}, {id: 'earring', name: '진주 귀걸이', price: 40}, {id: 'necklace', name: '실버 목걸이', price: 40}, {id: 'hairpin', name: '헤어핀', price: 30},
     ],
     colors: {
       hair: [0x2b211d, 0x4a2f26, 0x8a5a3c, 0xc99a6b, 0x1d1f2b, 0x9aa3b5, 0xd36b8c, 0x5b6cff],
-      cloth: [0xf4f1ea, 0x9d86ff, 0x3fcf9a, 0xffb34d, 0xff7a8a, 0x5aa9ff, 0x2c3550, 0x1f2430, 0xe8d3b0, 0xc0392b],
+      cloth: [0xf4f1ea, 0x9d86ff, 0x3fcf9a, 0xffb34d, 0xff7a8a, 0x5aa9ff, 0x2c3550, 0x1f2430, 0xe8d3b0, 0xc0392b, 0xb8c7a3, 0x8d6e63, 0xf6c1cf, 0x9fb7d9],
       skin: [0xffe5d4, 0xffdcc5, 0xf1c6a5, 0xd9a37f, 0xa8714f, 0x7a4e35],
     },
   };
-  const DEFAULT_LOOK = {eyes: 'round', brows: 'soft', blush: true, skin: 0xffe0cc, hair: 'bob', hairColor: 0x4a2f26, top: 'hoodie', topColor: 0x9d86ff, bottom: 'jeans', bottomColor: 0x2c3550, shoes: 'sneaker', shoeColor: 0xf4f1ea, acc: 'none'};
+  const DEFAULT_LOOK = {eyes: 'round', brows: 'soft', blush: true, skin: 0xffe0cc, hair: 'bob', hairColor: 0x4a2f26, top: 'hoodie', topColor: 0x9d86ff, bottom: 'jeans', bottomColor: 0x2c3550, shoes: 'sneaker', shoeColor: 0xf4f1ea, acc: 'none', body: 'f'};
 
   // ── 지오메트리 도우미 ──
   const geoCache = new Map();
@@ -64,6 +70,8 @@
       face.eyes.push(eye);
       const brow = add(g, capsule(r * (L.brows === 'bold' ? 0.04 : 0.025), r * 0.12), dark, s * r * 0.36, cy + r * 0.3, cz - r * 0.02); brow.rotation.z = Math.PI / 2 + s * 0.15; brow.userData.side = s; brow.visible = L.brows !== 'none';
       face.brows = face.brows || []; face.brows.push(brow);
+      if (L.body !== 'm' && L.eyes !== 'dot') for (const k of [0, 1]) { const lash = add(eye, capsule(r * 0.012, r * 0.07), dark, s * r * (0.1 + k * 0.05), r * 0.17 * EYE.s[1] - k * r * 0.03, r * 0.02); lash.rotation.z = -s * (0.9 + k * 0.4); } // 여자: 속눈썹
+      if (L.body === 'm' && L.brows !== 'none') brow.scale.set(1.35, 1.1, 1); // 남자: 조금 진한 눈썹
       // 웃는 눈(^^): 감은 눈 아치. 평소엔 숨김
       const arc = add(g, new THREE.TorusGeometry(r * 0.11, r * 0.025, 8, 20, Math.PI), dark, s * r * 0.36, cy - r * 0.03, cz + r * 0.02); arc.visible = false;
       face.arcs = face.arcs || []; face.arcs.push(arc);
@@ -117,14 +125,22 @@
       bangs([[-0.3, 0.55, 0.62, 1.1, 0.55, 0.55, 0.2], [0.3, 0.55, 0.62, 1.1, 0.55, 0.55, -0.2]]); }
     if (style === 'pony') { bangs([[0, 0.6, 0.6, 1.6, 0.55, 0.55, 0]]); const t = add(g, capsule(r * 0.2, r * 0.7), H, 0, cy + r * 0.1, -r * 1.08); t.rotation.x = 0.5;
       add(g, new THREE.TorusGeometry(r * 0.13, r * 0.05, 8, 20), mat(0xff6b8a), 0, cy + r * 0.62, -r * 0.9).rotation.x = 1.1; }
+    if (style === 'wolf') { backVol(-0.3, 1.05, -0.2); for (const s of [-1, 1]) for (let k = 0; k < 3; k++) { const c = add(g, new THREE.ConeGeometry(r * 0.16, r * 0.55, 10), H, s * r * (0.7 + k * 0.08), cy - r * (0.3 + k * 0.22), -r * (0.25 + k * 0.18)); c.rotation.z = Math.PI + s * 0.2; } // 레이어드 뒷머리
+      bangs([[-0.45, 0.48, 0.6, 0.9, 0.7, 0.55, 0.45], [0, 0.52, 0.66, 1.0, 0.7, 0.55, 0], [0.45, 0.48, 0.6, 0.9, 0.7, 0.55, -0.45]]); }
+    if (style === 'hime') { backVol(-0.32, 1.45, -0.5); for (const s of [-1, 1]) { const side = add(g, new THREE.BoxGeometry(r * 0.22, r * 0.75, r * 0.3), H, s * r * 0.86, cy - r * 0.32, r * 0.18); side.rotation.z = s * 0.04; } // 옆머리 일자
+      bangs([[-0.42, 0.5, 0.62, 1.0, 0.55, 0.5, 0.05], [0, 0.53, 0.68, 1.05, 0.55, 0.5, 0], [0.42, 0.5, 0.62, 1.0, 0.55, 0.5, -0.05]]); } // 일자 앞머리
+    if (style === 'dandy') { bangs([[-0.2, 0.62, 0.62, 1.7, 0.55, 0.55, 0.15, 0.6], [0.45, 0.58, 0.58, 1.0, 0.5, 0.5, -0.3, 0.6]]); const top = add(g, sphere(r * 0.9, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.4), H, 0, cy + r * 0.32, 0); top.scale.set(1.08, 0.9, 1.08); }
+    if (style === 'wave') { const b = backVol(-0.32, 1.45, -0.5); for (const s of [-1, 1]) for (let k = 0; k < 4; k++) add(g, sphere(r * 0.24, 18, 14), H, s * r * (0.86 + (k % 2) * 0.08), cy - r * (0.2 + k * 0.32), -r * 0.05);
+      bangs([[-0.35, 0.55, 0.62, 1.2, 0.6, 0.55, 0.3], [0.38, 0.5, 0.6, 1.0, 0.6, 0.55, -0.35]]); }
     if (style === 'curly') { for (let i = 0; i < 14; i++) { const a = (i / 14) * Math.PI * 2; add(g, sphere(r * 0.3, 20, 16), H, Math.cos(a) * r * 0.82, cy + r * 0.55 + Math.sin(a * 2) * r * 0.06, Math.sin(a) * r * 0.75 - r * 0.12); }
       for (let i = 0; i < 5; i++) add(g, sphere(r * 0.3, 20, 16), H, (i - 2) * r * 0.34, cy + r * 0.98, (i % 2) * r * 0.1 - r * 0.05); }
   }
 
   // ── 상의 ──
-  function buildTop(g, kind, color, skinM) {
-    const C = mat(color, {roughness: kind === 'jacket' || kind === 'suit' ? 0.45 : 0.78, clearcoat: kind === 'jacket' ? 0.4 : 0.08});
-    const torso = add(g, capsule(0.37, 0.28), C, 0, 0.86, 0); torso.scale.set(1, 1, 0.88);
+  function buildTop(g, kind, color, skinM, body = 'f') {
+    const C = mat(color, {roughness: kind === 'jacket' || kind === 'suit' || kind === 'puffer' ? 0.45 : 0.78, clearcoat: kind === 'jacket' || kind === 'puffer' ? 0.4 : 0.08});
+    const W = body === 'm' ? 1.06 : 0.93; // 남자: 어깨가 조금 넓게, 여자: 조금 가늘게
+    const torso = add(g, capsule(0.37, 0.28), kind === 'tank' || kind === 'crop' ? skinM : C, 0, 0.86, 0); torso.scale.set(W, 1, 0.88);
     // 팔은 어깨(피벗) 그룹에 달아서 손인사·하이파이브 같은 동작을 할 수 있게 해요. s = -1 오른팔, +1 왼팔 (캐릭터 기준)
     const SH = {x: 0.4, y: 1.04}, arms = {};
     for (const s of [-1, 1]) { const pv = new THREE.Group(); pv.position.set(s * SH.x, SH.y, 0); g.add(pv); arms[s] = pv; }
@@ -147,21 +163,41 @@
       add(g, new THREE.BoxGeometry(0.02, 0.48, 0.02), mat(0xd9dde6, {metalness: 0.9, roughness: 0.2}), 0, 0.86, 0.335); }
     if (kind === 'suit') { sleeve(0.3, C); const shirt = add(g, new THREE.ConeGeometry(0.15, 0.36, 3), mat(0xf6f3ec, {roughness: 0.7}), 0, 0.98, 0.26); shirt.rotation.x = Math.PI; shirt.scale.z = 0.3;
       add(g, new THREE.BoxGeometry(0.06, 0.24, 0.02), mat(0x8a1e2c, {roughness: 0.5}), 0, 0.95, 0.32); add(g, sphere(0.03, 8, 8), mat(0xf7ce55, {metalness: 0.9, roughness: 0.2}), 0.2, 0.98, 0.3); }
+    if (kind === 'tank') { // 나시: 맨팔 + 얇은 끈 + 몸판
+      for (const s of [-1, 1]) { const arm = armAdd(s, capsule(0.085, 0.3), skinM, s * 0.49, 0.8, 0); arm.rotation.z = s * 0.3; add(g, capsule(0.022, 0.18), C, s * 0.16, 1.07, 0.14).rotation.x = -0.4; }
+      const vest = add(g, capsule(0.375, 0.1), C, 0, 0.9, 0.004); vest.scale.set(W * 1.01, 1, 0.89); }
+    if (kind === 'vneck') { sleeve(0.28, C); const v = add(g, new THREE.ConeGeometry(0.16, 0.36, 3), skinM, 0, 0.98, 0.29); v.rotation.x = Math.PI; v.scale.z = 0.25; // 깊은 V
+      for (const s of [-1, 1]) { const rib = add(g, capsule(0.02, 0.36), mat(color, {roughness: 0.9}), s * 0.085, 0.98, 0.31); rib.rotation.z = s * 0.42; } }
+    if (kind === 'layered') { sleeve(0.32, mat(0xf2f2f2, {roughness: 0.8})); for (const s of [-1, 1]) { const sl = armAdd(s, capsule(0.112, 0.08), C, s * 0.44, 0.98, 0); sl.rotation.z = s * 0.6; } // 긴팔 위에 반팔
+      add(g, new THREE.TorusGeometry(0.34, 0.035, 8, 28), mat(0xf2f2f2, {roughness: 0.8}), 0, 0.6, 0).rotation.x = Math.PI / 2; }
+    if (kind === 'crop') { sleeve(0.12, C); const top = add(g, capsule(0.375, 0.12), C, 0, 0.95, 0.004); top.scale.set(W * 1.01, 1, 0.89); }
+    if (kind === 'cardigan') { sleeve(0.32, C); const inner = add(g, new THREE.BoxGeometry(0.22, 0.5, 0.05), mat(0xf6f3ec, {roughness: 0.8}), 0, 0.84, 0.3);
+      for (let i = 0; i < 3; i++) for (const s of [-1, 1]) add(g, sphere(0.022, 8, 8), mat(0xe8d3b0, {roughness: 0.4}), s * 0.14, 0.95 - i * 0.12, 0.32);
+      const hem = add(g, new THREE.TorusGeometry(0.4, 0.05, 10, 30), C, 0, 0.58, 0); hem.rotation.x = Math.PI / 2; hem.scale.set(W, 1, 0.9); }
+    if (kind === 'puffer') { sleeve(0.3, C); for (let i = 0; i < 4; i++) { const ring = add(g, new THREE.TorusGeometry(0.36, 0.07, 10, 30), C, 0, 0.62 + i * 0.15, 0); ring.rotation.x = Math.PI / 2; ring.scale.set(W * 1.05, 1, 0.92); }
+      add(g, new THREE.TorusGeometry(0.24, 0.08, 10, 28), C, 0, 1.15, 0).rotation.x = Math.PI / 2; }
     hands();
   }
 
   // ── 하의 & 신발 ──
-  function buildBottom(g, kind, color, skinM) {
+  function buildBottom(g, kind, color, skinM, top) {
     const C = mat(color, {roughness: 0.75, clearcoat: 0.05});
+    if ((top === 'tank' || top === 'crop') && !['skirt', 'mini', 'longskirt'].includes(kind)) { const hip = add(g, capsule(0.4, 0.04), C, 0, 0.52, 0); hip.scale.set(1, 1, 0.9); } // 나시·크롭엔 허리까지 바지가 보이게
     if (kind === 'jeans' || kind === 'jogger') { for (const s of [-1, 1]) add(g, capsule(0.13, 0.24), C, s * 0.17, 0.34, 0);
       if (kind === 'jogger') for (const s of [-1, 1]) add(g, new THREE.TorusGeometry(0.12, 0.035, 8, 20), mat(0xffffff, {roughness: 0.7}), s * 0.17, 0.22, 0).rotation.x = Math.PI / 2; }
     if (kind === 'shorts') { for (const s of [-1, 1]) { add(g, capsule(0.14, 0.06), C, s * 0.17, 0.48, 0); add(g, capsule(0.09, 0.2), skinM, s * 0.17, 0.3, 0); } }
+    if (kind === 'wide') { for (const s of [-1, 1]) { const l = add(g, new THREE.CylinderGeometry(0.13, 0.19, 0.5, 18), C, s * 0.17, 0.33, 0); l.castShadow = true; } add(g, new THREE.BoxGeometry(0.02, 0.4, 0.02), mat(color, {roughness: 0.6}), 0.17, 0.33, 0.17); }
+    if (kind === 'cargo') { for (const s of [-1, 1]) { add(g, capsule(0.14, 0.24), C, s * 0.17, 0.34, 0); add(g, new THREE.BoxGeometry(0.1, 0.12, 0.06), mat(color, {roughness: 0.9}), s * 0.29, 0.34, 0.03); } }
+    if (kind === 'mini') { const sk = add(g, new THREE.CylinderGeometry(0.33, 0.4, 0.17, 16, 1, true), mat(color, {roughness: 0.7, side: THREE.DoubleSide}), 0, 0.6, 0); sk.scale.z = 0.9;
+      for (const s of [-1, 1]) add(g, capsule(0.085, 0.3), skinM, s * 0.16, 0.32, 0); }
+    if (kind === 'longskirt') { const sk = add(g, new THREE.CylinderGeometry(0.33, 0.44, 0.5, 18, 1, true), mat(color, {roughness: 0.75, side: THREE.DoubleSide}), 0, 0.43, 0); sk.scale.z = 0.9; }
     if (kind === 'skirt') { const sk = add(g, new THREE.CylinderGeometry(0.33, 0.46, 0.3, 16, 1, true), mat(color, {roughness: 0.7, side: THREE.DoubleSide}), 0, 0.53, 0); sk.scale.z = 0.9;
       for (const s of [-1, 1]) add(g, capsule(0.085, 0.24), skinM, s * 0.16, 0.3, 0); }
   }
   function buildShoes(g, kind, color) {
     for (const s of [-1, 1]) {
       if (kind === 'boots') { add(g, capsule(0.15, 0.1), mat(0x5a3a28, {roughness: 0.4, clearcoat: 0.6}), s * 0.17, 0.16, 0.02); const t = add(g, sphere(0.16, 20, 16), mat(0x5a3a28, {roughness: 0.4, clearcoat: 0.6}), s * 0.17, 0.09, 0.08); t.scale.set(1, 0.6, 1.3); }
+      else if (kind === 'chunky') { const t = add(g, sphere(0.18, 20, 16), mat(color, {roughness: 0.4}), s * 0.17, 0.13, 0.07); t.scale.set(1.08, 0.75, 1.4); const sole = add(g, new THREE.BoxGeometry(0.34, 0.08, 0.5), mat(0xd9dde6, {roughness: 0.7}), s * 0.17, 0.04, 0.07); sole.castShadow = true; }
       else if (kind === 'loafer') { const t = add(g, sphere(0.16, 20, 16), mat(0x15161c, {roughness: 0.2, clearcoat: 1}), s * 0.17, 0.09, 0.06); t.scale.set(0.95, 0.55, 1.4); }
       else { const t = add(g, sphere(0.17, 20, 16), mat(color, {roughness: 0.35}), s * 0.17, 0.11, 0.06); t.scale.set(1, 0.7, 1.35); const sole = add(g, sphere(0.17, 20, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), mat(0xd9dde6, {roughness: 0.6}), s * 0.17, 0.11, 0.06); sole.scale.set(1.03, 0.6, 1.38); }
     }
@@ -179,6 +215,10 @@
       for (const s of [-1, 1]) { const e = add(g, new THREE.CylinderGeometry(r * 0.2, r * 0.2, r * 0.14, 24), gold, s * r * 1.06, cy, 0); e.rotation.z = Math.PI / 2; }
       const mic = add(g, capsule(r * 0.025, r * 0.4), gold, r * 0.85, cy - r * 0.35, r * 0.4); mic.rotation.set(0.9, 0, 0.6); }
     if (kind === 'ribbon') { const rc = mat(0xff5c7a, {roughness: 0.4}); for (const s of [-1, 1]) { const w = add(g, new THREE.ConeGeometry(r * 0.18, r * 0.32, 12), rc, r * (0.5 + s * 0.17), cy + r * 1.02, r * 0.1); w.rotation.z = s * Math.PI / 2; } add(g, sphere(r * 0.08), rc, r * 0.5, cy + r * 1.02, r * 0.1); }
+    if (kind === 'bucket') { const c = mat(0xe8d3b0, {roughness: 0.9}); add(g, new THREE.CylinderGeometry(r * 0.78, r * 0.95, r * 0.55, 32), c, 0, cy + r * 0.85, -r * 0.04); const brim = add(g, new THREE.CylinderGeometry(r * 1.32, r * 1.32, r * 0.05, 36), c, 0, cy + r * 0.58, -r * 0.02); brim.rotation.x = 0.08; }
+    if (kind === 'earring') { const pearl = mat(0xfaf6ee, {roughness: 0.15, clearcoat: 1}); for (const s of [-1, 1]) { add(g, sphere(r * 0.025, 8, 8), gold, s * r * 1.02, cy - r * 0.12, 0); add(g, sphere(r * 0.075, 16, 16), pearl, s * r * 1.02, cy - r * 0.26, 0); } }
+    if (kind === 'necklace') { const n = add(g, new THREE.TorusGeometry(0.2, 0.012, 8, 40), mat(0xd9dde6, {metalness: 0.9, roughness: 0.2}), 0, 1.06, 0.12); n.rotation.x = Math.PI / 2 - 0.5; add(g, sphere(0.04, 12, 12), mat(0xd9dde6, {metalness: 0.9, roughness: 0.15}), 0, 0.93, 0.33); }
+    if (kind === 'hairpin') { for (let k = 0; k < 2; k++) { const p = add(g, new THREE.BoxGeometry(r * 0.32, r * 0.05, r * 0.05), mat(k ? 0xff7a8a : 0xf7ce55, {roughness: 0.3}), r * 0.42, cy + r * (0.66 - k * 0.1), r * 0.78); p.rotation.z = 0.5; } }
     if (kind === 'crown') { const gm = mat(0xf7ce55, {metalness: 0.9, roughness: 0.2, side: THREE.DoubleSide}); add(g, new THREE.CylinderGeometry(r * 0.38, r * 0.42, r * 0.26, 6, 1, true), gm, 0, cy + r * 1.16, 0);
       for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; add(g, new THREE.ConeGeometry(r * 0.07, r * 0.2, 8), gm, Math.sin(a) * r * 0.38, cy + r * 1.38, Math.cos(a) * r * 0.38); } }
   }
@@ -188,8 +228,8 @@
     const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
     const skinM = mat(L.skin, {roughness: 0.55, clearcoat: 0.3});
     buildShoes(body, L.shoes, L.shoeColor);
-    buildBottom(body, L.bottom, L.bottomColor, skinM);
-    buildTop(body, L.top, L.topColor, skinM);
+    buildBottom(body, L.bottom, L.bottomColor, skinM, L.top);
+    buildTop(body, L.top, L.topColor, skinM, L.body);
     const r = 0.62, cy = 1.74, headG = new THREE.Group(); body.add(headG);
     const head = add(headG, sphere(r, 48, 40), skinM, 0, cy, 0); head.scale.set(1.04, 0.96, 0.98);
     for (const s of [-1, 1]) add(headG, sphere(0.1, 16, 16), skinM, s * 0.64, cy - 0.02, 0);
@@ -223,12 +263,12 @@
   ];
   function exprFromText(text) { const t = String(text || ''); for (const [e, re] of EXPR_RULES) if (re.test(t)) return e; return null; }
   // 다른 사람에게 보내는 짧은 문자열 (서버에 저장할 때 사용)
-  const LOOK_KEYS = ['skin', 'hair', 'hairColor', 'top', 'topColor', 'bottom', 'bottomColor', 'shoes', 'shoeColor', 'acc', 'eyes', 'brows', 'blush'];
+  const LOOK_KEYS = ['skin', 'hair', 'hairColor', 'top', 'topColor', 'bottom', 'bottomColor', 'shoes', 'shoeColor', 'acc', 'eyes', 'brows', 'blush', 'body']; // 새 항목은 맨 뒤에만 (예전 문자열도 읽히게)
   function encodeLook(L) { const l = Object.assign({}, DEFAULT_LOOK, L); return LOOK_KEYS.map((k) => (typeof l[k] === 'number' ? l[k].toString(36) : typeof l[k] === 'boolean' ? (l[k] ? '1' : '0') : String(l[k]))).join('.'); }
   function decodeLook(str) {
     const out = {}; const parts = String(str || '').split('.');
-    if (parts.length !== LOOK_KEYS.length) return Object.assign({}, DEFAULT_LOOK);
-    LOOK_KEYS.forEach((k, i) => { const d = DEFAULT_LOOK[k], v = parts[i];
+    if (parts.length < 13 || parts.length > LOOK_KEYS.length) return Object.assign({}, DEFAULT_LOOK);
+    LOOK_KEYS.forEach((k, i) => { const d = DEFAULT_LOOK[k], v = parts[i]; if (v === undefined) { out[k] = d; return; }
       if (typeof d === 'number') { const n = parseInt(v, 36); out[k] = Number.isFinite(n) && n >= 0 && n <= 0xffffff ? n : d; }
       else if (typeof d === 'boolean') out[k] = v === '1';
       else { const list = WARDROBE[k === 'acc' ? 'acc' : k]; out[k] = list && list.some((x) => x.id === v) ? v : d; } });
