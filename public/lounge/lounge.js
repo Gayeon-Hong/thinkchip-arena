@@ -8,8 +8,8 @@
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const fmt = (n) => Number(n || 0).toLocaleString('ko-KR');
-  const ARENA = new URL('../', location.href); // 메인 앱(게임 아레나)
-  const ARENA_HOME = new URL('../?home=1', location.href).href; // 메인 앱 홈 (첫 화면 라운지로 다시 안 넘어오게)
+  const ARENA = new URL('../index.html', location.href); // 메인 앱(게임 아레나). 토스 앱 안에서는 폴더 주소(../)가 index.html 로 안 열려서 파일명까지 적어요
+  const ARENA_HOME = new URL('../index.html?home=1', location.href).href; // 메인 앱 홈 (첫 화면 라운지로 다시 안 넘어오게)
 
   // ───────── 저장소 (메인 앱과 공유) ─────────
   const PROFILE_KEY = 'brain-arena:mvp:v2', LOUNGE_KEY = 'thinkchip:lounge:v1';

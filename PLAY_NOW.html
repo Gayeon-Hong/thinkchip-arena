@@ -1740,8 +1740,8 @@ const invitedFrom=(params.get('from')||'친구').slice(0,16);
 const invitedRoom=normalizeCode(params.get('room'));
 const fromLounge=params.get('from')==='lounge';
 // 처음 들어오면 3D 라운지가 첫 화면. 라운지 로고(?home=1)나 게임/방 링크로 온 경우만 기존 홈을 보여줘요.
-if(!['home','open','party','room','game','from','seed'].some(k=>params.has(k))&&!/\/lounge\//.test(location.pathname||'')){try{location.replace('./lounge/');}catch{}}
-const LOUNGE_URL='./lounge/'+(invitedRoom?`?room=${invitedRoom}`:'');
+if(!['home','open','party','room','game','from','seed'].some(k=>params.has(k))&&!/\/lounge\//.test(location.pathname||'')){try{location.replace('./lounge/index.html');}catch{}}
+const LOUNGE_URL='./lounge/index.html'+(invitedRoom?`?room=${invitedRoom}`:'');
 let storageKey=KEY; // must exist before the first readProfile() call
 let profile=readProfile();
 let screen=invitedRoom||partyGame?'live':invitedGame?'intro':'home';
@@ -1792,7 +1792,7 @@ function home(){
  <section class="hero arena-hero"><div class="hero-grid" aria-hidden="true"></div><div class="hero-top"><span class="kicker"><i></i> THINK. PLAY. WIN.</span><span class="edition">THE ARENA OF MINDS</span></div>
  <div class="hero-copy"><h1>읽고, 속이고,<br><em>살아남아라.</em></h1><p>숫자와 심리, 배신과 동맹.<br>단 한 번의 선택이 승부를 가른다.</p></div>
  <div class="hero-mosaic" aria-hidden="true">${mosaicTiles()}</div>
- <div class="hero-actions"><a class="hero-cta" href="./lounge/">아레나 입장 ${icon('arrow')}</a><button class="hero-ghost" data-action="random">랜덤 매치</button></div>
+ <div class="hero-actions"><a class="hero-cta" href="./lounge/index.html">아레나 입장 ${icon('arrow')}</a><button class="hero-ghost" data-action="random">랜덤 매치</button></div>
  <div class="hero-bottom"><span>실시간 · 최대 8인 · ${GAMES.length+PARTY_IDS.length} GAMES</span><span>${liveAvailable()?'● LIVE':'SOLO · AI'}</span></div></section>
  ${todayCard()}
  <div class="quick-modes"><button data-action="live">⚡<span><strong>방 코드로 대결</strong><small>친구와 같은 판, 같은 순간</small></span>${icon('up')}</button><button data-action="random-ai">${icon('bot')}<span><strong>AI 랜덤 매치</strong><small>상대는 기다려주지 않는다</small></span>${icon('up')}</button></div>
