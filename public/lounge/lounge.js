@@ -354,7 +354,7 @@
       <div class="tabs">${tabs.map(([id, n]) => `<button data-dtab="${id}" class="${decoTab === id ? 'on' : ''}">${n}</button>`).join('')}</div>
       <div class="items">${DECOR[decoTab].map((it) => btn(decoTab, it)).join('')}</div>
       <p style="font-size:11.5px;color:var(--muted);margin:10px 2px 0">${decoTab === 'items' ? '눌러서 놓기 / 빼기. ' : ''}꾸민 방은 내가 만든 친구 방에 들어온 친구들에게도 보여요.</p>
-      <div class="closet-foot"><span class="sum">${total ? `새로 살 것 ${due.length}개 · <b>⬡${total}</b> (보유 ⬡${fmt(chips)})` : '바꾼 방을 저장할 수 있어요'}</span>
+      <div class="closet-foot"><span class="sum">${total ? (total > chips ? `👀 미리보기 중 · <b>⬡${fmt(total - chips)}</b> 더 모으면 살 수 있어요` : `새로 살 것 ${due.length}개 · <b>⬡${total}</b> (보유 ⬡${fmt(chips)})`) : '바꾼 방을 저장할 수 있어요'}</span>
       <button class="btn gold" id="decoSave" ${total > chips ? 'disabled' : ''}>${total ? (total > chips ? '씽크칩 부족' : '구매하고 꾸미기') : '저장하기'}</button></div>`});
     $('sheetBody').onclick = (e) => { const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.dtab) { decoTab = b.dataset.dtab; openRoomDeco(); return; }
@@ -457,7 +457,7 @@
     }
     openSheet({kicker: 'DRESS ROOM', title: '👕 드레스룸', cls: 'closet', onClose: () => { camState.closeUp = false; draft = null; rebuildMe(); }, html: `
       <div class="tabs">${TABS.map((t) => `<button data-tab="${t.id}" class="${closetTab === t.id ? 'on' : ''}">${t.name}${t.free ? ' · 무료' : ''}</button>`).join('')}</div>${body}
-      <div class="closet-foot"><span class="sum">${total ? `새로 살 것 ${due.length}개 · <b>⬡${total}</b> (보유 ⬡${fmt(chips)})` : '바꾼 모습을 저장할 수 있어요'}</span>
+      <div class="closet-foot"><span class="sum">${total ? (total > chips ? `👀 미리보기 중 · <b>⬡${fmt(total - chips)}</b> 더 모으면 살 수 있어요` : `새로 살 것 ${due.length}개 · <b>⬡${total}</b> (보유 ⬡${fmt(chips)})`) : '바꾼 모습을 저장할 수 있어요'}</span>
       <button class="btn gold" id="wearBtn" ${total > chips ? 'disabled' : ''}>${total ? (total > chips ? '씽크칩 부족' : '구매하고 입기') : '저장하기'}</button></div>`});
     $('sheetBody').onclick = (e) => {
       const b = e.target.closest('button'); if (!b) return;
