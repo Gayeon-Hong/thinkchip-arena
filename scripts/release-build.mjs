@@ -17,6 +17,8 @@ console.log('\n==== [1/4] 앱인토스 콘솔 정보 ====');
 while (!/^[a-z0-9][a-z0-9-]{1,59}$/.test(env.VITE_TOSS_APP_NAME || '')) {
   env.VITE_TOSS_APP_NAME = (await rl.question('콘솔에 등록한 영문 appName (예: brain-arena): ')).trim();
 }
+// 광고 ID 는 'ait.' 로 시작해요. 앱 이름 같은 엉뚱한 값이 들어가 있으면 다시 물어봐요.
+if (env.VITE_REWARDED_AD_GROUP_ID && !/^ait[.-]/.test(env.VITE_REWARDED_AD_GROUP_ID)) { console.log(`⚠ 저장된 광고 ID(${env.VITE_REWARDED_AD_GROUP_ID})가 광고 그룹 ID 형식이 아니에요. 다시 입력해 주세요.`); env.VITE_REWARDED_AD_GROUP_ID = ''; }
 if (env.VITE_REWARDED_AD_GROUP_ID === undefined || env.VITE_REWARDED_AD_GROUP_ID === '') {
   console.log('보상형 광고 그룹 ID: 콘솔 > 인앱 광고 에서 "보상형" 광고 그룹을 만들면 나와요. (없으면 Enter → 광고 없이 빌드)');
   env.VITE_REWARDED_AD_GROUP_ID = (await rl.question('보상형 광고 그룹 ID: ')).trim();
