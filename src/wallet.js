@@ -3,7 +3,7 @@ export const INITIAL_CHIPS=100;
 export const HINT_COST=30;
 export const AD_REWARD=20;
 export const AD_DAILY_LIMIT=5;
-export const PLAY_DAILY_CAP=100;
+export const PLAY_DAILY_CAP=200;
 export function todayKey(now=new Date()) {return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;}
 export function defaultProfile() {return {version:2,nickname:'',chips:INITIAL_CHIPS,best:{},completed:{},history:[],earnings:{},adCount:{},demoGift:false};}
 export function normalizeProfile(raw) {

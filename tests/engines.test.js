@@ -49,13 +49,13 @@ test('믿을까 배신할까: AI가 유효한 행동을 내며 6라운드 종료
  for(let i=0;i<6;i++){assert.ok(['cooperate','betray'].includes(trustCpuChoice(g)));g=playTrust(g,i%2?'betray':'cooperate');}
  assert.equal(g.over,true);assert.equal(g.history.length,6);
 });
-test('보상: 동일 시드 중복 지급 없음, 1일 상한 100',()=>{
+test('보상: 동일 시드 중복 지급 없음, 1일 상한 200',()=>{
  let p=defaultProfile();const now=new Date('2026-11-06T11:10:00');
  const first=awardRun(p,'flip:seed:ai',25,now);assert.equal(first.earned,25);
  assert.equal(awardRun(first.profile,'flip:seed:ai',25,now).earned,0);
  p=first.profile;
- for(let i=0;i<5;i++)p=awardRun(p,`flip:seed${i}:ai`,25,now).profile;
- assert.equal(p.chips,200);
+ for(let i=0;i<9;i++)p=awardRun(p,`flip:seed${i}:ai`,25,now).profile;
+ assert.equal(p.chips,300);
 });
 test('보상: 힌트 차감, 칩 부족, 광고 시청 횟수 제한',()=>{
  let p=defaultProfile();assert.equal(spendChips(p,30).profile.chips,70);

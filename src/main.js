@@ -24,6 +24,7 @@ import {createDots,playDots,dotsAI,dotsAdvice,DB_N,DB_H,DB_V,DB_LINES} from './g
 import {liveAvailable,connectLive,newRoomCode,normalizeCode} from './live.js';
 import {createMinority,playMinority,minorityAdvice,minorityBotTarget,MI_ROUNDS,MI_POINT} from './games/minority.js';
 import {defaultProfile,normalizeProfile,awardRun,spendChips,awardAd,AD_DAILY_LIMIT,HINT_COST,AD_REWARD,todayKey} from './wallet.js';
+import {listChipPacks,buyChipPack,restoreChipOrders} from './toss.js';
 import {TOSS_CONFIG,shareInvite,showRewardedAd,initToss,bindBackHandler,exitApp,isRewardedAdSupported} from './toss.js';
 
 const KEY='brain-arena:mvp:v2';
@@ -129,7 +130,7 @@ function intro(){
  <div class="section-title tight"><div><span class="mini-kicker">SELECT A MODE</span><h2>대결 모드 선택</h2></div></div>
  <div class="mode-list">${isInvite?`<button class="mode-card featured" data-start="friend"><span class="mode-icon">${icon('duel')}</span><span><strong>${esc(invitedFrom)} 기록 깨기</strong><small>같은 숫자 순서로 ${fmt(invitedTarget)}점 도전 · 힌트 없음</small></span><span class="mode-go">→</span></button>`:''}
  <button class="mode-card" data-start="solo"><span class="mode-icon">${icon('spark')}</span><span><strong>혼자 연습</strong><small>편하게 규칙 익히기 · 씽크칩 힌트 사용 가능</small></span><span class="mode-go">→</span></button>
- <button class="mode-card" data-start="ai"><span class="mode-icon">${icon('bot')}</span><span><strong>AI와 대결</strong><small>상대의 전략을 이기고 보너스 칩 획득</small></span><span class="mode-go">→</span></button><label class="difficulty-row">AI 난이도 <select data-difficulty>${LEVELS.map(k=>`<option value="${k}" ${difficulty===k?'selected':''}>${LEVEL_KO[k]}</option>`).join('')}</select></label>
+ <button class="mode-card" data-start="ai"><span class="mode-icon">${icon('bot')}</span><span><strong>AI와 대결</strong><small>상대의 전략을 이기고 보너스 칩 획득</small></span><span class="mode-go">→</span></button><label class="difficulty-row">AI 난이도 <select data-difficulty>${LEVELS.map(k=>`<option value="${k}" ${difficulty===k?'selected':''}>${LEVEL_KO[k]} · 승리 +${AI_WIN[k]}칩</option>`).join('')}</select></label>
  <button class="mode-card" data-start="friend"><span class="mode-icon">${icon('duel')}</span><span><strong>친구와 점수 대결</strong><small>먼저 플레이한 뒤 링크로 기록 도전장을 보내요</small></span><span class="mode-go">→</span></button>
  <button class="mode-card live-mode" data-action="live-create-here"><span class="mode-icon">${icon('duel')}</span><span><strong>친구와 실시간 대결</strong><small>방을 만들고 같은 판에서 동시에 겨뤄요</small></span><span class="mode-go">→</span></button></div>
  <p class="fineprint">친구 대결은 같은 조건으로 기록을 겨루는 도전장 방식이에요.</p>
@@ -589,10 +590,13 @@ function triadExamples(){const ex=[
   {t:'세트 아님 ❌',cards:[{color:0,shape:0,count:1},{color:0,shape:1,count:2},{color:1,shape:2,count:3}]}];
  return `<div class="tri-examples"><b>예시로 이해하기</b>${ex.map(e=>`<div class="tri-ex"><div class="tri-ex-cards">${e.cards.map(miniTri).join('')}</div><div><strong>${e.t}</strong><ul>${triCheck(e.cards)}</ul></div></div>`).join('')}</div>`;}
 function rulesModal(id){return `<div class="modal-backdrop" data-action="close-rules"><div class="modal-card" role="dialog" aria-modal="true" aria-label="게임 방법"><div class="modal-top"><h2>${esc(GAME_BY_ID[id].title)} 규칙</h2><button class="icon-btn" data-action="close-rules" aria-label="닫기">×</button></div>${rulesFor(id).map((rule,i)=>`<div class="rule-line"><span>${i+1}</span><p>${esc(rule)}</p></div>`).join('')}${id==='triad'?triadExamples():''}<button class="btn primary full" data-action="close-rules">알겠어요</button></div></div>`;}
+// AI 를 이겼을 때 보상: 난이도가 높을수록 많이 줘요 (라운지 난이도 버튼에도 같은 숫자를 보여줘요)
+const AI_WIN={easy:10,normal:18,hard:30,expert:45,master:60};
 function calcVictory(){const s=session,g=s.game;if(s.challenger)return g.score>s.challenger.score;if(s.mode!=='ai')return null;if(s.botTarget!==null)return g.score>s.botTarget;return g.score>g.cpuScore;}
 function complete(){if(!session||!session.game.over)return;
  const s=session,g=s.game,victory=s.mode==='live'?null:calcVictory();
- let payout=s.mode==='ai'?(victory?({easy:12,normal:18,hard:25,expert:32,master:40})[s.difficulty]||18:3):s.mode==='friend'||s.mode==='live'?5:3;
+ let payout=s.mode==='ai'?(victory?AI_WIN[s.difficulty]||18:3):s.mode==='friend'||s.mode==='live'?5:3;
+ payout=Math.round(payout*(GAME_BY_ID[s.id]?.bonus||1)); // 게임별 차등 보상
  const key=`${s.id}:${s.seed}:${s.mode}:${s.difficulty}`;
  const result=awardRun(profile,key,payout);
  profile=result.profile;s.award=result.earned;
@@ -610,11 +614,15 @@ function result(){const s=session,g=s.game,enemy=opponentScore(),victory=calcVic
  <div class="ad-card"><span>ADVERTISEMENT · OPTIONAL</span><strong>보상형 광고로 씽크칩 받기</strong><p>광고를 끝까지 시청하고 보상을 받으면 +${AD_REWARD}칩. SDK 설정 전에는 지급되지 않습니다.</p><button data-action="watch-ad" ${loadingAd||!TOSS_CONFIG.enableRewardedAds?'disabled':''}>${loadingAd?'광고 여는 중…':'광고 보고 +20칩 받기'}</button></div>
  </section></main><div id="toast" class="toast" role="status"></div></div>`;
 }
-function wallet(){const count=Number(profile.adCount[todayKey()]||0);return `<div class="page"><main class="shell">${header({back:true,title:'씽크칩 지갑'})}
+let chipPacks=null,buying=false; // 콘솔에 등록된 충전 상품 (토스 앱 안에서만)
+async function loadChipPacks(){if(chipPacks!==null)return;chipPacks=[];chipPacks=await listChipPacks();if(screen==='wallet')render();}
+function grantChips(n){profile.chips+=Math.max(0,Math.trunc(n));saveProfile();return true;}
+function wallet(){loadChipPacks();const count=Number(profile.adCount[todayKey()]||0);return `<div class="page"><main class="shell">${header({back:true,title:'씽크칩 지갑'})}
  <section class="wallet-hero"><span class="mini-kicker">THINK CHIP WALLET</span><div class="wallet-balance"><span class="wallet-big-icon">⬡</span><strong>${fmt(profile.chips)}</strong><span>CHIP</span></div><p>도전해서 모으고, 생각이 막힐 때 힌트로 사용하세요.</p></section>
+ ${chipPacks===null?'':chipPacks.length?`<div class="section-title tight"><div><span class="mini-kicker">CHIP SHOP</span><h2>씽크칩 충전</h2></div></div><div class="chip-packs">${chipPacks.map(p=>`<button class="chip-pack" data-buy="${esc(p.sku)}" ${buying?'disabled':''}><span class="cp-amt">⬡ ${fmt(p.chips)}</span><small>${esc(p.displayName||'')}</small><b>${esc(p.displayAmount||'')}</b></button>`).join('')}</div><p class="fineprint">토스페이로 결제돼요. 충전한 칩은 옷·방 꾸미기와 힌트에 쓸 수 있어요.</p>`:''}
  <div class="section-title tight"><div><h2>씽크칩 얻기</h2></div></div>
  <div class="shop-card"><div class="shop-icon">▶</div><div><strong>보상형 광고 시청</strong><p>시청 완료 시 +${AD_REWARD}칩 · 오늘 ${count}/${AD_DAILY_LIMIT}회</p></div><button data-action="watch-ad" ${loadingAd||!TOSS_CONFIG.enableRewardedAds||count>=AD_DAILY_LIMIT?'disabled':''}>${!TOSS_CONFIG.enableRewardedAds?'연동 전':loadingAd?'준비 중':'시청'}</button></div>
- <div class="shop-card"><div class="shop-icon gift">♛</div><div><strong>AI 대결에서 이기기</strong><p>난이도에 따라 12~25칩 · 일일 보상 한도 적용</p></div><button data-action="home">게임</button></div>
+ <div class="shop-card"><div class="shop-icon gift">♛</div><div><strong>AI 대결에서 이기기</strong><p>난이도에 따라 10~60칩 · 어려운 게임은 추가 보너스</p></div><button data-action="home">게임</button></div>
   <div class="section-title tight"><div><h2>씽크칩 사용처</h2></div></div>
  <div class="shop-card"><div class="shop-icon hint">💡</div><div><strong>전략 힌트 1회</strong><p>혼자 연습 / AI 대결에서만 사용 가능</p></div><span class="price-tag">-${HINT_COST}칩</span></div>
  <label class="nickname-row">공유할 때 사용할 별명 (선택) <input id="nickname" maxlength="16" placeholder="예: 숫자천재" value="${esc(profile.nickname)}" /></label>
@@ -637,11 +645,11 @@ function render(){const gid=['intro','game','result'].includes(screen)?(session&
 function toLounge(){if(screen==='game'&&session&&!session.game.over){if(!confirm(session.mode==='live'?'이번 판을 포기할까요? 지금 점수로 기록돼요.':'진행 중인 게임을 그만두고 라운지로 돌아갈까요? 이 판의 보상은 지급되지 않아요.'))return true;
   if(session.mode==='live')live?.conn?.send({t:'done',score:session.game.score,round:session.liveRound});}
  const q=new URLSearchParams();if(invitedRoom)q.set('room',invitedRoom);const gid=live?.state?.game||session?.id||partyGame||openGame;if(gid)q.set('back',gid);if(session?.game?.over&&session.award)q.set('won',String(session.award));
- leaveLive();location.href='./lounge/index.html'+(q.toString()?`?${q}`:'');return true;}
+ leaveLive();const url='./lounge/index.html'+(q.toString()?`?${q}`:'');document.body.classList.add('to-lounge');setTimeout(()=>{location.href=url;},260);return true;}
 function goBack(){if(rulesOpen){rulesOpen=false;render();return true;}if(screen==='home')return false;
- if(fromLounge&&['intro','live','game','result'].includes(screen))return toLounge(); // 라운지에서 온 사람은 라운지로 돌아가요
+ if(fromLounge&&['intro','live','game','result','wallet'].includes(screen))return toLounge(); // 라운지에서 온 사람은 라운지로 돌아가요
  if(screen==='game')setScreen(session?.mode==='live'?'live':'intro');
- else if(screen==='live'){leaveLive();setScreen('home');}else if(screen==='wallet')setScreen(previousPage==='game'?'home':previousPage);else setScreen('home');return true;}
+ else if(screen==='live'){leaveLive();setScreen('home');}else if(screen==='wallet'){if(fromLounge)return toLounge();setScreen(previousPage==='game'?'home':previousPage);}else setScreen('home');return true;}
 function setScreen(name){if(screen==='game'&&name!=='game'&&session&&!session.game.over){if(!confirm(session.mode==='live'?'이번 판을 포기할까요? 지금 점수로 기록돼요.':'진행 중인 게임을 종료하고 나갈까요? 이 판의 보상은 지급되지 않아요.'))return;
  if(session.mode==='live'){live?.conn?.send({t:'done',score:session.game.score,round:session.liveRound});name=live?'live':name;}}screen=name;rulesOpen=false;render();window.scrollTo?.(0,0);}
 function tapHint(){if(!session||session.game.over||session.mode==='friend'||session.mode==='live')return;
@@ -688,7 +696,7 @@ async function requestAd(){if(loadingAd)return;
  finally{loadingAd=false;render();}
 }
 root.addEventListener('click',async e=>{
- const target=e.target.closest('[data-action],[data-open],[data-filter],[data-start],[data-lane],[data-number],[data-card],[data-trust],[data-digit],[data-take],[data-bid],[data-mb-bet],[data-mb-guess],[data-mb-hide],[data-side],[data-mi],[data-theme-choice],[data-quick],[data-live-game],[data-live-level],[data-live-mode],[data-live-topic],[data-accuse],[data-side2],[data-sd-cell],[data-sd-num],[data-mg-dir],[data-st-ans],[data-gm-cell],[data-db-line],[data-emoji],[data-chat-quick]');if(!target)return;
+ const target=e.target.closest('[data-action],[data-open],[data-filter],[data-start],[data-buy],[data-lane],[data-number],[data-card],[data-trust],[data-digit],[data-take],[data-bid],[data-mb-bet],[data-mb-guess],[data-mb-hide],[data-side],[data-mi],[data-theme-choice],[data-quick],[data-live-game],[data-live-level],[data-live-mode],[data-live-topic],[data-accuse],[data-side2],[data-sd-cell],[data-sd-num],[data-mg-dir],[data-st-ans],[data-gm-cell],[data-db-line],[data-emoji],[data-chat-quick]');if(!target)return;
  const action=target.dataset.action;
  if(target.disabled)return;
  if(action==='toggle-theme'){toggleTheme();render();return;}
@@ -718,6 +726,7 @@ root.addEventListener('click',async e=>{
  if(target.dataset.open){selectedGame=target.dataset.open;setScreen('intro');return;}
  if(target.dataset.filter){viewTab=target.dataset.filter;render();return;}
  if(target.dataset.start){start(target.dataset.start);return;}
+ if(target.dataset.buy){if(buying)return;buying=true;render();const out=await buyChipPack(target.dataset.buy,(n)=>grantChips(n));buying=false;render();flash(out.ok?`⬡ ${fmt(out.chips)} 씽크칩이 충전됐어요!`:out.error);return;}
  if(screen==='game'&&session&&!session.game.over){
   if(target.dataset.lane!==undefined){session.game=playFlip(session.game,Number(target.dataset.lane),session.flipped);session.flipped=false;session.hint=null;session.hintKey=null;if(session.game.over)complete();else {render();if(session.game.last?.cleared)flash(`조합 성공! +${session.game.last.earned}점`);}return;}
   if(target.dataset.number!==undefined){session.game=playBlind(session.game,Number(target.dataset.number));session.hint=null;session.hintKey=null;if(session.game.over)complete();else render();return;}
@@ -770,8 +779,10 @@ root.addEventListener('change',e=>{if(e.target.matches('[data-difficulty]')){dif
 initTheme(render);
 render();
 if(directMode){if(directLevel)difficulty=directLevel;start(directMode);}
+if(params.get('wallet')==='1'){screen='wallet';render();}
 // Toss: safe area, user key (per-account records), ad preload; Android back -> in-app back, exit confirm on home.
 initToss().then(st=>{useUserKey(st.userKeyHash);
+ restoreChipOrders((n)=>grantChips(n)).then(n=>{if(n){flash(`결제된 ⬡ ${fmt(n)} 씽크칩을 지급했어요`);render();}});
  // Web / MS Store build only: offline support. Never inside the Toss app.
  if(!st.inToss&&'serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('./sw.js').catch(()=>{});
 }).catch(()=>{});

@@ -63,6 +63,13 @@ export class Room extends DurableObject {
       this.s = (await ctx.storage.get('s')) || this.fresh();
     });
   }
+  // 미니홈피처럼: 방마다 TODAY / TOTAL 방문자 수와 방명록 (방 코드 = 그 사람 방)
+  visit(pid) {
+    const d = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), hp = this.s.hp || (this.s.hp = {day: d, seen: [], today: 0, total: 0, gb: []});
+    if (hp.day !== d) { hp.day = d; hp.seen = []; hp.today = 0; }
+    if (!hp.seen.includes(pid)) { hp.seen = [...hp.seen, pid].slice(-300); hp.today += 1; hp.total += 1; }
+  }
+  hpView() { const hp = this.s.hp || {}; return {t: 'hp', today: hp.today || 0, total: hp.total || 0, gb: hp.gb || []}; }
   fresh() { return {code: '', phase: 'lobby', game: 'flip', level: 'normal', seed: '', round: 0, startAt: 0, players: {}, chat: [], series: null}; }
   online() { const ids = new Set(); for (const ws of this.ctx.getWebSockets()) { if (ws.readyState !== 1) continue; const a = ws.deserializeAttachment(); if (a?.pid) ids.add(a.pid); } return ids; }
   hostId(on = this.online()) { return Object.values(this.s.players).filter((p) => on.has(p.pid)).sort((a, b) => a.joinedAt - b.joinedAt)[0]?.pid || null; }
@@ -323,15 +330,16 @@ export class Room extends DurableObject {
     for (const ws of this.ctx.getWebSockets()) { if (ws !== server && ws.deserializeAttachment()?.pid === pid) { try { ws.close(4001, 'replaced'); } catch {} } }
     const on = this.online();
     if (!this.s.players[pid] && on.size >= (code.startsWith('LNG') ? LOUNGE_MAX : MAX_PLAYERS)) { server.send(JSON.stringify({t: 'error', code: 'full'})); server.close(4002, 'full'); return new Response(null, {status: 101, webSocket: client}); }
-    if (!on.size && this.s.phase !== 'lobby') { this.s = this.fresh(); } // everyone had left: start over
+    if (!on.size && this.s.phase !== 'lobby') { const hp = this.s.hp; this.s = this.fresh(); if (hp) this.s.hp = hp; } // everyone had left: start over (방명록·방문자 수는 남겨요)
     this.s.code = code;
     const p = this.s.players[pid] || {pid, joinedAt: Date.now(), ready: false, score: 0, done: false, inRound: false};
     this.s.players[pid] = {...p, name, look: cleanLook(url.searchParams.get('look')), deco: cleanDeco(url.searchParams.get('deco'))};
     // Forget players who left long ago so the room does not fill with ghosts.
     for (const [id, q] of Object.entries(this.s.players)) if (id !== pid && !on.has(id) && !q.inRound) delete this.s.players[id];
     server.serializeAttachment({pid});
+    this.visit(pid);
     await this.sync();
-    try { server.send(JSON.stringify({t: 'chatlog', items: this.s.chat || []})); } catch {}
+    try { server.send(JSON.stringify({t: 'chatlog', items: this.s.chat || []})); server.send(JSON.stringify(this.hpView())); } catch {}
     return new Response(null, {status: 101, webSocket: client});
   }
   async webSocketMessage(ws, raw) {
@@ -501,6 +509,13 @@ export class Room extends DurableObject {
       }
       case 'look':
         p.look = cleanLook(m.look); break;
+      case 'gb': { // 방명록 한 줄 남기기 (10초에 한 번)
+        const text = cleanChat(m.text).slice(0, 60), now = Date.now(); this.lastGb = this.lastGb || {};
+        if (!text || now - (this.lastGb[pid] || 0) < 10000) return; this.lastGb[pid] = now;
+        const hp = this.s.hp || (this.visit(pid), this.s.hp);
+        hp.gb = [{name: p.name, look: p.look || '', text, at: now}, ...(hp.gb || [])].slice(0, 30);
+        await this.save(); this.broadcast(this.hpView()); return;
+      }
       case 'deco': // 내 방 꾸미기 (친구 방 방장의 방이 모두에게 보여요)
         p.deco = cleanDeco(m.deco); break; // 드레스룸에서 갈아입으면 모두에게 새 모습으로
       case 'emoji':

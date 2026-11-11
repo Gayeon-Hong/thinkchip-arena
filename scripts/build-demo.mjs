@@ -18,7 +18,7 @@ console.log('PLAY_NOW.html generated:',html.length,'characters');
 import {cp, rm, mkdir} from 'node:fs/promises';
 const {GAMES, PARTY_GAMES} = await import(new URL('../src/catalog.js', import.meta.url));
 const {LIVE_URL} = await import(new URL('../src/live.config.js', import.meta.url));
-const pick = (g) => ({id: g.id, title: g.title, short: g.short, genre: g.genre, symbol: g.symbol, color: g.color, ...(g.coop ? {coop: true} : {}), ...(g.min ? {min: g.min} : {})});
+const pick = (g) => ({id: g.id, title: g.title, short: g.short, genre: g.genre, symbol: g.symbol, color: g.color, ...(g.coop ? {coop: true} : {}), ...(g.min ? {min: g.min} : {}), ...(g.bonus ? {bonus: g.bonus} : {})});
 const config = `// 자동 생성 파일 (scripts/build-demo.mjs) — 직접 고치지 말고 src/catalog.js, src/live.config.js 를 고치세요.\nwindow.THINKCHIP_CONFIG = ${JSON.stringify({LIVE_URL, GAMES: GAMES.map(pick), PARTY: Object.values(PARTY_GAMES).map(pick)})};\n`;
 await writeFile(resolve(base, 'public/lounge/config.js'), config);
 // GitHub Pages 는 저장소 루트를 그대로 보여 줘요: 루트 index.html = PLAY_NOW, public/ 의 정적 파일을 루트에도 복사.

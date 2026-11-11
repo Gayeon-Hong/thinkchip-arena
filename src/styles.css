@@ -447,3 +447,15 @@ a.hero-cta{text-decoration:none}
 .chip-icon,.reward-icon,.wallet-link .chip-icon{color:var(--gold)}
 .live-stage,.game-stage{background:linear-gradient(180deg,#141c33 0%,#1b2644 52%,#6b4f3b 52.5%,#7a5a43 70%,#5e4433 100%);border-color:rgba(247,206,85,.22)}
 [data-theme="light"] .live-stage,[data-theme="light"] .game-stage{background:linear-gradient(180deg,#e9e3d8 0%,#dcd5c8 52%,#b08b6b 52.5%,#c09a78 70%,#a07c5e 100%)}
+
+/* ── 라운지가 기준: 버튼·카드·전환을 라운지와 같은 모양으로 ── */
+#app{animation:appIn .35s ease both}@keyframes appIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+body.to-lounge #app{opacity:0;transform:scale(.98);transition:opacity .24s ease,transform .24s ease}
+[data-theme="dark"]{--line:rgba(255,255,255,.1)}
+.btn{border-radius:13px;font-weight:900;font-size:14px}
+.btn.primary{background:var(--gold);color:#141a2c;border-color:transparent}
+[data-theme="light"] .btn.primary{background:#f7ce55;color:#141a2c}
+.play-panel,.hand-panel,.score-panel,.result-box,.mode-card,.hint-row{border-radius:16px}
+[data-theme="dark"] .play-panel,[data-theme="dark"] .hand-panel,[data-theme="dark"] .score-panel,[data-theme="dark"] .result-box,[data-theme="dark"] .hint-row{background:rgba(14,20,38,.78);backdrop-filter:blur(10px)}
+[data-theme="light"]{--bg:#e9ecf5;--surface:#ffffff;--line:rgba(20,30,60,.12);--text:#1b2440;--muted:#5d6782}
+.chip-packs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px}.chip-pack{display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 6px;border-radius:16px;border:1px solid rgba(247,206,85,.35);background:rgba(247,206,85,.08);color:var(--text)}.chip-pack .cp-amt{font-size:16px;font-weight:900;color:var(--gold)}.chip-pack small{font-size:10px;color:var(--muted)}.chip-pack b{font-size:13px;padding:4px 10px;border-radius:999px;background:var(--gold);color:#141a2c}

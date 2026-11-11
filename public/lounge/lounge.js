@@ -182,6 +182,7 @@
 
   // ───────── 캐릭터 ─────────
   const labels = $('labels');
+  const OBST = ZONES.filter((z) => z.games || z.main).map((z) => ({x: z.pos[0], z: z.pos[1], r: z.main ? 2.0 : 1.55})); // 캐릭터가 못 지나가는 테이블 (원)
   const players = new Map(); // pid -> {av, name, tag, bubble, pos, target, state, bubbleTimer, exprTimer}
   let lookAtSpeaker = null; // 최근에 말한 사람 → 다른 캐릭터들이 그쪽을 봐요
   function makeTag(text, cls) { const el = document.createElement('div'); el.className = 'name-tag ' + (cls || ''); el.textContent = text; labels.appendChild(el); return el; }
@@ -225,6 +226,7 @@
     p.exprUntil = simT + ms / 1000;
   }
   function walkTo(p, x, z, then) {
+    for (const o of OBST) { const ox = x - o.x, oz = z - o.z, od = Math.hypot(ox, oz); if (od < o.r + 0.1) { const k = (o.r + 0.1) / (od || 1); x = o.x + (od ? ox : 1) * k; z = o.z + (od ? oz : 0) * k; } } // 테이블 한가운데를 찍으면 가장자리까지만
     const lim = ROOM - 1.2; p.target = {x: Math.max(-lim, Math.min(lim, x)), z: Math.max(-lim, Math.min(lim, z)), then};
   }
 
@@ -265,10 +267,14 @@
     const fh = ray.intersectObject(floor, false)[0];
     if (fh) { walkTo(me, fh.point.x, fh.point.z); sendPose(); }
   }
-  function goToZone(zone) {
+  // 게임으로 들어갈 때: 내 캐릭터가 폴짝 뛰고 화면이 라운지 색으로 덮인 뒤 넘어가요 (뚝 끊기지 않게)
+  function enterGame(url) { let v = $('veil'); if (!v) { v = document.createElement('div'); v.id = 'veil'; v.className = 'veil'; v.innerHTML = '<div class="veil-mark">⬡</div><b>게임 테이블에 앉는 중…</b>'; document.body.appendChild(v); }
+    try { setExpr(me, 'happy'); } catch (e) {} requestAnimationFrame(() => v.classList.add('show')); setTimeout(() => { location.href = url; }, 380); }
+  window.addEventListener('pageshow', (e) => { if (e.persisted) { const v = $('veil'); if (v) v.classList.remove('show'); } });
+  function goToZone(zone, then) {
     const [x, z] = zone.pos, toMe = Math.atan2(me.av.position.x - x, me.av.position.z - z);
     const r = zone.main ? 2.8 : zone.party ? 2.6 : 2.3;
-    walkTo(me, x + Math.sin(toMe) * r, z + Math.cos(toMe) * r, () => openZone(zone)); sendPose();
+    walkTo(me, x + Math.sin(toMe) * r, z + Math.cos(toMe) * r, then || (() => openZone(zone))); sendPose();
   }
 
   // ───────── 루프 ─────────
@@ -294,6 +300,8 @@
         const dx = p.target.x - pos.x, dz = p.target.z - pos.z, d = Math.hypot(dx, dz);
         if (d < 0.05) { const then = p.target.then; p.target = null; p.state = 'idle'; then && then(); }
         else { const step = Math.min(d, dt * 3.4); pos.x += (dx / d) * step; pos.z += (dz / d) * step; p.state = 'walk';
+          for (const o of OBST) { const ox = pos.x - o.x, oz = pos.z - o.z, od = Math.hypot(ox, oz); // 테이블을 뚫지 않고 가장자리를 따라 돌아가요
+            if (od < o.r) { const nx = od > 0.001 ? ox / od : 1, nz = od > 0.001 ? oz / od : 0, side = (nx * dz - nz * dx) >= 0 ? 1 : -1; pos.x = o.x + nx * o.r - nz * side * step; pos.z = o.z + nz * o.r + nx * side * step; } }
           const want = Math.atan2(dx, dz); let diff = want - p.av.rotation.y; diff = Math.atan2(Math.sin(diff), Math.cos(diff)); p.av.rotation.y += diff * Math.min(1, dt * 10); }
       }
       if (!p.target && !(p === me && camState.closeUp)) { // 서 있을 땐 카메라(또는 방금 말한 사람) 쪽으로 천천히 몸을 돌려요 — 말풍선과 표정이 잘 보이게
@@ -413,22 +421,23 @@
     return `<a class="game-btn" href="${href}" style="text-decoration:none;color:inherit"><i style="background:${COLOR[g.color] || '#7c8cff'}">${esc(g.symbol)}</i><span><b>${esc(g.title)}</b><small>${esc(g.short || g.genre || '')}</small></span></a>`;
   }
   // 혼자 하기: 라운지에서 모드·난이도를 고르고 게임으로 바로 들어가요
-  const LEVELS = [['easy', '쉬움'], ['normal', '보통'], ['hard', '어려움'], ['expert', '고수'], ['master', '지옥']];
+  const LEVELS = [['easy', '쉬움', 10], ['normal', '보통', 18], ['hard', '어려움', 30], ['expert', '고수', 45], ['master', '지옥', 60]]; // 세 번째 값 = AI 를 이기면 받는 칩 (src/main.js AI_WIN 과 같게)
   const getLevel = () => { const v = store.get('thinkchip:level', 'normal'); return LEVELS.some((l) => l[0] === v) ? v : 'normal'; };
   const soloHref = (id, mode) => new URL(`?open=${encodeURIComponent(id)}&mode=${mode}&level=${getLevel()}&from=lounge`, ARENA).href;
-  const levelRow = () => `<div class="lv-row"><span>AI 난이도</span>${LEVELS.map(([k, n]) => `<button data-lv="${k}" class="${getLevel() === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
+  const levelRow = () => `<div class="lv-row"><span>AI 난이도<small>이기면 받는 칩</small></span>${LEVELS.map(([k, n, w]) => `<button data-lv="${k}" class="${getLevel() === k ? 'on' : ''}">${n}<em>+${w}</em></button>`).join('')}</div>`;
   function bindSolo(rerender) {
     $('sheetBody').querySelectorAll('[data-lv]').forEach((b) => { b.onclick = () => { store.set('thinkchip:level', b.dataset.lv); rerender(); }; });
-    $('sheetBody').querySelectorAll('[data-solo]').forEach((b) => { b.onclick = () => { const [id, mode] = b.dataset.solo.split(':'); location.href = soloHref(id, mode); }; });
+    $('sheetBody').querySelectorAll('[data-solo]').forEach((b) => { b.onclick = () => { const [id, mode] = b.dataset.solo.split(':'); enterGame(soloHref(id, mode)); }; });
   }
-  const zoneOf = (id) => ZONES.find((z) => z.games && z.games.includes(id)) || ZONES.find((z) => z.main);
+  const zoneOf = (id) => ZONES.find((z) => z.games && z.games.includes(id)) || (CFG.PARTY.some((g) => g.id === id) ? ZONES.find((z) => z.party) : ZONES.find((z) => z.main));
   // 게임 하나를 골랐을 때 (전체 게임 목록·메인 매치): 같이 / AI / 연습을 여기서 정해요
   function openGamePick(id, kicker) {
     const g = GAME[id]; if (!g) return; const n = othersHere().length;
     openSheet({kicker: kicker || g.genre || 'GAME', title: `${g.symbol} ${g.title}`, html: `<div class="card"><p>${esc(g.short || '')}</p></div>
       <button class="btn gold full" id="pickTeam">👥 같이 하기${n ? ` · 라운지 ${n}명에게 초대` : ' · 친구 기다리기'}</button>
-      ${levelRow()}
-      <div style="display:flex;gap:8px"><button class="btn ghost full" data-solo="${g.id}:ai">🤖 AI 대결</button><button class="btn ghost full" data-solo="${g.id}:solo">🎯 혼자 연습</button></div>`});
+      ${g.min ? `<p class="table-note" style="margin-top:10px">🚫 혼자 할 수 없는 게임이에요 · <b>${g.min}명 이상</b> 필요</p>` : levelRow()}
+      ${g.bonus ? `<p class="table-note">⬡ 이 게임은 보상 칩 <b>×${g.bonus}</b></p>` : ''}
+      <div style="display:flex;gap:8px"><button class="btn ghost full" ${g.min ? 'disabled' : `data-solo="${g.id}:ai"`}>🤖 AI 대결</button><button class="btn ghost full" ${g.min ? 'disabled' : `data-solo="${g.id}:solo"`}>🎯 혼자 연습</button></div>`});
     $('pickTeam').onclick = () => startWaiting(zoneOf(id), id);
     bindSolo(() => openGamePick(id, kicker));
   }
@@ -439,12 +448,13 @@
   let pending = null; // 내가 연 테이블 {code, id, joined:Set, timer}
   function othersHere() { return [...players.values()].filter((p) => p.id && p.id !== ME).map((p) => p.name); }
   function openTable(zone, mode) {
-    const list = zone.games.map((id) => GAME[id]).filter(Boolean), others = othersHere();
+    const list = (zone.party ? CFG.PARTY : zone.games.map((id) => GAME[id]).filter(Boolean)), others = othersHere();
+    const badge = (g) => (g.min ? `<em class="gb">${g.min}명+</em>` : g.bonus ? `<em class="gb gold">칩 ×${g.bonus}</em>` : '');
     const tabs = `<div class="seg"><button class="${mode === 'team' ? 'on' : ''}" data-mode="team">👥 같이 하기${others.length ? ` · ${others.length}명` : ''}</button><button class="${mode === 'solo' ? 'on' : ''}" data-mode="solo">🤖 혼자 · AI</button></div>`;
-    const who = mode === 'team' ? `<p class="table-note">${others.length ? `라운지에 있는 <b>${others.slice(0, 6).map(esc).join(', ')}${others.length > 6 ? ` 외 ${others.length - 6}명` : ''}</b>에게 초대가 가요. 게임을 고르면 파티원이 올 때까지 여기서 기다려요.` : '지금은 라운지에 다른 사람이 없어요. 게임을 고르면 초대를 걸어 두고 누가 들어올 때까지 기다려요. 친구 방 코드로 친구를 불러도 좋아요.'}</p>` : `<p class="table-note">버튼을 누르면 바로 시작해요. 끝나면 이 테이블로 돌아와요.</p>${levelRow()}`;
+    const who = mode === 'team' ? `<p class="table-note">${others.length ? `라운지에 있는 <b>${others.slice(0, 6).map(esc).join(', ')}${others.length > 6 ? ` 외 ${others.length - 6}명` : ''}</b>에게 초대가 가요. 게임을 고르면 파티원이 올 때까지 여기서 기다려요.` : '지금은 라운지에 다른 사람이 없어요. 게임을 고르면 초대를 걸어 두고 누가 들어올 때까지 기다려요. 친구 방 코드로 친구를 불러도 좋아요.'}</p>` : (zone.party ? '<p class="table-note">🚫 파티 게임은 <b>혼자 할 수 없어요.</b> 👥 같이 하기에서 친구를 불러 주세요.</p>' : `<p class="table-note">버튼을 누르면 바로 시작해요. 끝나면 이 테이블로 돌아와요.</p>${levelRow()}`);
     const items = list.map((g) => mode === 'team'
-      ? `<button class="game-btn" data-team="${g.id}"><i style="background:${COLOR[g.color] || '#7c8cff'}">${esc(g.symbol)}</i><span><b>${esc(g.title)}</b><small>${esc(g.short || '')}</small></span></button>`
-      : `<div class="tg-row"><div class="game-btn"><i style="background:${COLOR[g.color] || '#7c8cff'}">${esc(g.symbol)}</i><span><b>${esc(g.title)}</b><small>${esc(g.short || '')}</small></span></div><button class="tg-b" data-solo="${g.id}:solo">연습</button><button class="tg-b ai" data-solo="${g.id}:ai">AI 대결</button></div>`).join('');
+      ? `<button class="game-btn" data-team="${g.id}"><i style="background:${COLOR[g.color] || '#7c8cff'}">${esc(g.symbol)}</i><span><b>${esc(g.title)}${badge(g)}</b><small>${esc(g.short || '')}</small></span></button>`
+      : `<div class="tg-row"><div class="game-btn"><i style="background:${COLOR[g.color] || '#7c8cff'}">${esc(g.symbol)}</i><span><b>${esc(g.title)}${badge(g)}</b><small>${g.min ? `혼자 불가 · ${g.min}명 이상 필요` : esc(g.short || '')}</small></span></div><button class="tg-b" ${g.min ? 'disabled' : `data-solo="${g.id}:solo"`}>연습</button><button class="tg-b ai" ${g.min ? 'disabled' : `data-solo="${g.id}:ai"`}>AI 대결</button></div>`).join('');
     openSheet({kicker: zone.sub, title: `${zone.icon} ${zone.title}`, html: `${tabs}${who}<div class="game-list table-games">${items}</div>`});
     $('sheetBody').querySelectorAll('[data-mode]').forEach((b) => { b.onclick = () => openTable(zone, b.dataset.mode); });
     $('sheetBody').querySelectorAll('[data-team]').forEach((b) => { b.onclick = () => startWaiting(zone, b.dataset.team); });
@@ -468,7 +478,7 @@
     $('waitCancel').onclick = () => { cancelWaiting(); closeSheet(); };
     $('waitGo').onclick = goTable;
     $('waitShare').onclick = shareTable;
-    $('waitAi').onclick = () => { const id = pending.id; cancelWaiting(); location.href = soloHref(id, 'ai'); };
+    $('waitAi').onclick = () => { const id = pending.id; cancelWaiting(); enterGame(soloHref(id, 'ai')); };
   }
   function cancelWaiting(silent) { if (!pending) return; clearTimeout(pending.timer); if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'chat', text: `[[cancel:${pending.code}]]`})); pending = null; if (!silent) toast('초대를 취소했어요'); }
   // 카톡 등으로 '같이 하자' 링크 보내기. 브라우저 공유창이 없으면(토스 앱 안) 게임 방으로 먼저 들어가 토스 공유로 보내요
@@ -478,9 +488,9 @@
     if (navigator.share && !/^(localhost|127\.)/.test(location.hostname)) {
       try { await navigator.share({title: '씽크칩 아레나 같이 하자!', text, url}); toast('초대를 보냈어요. 여기서 기다릴게요'); return; } catch (e) { if (e && e.name === 'AbortError') return; }
     }
-    pending.going = true; location.href = url + '&invite=1';
+    pending.going = true; enterGame(url + '&invite=1');
   }
-  function goTable() { if (!pending) return; pending.going = true; clearTimeout(pending.timer); location.href = tableHref(pending.id, pending.code); }
+  function goTable() { if (!pending) return; pending.going = true; clearTimeout(pending.timer); enterGame(tableHref(pending.id, pending.code)); }
   // 다른 사람의 초대 팝업
   let inviteShown = null;
   function showInvite(fromName, code, id) {
@@ -490,7 +500,7 @@
     el.innerHTML = `<div class="ip-ico" style="background:${COLOR[g.color] || '#7c8cff'}">${esc(g.symbol)}</div><div class="ip-txt"><b>${esc(fromName)}님이 같이 하재요</b><small>${esc(g.title)}</small></div><button class="btn ghost" data-ip="no">괜찮아요</button><button class="btn gold" data-ip="yes">참가</button>`;
     el.hidden = false;
     el.onclick = (e) => { const b = e.target.closest('[data-ip]'); if (!b) return; el.hidden = true;
-      if (b.dataset.ip === 'yes') { if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'chat', text: `[[ok:${code}]]`})); setTimeout(() => { location.href = tableHref(id, code); }, 300); } };
+      if (b.dataset.ip === 'yes') { if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'chat', text: `[[ok:${code}]]`})); setTimeout(() => { enterGame(tableHref(id, code)); }, 300); } };
   }
   function hideInvite(code) { const el = $('invitePop'); if (el && inviteShown === code) el.hidden = true; }
   // 채팅으로 오가는 초대 신호 처리. 화면에 보일 채팅이면 true
@@ -505,13 +515,14 @@
     if (zone.closet) return openCloset();
     if (zone.desk) return openDesk();
     if (zone.main) { const g = dailyGame(); return g ? openGamePick(g.id, "TODAY'S MAIN MATCH") : null; }
+    if (zone.party) return openTable(zone, 'team');
     if (zone.party) return openSheet({kicker: 'PARTY · LIVE', title: '🎉 파티 라운지', html: `<p style="font-size:12.5px;color:var(--muted);margin:0 0 10px">친구들과 같은 방에서 실시간으로 해요. ${room.public ? '누르면 방이 만들어지고 초대 링크를 보낼 수 있어요.' : `지금 친구 방(${room.code}) 사람들과 바로 시작해요.`}</p><div class="game-list">${CFG.PARTY.map((g) => gameButton(g, partyHref(g.id))).join('')}</div>`});
     return openTable(zone, players.size > 1 ? 'team' : 'solo');
   }
   function openGames() {
-    const html = ZONES.filter((z) => z.games || z.party).map((z) => `<div class="zone"><h3>${z.icon} ${esc(z.title)} <small>${esc(z.sub)}</small></h3><div class="game-list">${(z.party ? CFG.PARTY : z.games.map((id) => GAME[id]).filter(Boolean)).map((g) => z.party ? gameButton(g, partyHref(g.id)) : `<button class="game-btn" data-pick="${g.id}"><i style="background:${COLOR[g.color] || '#7c8cff'}">${esc(g.symbol)}</i><span><b>${esc(g.title)}</b><small>${esc(g.short || g.genre || '')}</small></span></button>`).join('')}</div></div>`).join('');
+    const html = ZONES.filter((z) => z.games || z.party).map((z) => `<div class="zone"><h3>${z.icon} ${esc(z.title)} <small>${esc(z.sub)}</small></h3><div class="game-list">${(z.party ? CFG.PARTY : z.games.map((id) => GAME[id]).filter(Boolean)).map((g) => `<button class="game-btn" data-pick="${g.id}"><i style="background:${COLOR[g.color] || '#7c8cff'}">${esc(g.symbol)}</i><span><b>${esc(g.title)}</b><small>${esc(g.short || g.genre || '')}</small></span></button>`).join('')}</div></div>`).join('');
     openSheet({kicker: 'ALL GAMES', title: '어떤 승부를 할까요?', html});
-    $('sheetBody').querySelectorAll('[data-pick]').forEach((b) => { b.onclick = () => openGamePick(b.dataset.pick); });
+    $('sheetBody').querySelectorAll('[data-pick]').forEach((b) => { b.onclick = () => { const id = b.dataset.pick; closeSheet(); toast('테이블로 가는 중…'); goToZone(zoneOf(id), () => openGamePick(id)); }; }); // 걸어가서 도착하면 선택 시트
   }
 
   // 비서 데스크: 출석 보너스(진짜 칩 지급) + 내 기록
@@ -525,6 +536,7 @@
       <button class="btn gold full" id="attendBtn" ${done ? 'disabled' : ''}>${done ? '오늘은 받았어요 ✓' : '출석 보너스 받기'}</button>
       <div class="card" style="margin-top:12px"><h3>내 기록</h3><div class="stats"><div><b>${fmt(p.chips)}</b><small>씽크칩</small></div><div><b>${plays}</b><small>최근 플레이</small></div><div><b>${wins}</b><small>최근 승리</small></div></div>
       ${bestList.length ? `<p style="margin-top:10px">${bestList.map(([id, s]) => `${esc(GAME[id]?.title || id)} <b style="color:var(--gold)">${fmt(s)}</b>`).join(' · ')}</p>` : '<p style="margin-top:10px">아직 기록이 없어요. 테이블에서 한 판 해볼까요?</p>'}</div>
+      <a class="btn ghost full" style="display:grid;place-items:center;text-decoration:none;color:inherit;margin-top:8px" href="${new URL('?wallet=1&from=lounge', ARENA).href}">⬡ 씽크칩 충전 · 지갑</a>
       <div class="name-row" style="margin:12px 0"><div class="label-row">내 이름 <small style="color:var(--muted);font-weight:600">· 바꾸면 바로 머리 위 이름이 바뀌어요</small></div><input id="deskName" maxlength="12" value="${esc(p.nickname || '')}" placeholder="라운지에서 보일 이름"></div>
       <div class="card"><h3>비서의 팁</h3><p>${['심리전 테이블에선 채팅 이모티콘으로 표정을 바꿔 블러핑해 보세요 😏', '드레스룸에서 얼굴은 무료로 바꿀 수 있어요.', '친구 방을 만들면 라운지와 파티 게임을 같은 사람들과 할 수 있어요.', '메인 매치는 매일 자정에 바뀌어요.'][new Date().getDate() % 4]}</p></div>`});
     $('deskName').onchange = (e) => { const q = profile(); q.nickname = e.target.value.trim().slice(0, 12); saveProfile(q); me.tag.textContent = myName(); reconnect(); toast('이름을 바꿨어요'); };
@@ -587,18 +599,42 @@
   }
 
   // 친구 방: 같은 코드로 들어온 사람들만 보이는 라운지 (파티 게임도 같은 방으로 이어져요)
+  // ── 미니홈피 감성: 방마다 TODAY/TOTAL 방문자 수 + 방명록 ──
+  let hp = null; // {today, total, gb:[{name, look, text, at}]}
+  function renderRoomLabel() {
+    const base = room.public ? '공개 라운지' : `친구 방 · ${room.code}`;
+    $('roomLabel').innerHTML = hp && !room.public ? `${esc(room.code)} · <span class="hp-count">TODAY <b>${hp.today}</b> · TOTAL <b>${hp.total}</b></span>` : esc(base);
+  }
+  const ago = (t) => { const m = Math.floor((Date.now() - t) / 60000); return m < 1 ? '방금' : m < 60 ? `${m}분 전` : m < 1440 ? `${Math.floor(m / 60)}시간 전` : `${Math.floor(m / 1440)}일 전`; };
+  function renderGuestbook() {
+    const list = (hp && hp.gb) || [];
+    $('gbList').innerHTML = list.length ? list.map((g) => `<div class="gb-item"><b>${esc(g.name)}</b><span>${esc(g.text)}</span><small>${ago(g.at)}</small></div>`).join('') : '<p class="table-note" style="text-align:center;margin:14px 0">아직 방명록이 비어 있어요. 첫 글을 남겨 보세요 ✍️</p>';
+  }
+  function openGuestbook() {
+    if (room.public) { toast('방명록은 친구 방에만 있어요 · 친구 방을 만들어 보세요'); return openFriends(); }
+    openSheet({kicker: 'GUESTBOOK', title: `📖 ${room.code} 방명록`, html: `
+      <div class="hp-strip">TODAY <b>${hp ? hp.today : 0}</b> &nbsp;|&nbsp; TOTAL <b>${hp ? hp.total : 0}</b></div>
+      <form class="gb-form" id="gbForm"><input id="gbInput" maxlength="60" placeholder="다녀갑니다~ 한 줄 남기기" autocomplete="off"><button class="btn gold">남기기</button></form>
+      <div class="gb-list" id="gbList"></div>`});
+    renderGuestbook();
+    $('gbForm').onsubmit = (e) => { e.preventDefault(); const v = $('gbInput').value.trim(); if (!v) return;
+      if (!conn || conn.readyState !== 1) return toast('연결된 뒤에 남길 수 있어요');
+      conn.send(JSON.stringify({t: 'gb', text: v})); $('gbInput').value = ''; toast('방명록을 남겼어요'); setExpr(me, 'happy'); };
+  }
   function openFriends() {
     openSheet({kicker: 'FRIENDS', title: '👥 친구 방', html: `
       ${room.public ? '<div class="card"><h3>지금은 공개 라운지예요</h3><p>친구 방을 만들면 코드로 들어온 친구들만 같은 라운지에 모여요. 파티 게임을 고르면 그 친구들과 바로 같은 방에서 시작해요.</p></div>'
         : `<div class="card"><h3>친구 방 코드</h3><div class="big-code">${room.code}</div><p>이 코드나 링크를 보내면 같은 라운지로 들어와요.</p></div><button class="btn gold full" id="shareBtn">초대 링크 보내기</button>`}
       <div class="code-row"><input id="codeInput" maxlength="6" placeholder="코드 입력" autocapitalize="characters"><button class="btn ghost" id="joinBtn">입장</button></div>
       <div style="display:flex;gap:8px;margin-top:10px"><button class="btn ${room.public ? 'gold' : 'ghost'} full" id="newRoomBtn">새 친구 방 만들기</button>${room.public ? '' : '<button class="btn ghost full" id="publicBtn">공개 라운지로</button>'}</div>
+      ${room.public ? '' : `<button class="btn ghost full" id="gbBtn" style="margin-top:8px">📖 방명록 · TODAY ${hp ? hp.today : 0}</button>`}
       <div class="name-row" style="margin-top:14px"><div class="label-row">내 이름</div><input id="nameInput" maxlength="12" value="${esc(profile().nickname || '')}" placeholder="라운지에서 보일 이름"></div>`});
     $('codeInput').oninput = (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''); };
     $('joinBtn').onclick = () => { const c = $('codeInput').value; if (c.length < 4) return toast('코드 4자리를 입력해 주세요'); switchRoom(c); closeSheet(); };
     $('newRoomBtn').onclick = () => { switchRoom(newCode()); openFriends(); };
     if ($('publicBtn')) $('publicBtn').onclick = () => { switchRoom(null); closeSheet(); };
     if ($('shareBtn')) $('shareBtn').onclick = shareRoom;
+    if ($('gbBtn')) $('gbBtn').onclick = openGuestbook;
     $('nameInput').onchange = (e) => { const p = profile(); p.nickname = e.target.value.trim().slice(0, 12); saveProfile(p); me.tag.textContent = myName(); reconnect(); toast('이름을 바꿨어요'); };
   }
   async function shareRoom() {
@@ -627,6 +663,7 @@
   if ($('viewBtn')) $('viewBtn').onclick = () => { viewIdx = (viewIdx + 1) % VIEWS.length; const v = VIEWS[viewIdx]; camState.pitch = v.pitch; if (v.dist) camState.dist = v.dist; else resize(); toast(`${v.name} 보기 · 화면을 밀어서 돌려 보세요`); };
   $('themeBtn').onclick = () => { const day = document.body.dataset.theme !== 'day'; setTheme(day ? 'day' : 'night'); store.set(LOUNGE_KEY, Object.assign(store.get(LOUNGE_KEY, {}), {theme: day ? 'day' : 'night'})); };
   function setTheme(t) {
+    try { localStorage.setItem('brain-arena:theme:v1', t === 'day' ? 'light' : 'dark'); } catch (e) {} // 라운지가 기준: 게임 화면도 같은 낮/밤 모드로
     document.body.dataset.theme = t; const day = t === 'day'; $('themeBtn').textContent = day ? '☀' : '☾';
     scene.background = new THREE.Color(day ? 0xdfe5f2 : 0x070b16); scene.fog = new THREE.Fog(day ? 0xdfe5f2 : 0x070b16, 26, 60);
     mats.wall.color.setHex(day ? mats.wallDay : 0x141c33); mats.floor.color.setHex(day ? mats.floorDay : 0x7a5a43);
@@ -637,9 +674,21 @@
   // 채팅 & 이모티콘
   $('chatForm').onsubmit = (e) => { e.preventDefault(); const v = $('chatInput').value.trim(); if (!v) return; $('chatInput').value = ''; sendChat(v); };
   $('emotes').onclick = (e) => { const b = e.target.closest('[data-emote]'); if (b) sendChat(b.dataset.emote); };
+  // 채팅 보내기: 서버가 0.6초 안에 연달아 온 메시지를 버려서(도배 방지) 빠르게 치면 사라졌어요 → 줄 세워 0.7초 간격으로 보내요.
+  // 연결이 끊겨 있으면 내 화면에 먼저 띄우고, 다시 연결되면 보내요.
+  const outbox = []; let outTimer = null, lastSent = 0;
+  function flushChat() {
+    clearTimeout(outTimer); outTimer = null;
+    if (!outbox.length || !conn || conn.readyState !== 1) return;
+    const wait = lastSent + 700 - Date.now(); if (wait > 0) { outTimer = setTimeout(flushChat, wait); return; }
+    conn.send(JSON.stringify({t: 'chat', text: outbox.shift()})); lastSent = Date.now();
+    if (outbox.length) outTimer = setTimeout(flushChat, 700);
+  }
   function sendChat(text) {
-    if (conn && conn.readyState === 1) { conn.send(JSON.stringify({t: 'chat', text})); }
-    else { chatLine(myName(), text); say(me, text); } // 오프라인이면 내 화면에만
+    text = String(text || '').trim().slice(0, 80); if (!text) return;
+    outbox.push(text); if (outbox.length > 8) outbox.splice(0, outbox.length - 8);
+    if (conn && conn.readyState === 1) flushChat();
+    else if (!/^\[\[/.test(text)) { chatLine(myName(), text); say(me, text); toast(CFG.LIVE_URL ? '연결 중이에요 · 연결되면 다른 사람에게도 보내요' : '오프라인이라 나에게만 보여요'); }
   }
 
   // ───────── 실시간 접속 (live-server 재사용: 방 = 라운지) ─────────
@@ -649,20 +698,23 @@
   let conn = null, retry = 0, retryTimer = 0, pingTimer = 0, gotFirstState = false;
   function switchRoom(code) {
     room.public = !code; room.code = code || 'LNG1';
-    $('roomLabel').textContent = room.public ? '공개 라운지' : `친구 방 · ${room.code}`;
+    hp = null; renderRoomLabel();
     const u = new URL(location.href); if (room.public) u.searchParams.delete('room'); else u.searchParams.set('room', room.code); history.replaceState(null, '', u);
     for (const id of [...players.keys()]) if (id !== ME) despawn(id); online.clear(); $('chatLog').innerHTML = ''; gotFirstState = false;
     reconnect();
   }
+  // 폰에서 앱을 내렸다 올리거나 인터넷이 돌아오면 바로 다시 연결
+  const wake = () => { if (!document.hidden && (!conn || conn.readyState > 1)) reconnect(); };
+  document.addEventListener('visibilitychange', wake); window.addEventListener('online', wake);
   function reconnect() { clearTimeout(retryTimer); if (conn) { conn.onclose = null; try { conn.close(); } catch (e) {} } retry = 0; connect(); }
   function connect() {
     if (!CFG.LIVE_URL) { setOnline(false); return; }
     let ws; const q = new URLSearchParams({pid: ME, name: myName(), look: A.encodeLook(mine.look), deco: encodeDeco(myRoom.deco)});
     try { ws = new WebSocket(`${CFG.LIVE_URL}/${room.code}?${q}`); } catch (e) { setOnline(false); return; }
     conn = ws;
-    ws.onopen = () => { retry = 0; setOnline(true); sendPose(); clearInterval(pingTimer); pingTimer = setInterval(() => { if (ws.readyState === 1) ws.send('{"t":"ping"}'); }, 20000); };
+    ws.onopen = () => { retry = 0; setOnline(true); sendPose(); flushChat(); clearInterval(pingTimer); pingTimer = setInterval(() => { if (ws.readyState === 1) ws.send('{"t":"ping"}'); }, 20000); };
     ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } handle(m); };
-    ws.onclose = () => { if (conn !== ws) return; setOnline(false); if (retry < 6) retryTimer = setTimeout(connect, Math.min(8000, 700 * 2 ** retry++)); };
+    ws.onclose = () => { if (conn !== ws) return; setOnline(false); retryTimer = setTimeout(connect, Math.min(10000, 700 * 2 ** Math.min(retry++, 4))); }; // 끊기면 계속 다시 붙어요
   }
   function setOnline(on) { $('online').classList.toggle('off', !on); $('online').innerHTML = on ? `<i></i><b>${online.size + 1}</b>명` : '<i></i><b>오프라인</b>'; }
   function sendPose() { const t = me.target || me.av.position; if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'pose', x: Math.round(t.x * 100) / 100, z: Math.round(t.z * 100) / 100})); }
@@ -684,6 +736,7 @@
       gotFirstState = true; setOnline(true); drawBoard(); setTicker();
     } else if (m.t === 'pose') { const p = players.get(m.pid); if (p && m.pid !== ME) walkTo(p, m.x, m.z); }
     else if (m.t === 'chat') { const p = players.get(m.pid); if (m.sys) chatLine('', m.text, true); else if (handleSignal(m)) { chatLine(otherName(m), m.text); say(p, m.text); } }
+    else if (m.t === 'hp') { hp = m; renderRoomLabel(); if ($('gbList')) renderGuestbook(); }
     else if (m.t === 'chatlog') { (m.items || []).filter((c) => !/^\[\[(ok|cancel):/.test(c.text || '')).slice(-6).forEach((c) => chatLine(c.sys ? '' : otherName(c), c.text, c.sys)); }
     else if (m.t === 'error' && m.code === 'full') { toast('공개 라운지가 꽉 차서 옆 라운지로 옮겨요'); const n = Number((room.code || 'LNG1').slice(3)) || 1; switchRoom(null); room.code = `LNG${Math.min(9, n + 1)}`; reconnect(); }
   }

@@ -144,3 +144,50 @@ export async function shareInvite(search, text) {
     return {ok: false, error: error?.name === 'AbortError' ? '공유를 취소했어요.' : '공유에 실패했어요.'};
   }
 }
+
+/* ---------- 씽크칩 유료 충전 (토스 인앱결제 IAP) ----------
+ * 콘솔에 등록된 상품만 보여요 (getProductItemList). 결제 → processProductGrant 에서 칩 지급 → true.
+ * 같은 주문을 두 번 지급하지 않게 지급한 orderId 를 기억하고, 앱이 꺼져 지급 못 한 주문은 다음 실행 때 getPendingOrders 로 지급해요. */
+const GRANTED_KEY = 'thinkchip:iap:granted';
+const grantedIds = () => { try { return JSON.parse(localStorage.getItem(GRANTED_KEY)) || []; } catch { return []; } };
+const markGranted = (id) => { try { localStorage.setItem(GRANTED_KEY, JSON.stringify([...grantedIds(), id].slice(-200))); } catch {} };
+export const chipsForSku = (sku) => (TOSS_CONFIG.chipPacks || []).find((p) => p.sku === sku)?.chips || 0;
+export async function listChipPacks() {
+  if (!tossState.inToss) return [];
+  try {
+    const sdk = await getSDK(); const res = await withTimeout(sdk?.IAP?.getProductItemList?.() ?? Promise.resolve(undefined), 6000);
+    return (res?.products || []).filter((p) => chipsForSku(p.sku)).map((p) => ({...p, chips: chipsForSku(p.sku)})).sort((a, b) => a.chips - b.chips);
+  } catch (e) { console.warn('IAP list failed', e); return []; }
+}
+/** grant(chips, orderId) 는 칩을 지갑에 넣고 true 를 돌려줘야 해요. */
+export async function buyChipPack(sku, grant) {
+  const sdk = await getSDK(); const iap = sdk?.IAP;
+  if (!iap?.createOneTimePurchaseOrder) return {ok: false, error: '토스 앱에서만 충전할 수 있어요.'};
+  if (iap.createOneTimePurchaseOrder.isSupported && !iap.createOneTimePurchaseOrder.isSupported()) return {ok: false, error: '토스 앱을 최신 버전으로 업데이트해 주세요.'};
+  return new Promise((resolve) => {
+    let cleanup = null; const end = (r) => { try { cleanup?.(); } catch {} resolve(r); };
+    try {
+      cleanup = iap.createOneTimePurchaseOrder({
+        options: {sku, processProductGrant: ({orderId}) => {
+          if (grantedIds().includes(orderId)) return true;
+          const ok = grant(chipsForSku(sku), orderId); if (ok) markGranted(orderId); return ok;
+        }},
+        onEvent: (ev) => { if (ev?.type === 'success') end({ok: true, chips: chipsForSku(sku)}); },
+        onError: (err) => { const code = err?.code || ''; end({ok: false, error: code === 'USER_CANCELED' ? '결제를 취소했어요.' : code === 'PAYMENT_PENDING' ? '결제 승인을 기다리는 중이에요. 완료되면 다음 실행 때 지급돼요.' : (err?.message || '결제하지 못했어요.')}); },
+      });
+    } catch (e) { end({ok: false, error: e?.message || '결제를 시작하지 못했어요.'}); }
+  });
+}
+/** 앱 시작 때: 결제는 됐는데 지급 못 한 주문 지급 */
+export async function restoreChipOrders(grant) {
+  if (!tossState.inToss) return 0;
+  try {
+    const sdk = await getSDK(); const res = await sdk?.IAP?.getPendingOrders?.(); let total = 0;
+    for (const o of res?.orders || []) {
+      const chips = chipsForSku(o.sku); if (!chips) continue;
+      if (!grantedIds().includes(o.orderId)) { if (!grant(chips, o.orderId)) continue; markGranted(o.orderId); total += chips; }
+      await sdk.IAP.completeProductGrant?.({params: {orderId: o.orderId}});
+    }
+    return total;
+  } catch (e) { console.warn('IAP restore failed', e); return 0; }
+}

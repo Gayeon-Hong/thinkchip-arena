@@ -8,6 +8,8 @@ export const APP_CONFIG = Object.freeze({
   rewardedAdGroupId: env.VITE_REWARDED_AD_GROUP_ID || (isDev ? 'ait-ad-test-rewarded-id' : ''),
   enableRewardedAds: true,
   demoFeatures: false,
+  // 씽크칩 유료 충전 (토스 인앱결제). 콘솔 > 인앱결제에 같은 SKU 로 상품을 등록하면 지갑에 보여요. 가격은 콘솔에서 정해요.
+  chipPacks: [{sku: 'chips_300', chips: 300}, {sku: 'chips_1000', chips: 1100}, {sku: 'chips_3000', chips: 3500}],
   // 'web' = Microsoft Store / public website build: never touches the Toss SDK.
   target: env.VITE_TARGET === 'web' ? 'web' : 'toss', // the +50 "trial bonus" button stays off in release builds
 });
