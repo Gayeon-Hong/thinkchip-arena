@@ -41,9 +41,27 @@ export function stepRedLight(g, dt, holding) {
   if (t >= RL_TIME) return {...n, timeout: true, over: true, score: finishScore(n)};
   return n;
 }
-const BOT = [124, 128, 130, 126, 112];
-export function redLightBotTarget(seed, difficulty = 'normal') {
-  const r = seededRandom(`rlbot:${seed}:${difficulty}`);
-  return BOT[lvl(difficulty)] + Math.round(r() * 6);
+// AI 도 같은 술래 패턴으로 실제로 달려요: 경고가 뜨면 반응 시간 뒤에 손을 떼고, 빨간불이 끝나면 다시 눌러요.
+// 반응이 늦으면 잡혀요. frames: AI 차례 화면에서 보여줄 위치 기록 (100ms 마다)
+const BOT_REACT = [[60, 170], [70, 185], [80, 200], [85, 205], [90, 210]], BOT_RESUME = [[460, 820], [300, 580], [250, 480], [200, 400], [170, 320]], BOT_PAUSE = [0.05, 0.03, 0.025, 0.018, 0.012];
+export function redLightBotRun(seed, difficulty = 'normal') {
+  const r = seededRandom(`rlbot:${seed}:${difficulty}`), l = lvl(difficulty);
+  let g = createRedLight(seed, difficulty), holding = true, releaseAt = null, pressAt = null, lastPhase = null;
+  const frames = [], DT = 20;
+  for (let guard = 0; !g.over && guard < 3000; guard++) {
+    const ph = phaseAt(g, g.t);
+    if (ph !== lastPhase) { lastPhase = ph;
+      if (ph.type === 'warn') { const [a1, b1] = BOT_REACT[l]; releaseAt = g.t + a1 + r() * (b1 - a1); }
+      if (ph.type === 'green' && !holding) { const [a2, b2] = BOT_RESUME[l]; pressAt = g.t + a2 + r() * (b2 - a2); } }
+    if (holding && releaseAt !== null && g.t >= releaseAt) { holding = false; releaseAt = null; }
+    if (!holding && pressAt !== null && g.t >= pressAt) { if (ph.type === 'green') holding = true; pressAt = null; }
+    if (!holding && ph.type === 'green' && pressAt === null) { const [a2, b2] = BOT_RESUME[l]; pressAt = g.t + a2 + r() * (b2 - a2); }
+    if (holding && ph.type === 'green' && g.t % 100 < DT && r() < BOT_PAUSE[l]) { holding = false; pressAt = g.t + 300 + r() * 500; } // 겁이 나서 잠깐 멈칫
+    if (frames.length === 0 || g.t - frames.at(-1).t >= 100) frames.push({t: Math.round(g.t), pos: Math.round(g.pos * 10) / 10, phase: ph.type, holding});
+    g = stepRedLight(g, DT, holding);
+  }
+  frames.push({t: Math.round(g.t), pos: Math.round(g.pos * 10) / 10, phase: phaseAt(g, g.t).type, holding, end: true});
+  return {frames, score: g.score, caught: g.caught, finished: g.finished, timeout: g.timeout};
 }
+export function redLightBotTarget(seed, difficulty = 'normal') { return redLightBotRun(seed, difficulty).score; }
 export const redLightAdvice = () => ({warn: true, note: '힌트 켜짐: 술래가 돌아보기 직전에 화면이 빨갛게 번쩍여요. 번쩍이면 바로 손을 떼세요!'});

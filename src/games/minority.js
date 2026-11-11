@@ -41,10 +41,15 @@ export function playMinority(g, side) {
   const rec = {round: g.round, me: side, picks, count, minority, won};
   return {...g, bots, round, score, rank, history: [...g.history, rec], last: rec, over};
 }
-export function minorityBotTarget(seed, difficulty = 'normal') {
-  const r = seededRandom(`mibot:${seed}:${difficulty}`);
-  return byLevel(difficulty, [60, 72, 84, 96, 108]) + Math.round(r() * 10);
+// AI 도 같은 9명 판에서 실제로 골라요: 다른 참가자 버릇을 읽는 정도가 난이도마다 달라요. rounds: AI 차례 화면용 기록
+const BOT_READ = [0.35, 0.8, 1, 1, 1];
+export function minorityBotRun(seed, difficulty = 'normal') {
+  const r = seededRandom(`mibot:${seed}:${difficulty}`), read = byLevel(difficulty, BOT_READ);
+  let g = createMinority(seed, difficulty);
+  while (!g.over) { const adv = minorityAdvice(g); const side = adv.side !== null && r() < read ? adv.side : (r() < 0.5 ? 0 : 1); g = playMinority(g, side); }
+  return {rounds: g.history.map((h) => ({topic: g.topics[h.round], me: h.me, count: h.count, minority: h.minority, won: h.won})), score: g.score, rank: g.rank};
 }
+export function minorityBotTarget(seed, difficulty = 'normal') { return minorityBotRun(seed, difficulty).score; }
 export function minorityAdvice(g) {
   const c = [0, 0], unknown = [];
   for (const b of g.bots) { const s = intent(b, g); if (s === null) unknown.push(b); else c[s]++; }

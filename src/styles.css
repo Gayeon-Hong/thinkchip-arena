@@ -459,3 +459,25 @@ body.to-lounge #app{opacity:0;transform:scale(.98);transition:opacity .24s ease,
 [data-theme="dark"] .play-panel,[data-theme="dark"] .hand-panel,[data-theme="dark"] .score-panel,[data-theme="dark"] .result-box,[data-theme="dark"] .hint-row{background:rgba(14,20,38,.78);backdrop-filter:blur(10px)}
 [data-theme="light"]{--bg:#e9ecf5;--surface:#ffffff;--line:rgba(20,30,60,.12);--text:#1b2440;--muted:#5d6782}
 .chip-packs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px}.chip-pack{display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 6px;border-radius:16px;border:1px solid rgba(247,206,85,.35);background:rgba(247,206,85,.08);color:var(--text)}.chip-pack .cp-amt{font-size:16px;font-weight:900;color:var(--gold)}.chip-pack small{font-size:10px;color:var(--muted)}.chip-pack b{font-size:13px;padding:4px 10px;border-radius:999px;background:var(--gold);color:#141a2c}
+
+/* AI 차례: AI 가 먼저 플레이하는 장면 */
+.ai-turn{margin-top:12px}.ai-turn h2{font-size:18px;margin:8px 0 12px}
+.ai-badge{display:inline-flex;align-items:center;gap:6px;font:700 12px system-ui;color:var(--accent-ink);background:var(--accent-soft);padding:6px 10px;border-radius:999px}.ai-badge small{font-weight:500;opacity:.8}
+.ai-replay{background:var(--surface);border:1px solid var(--line);border-radius:17px;padding:14px;min-height:220px}
+.ai-note{font-size:11.5px;color:var(--muted);margin:0 0 10px}
+.ai-rows{display:flex;flex-direction:column;gap:6px}
+.ai-row{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:11px;background:var(--surface-2);border:1px solid var(--line);animation:aiIn .3s ease}
+.ai-row span{width:20px;font:600 11px system-ui;color:var(--subtle)}.ai-row b{flex:1;font:700 17px system-ui;letter-spacing:2px}.ai-row b small{font:500 11px system-ui;letter-spacing:0;color:var(--muted)}.ai-row em{font-style:normal;font:700 13px system-ui;color:var(--accent-ink)}
+.ai-row.win{border-color:var(--accent-ink);background:var(--accent-soft)}.ai-row.lose em,.ai-row.lose b{color:var(--muted)}.ai-row.thinking{opacity:.6}.ai-row.thinking b{letter-spacing:0;font-size:13px}
+@keyframes aiIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.ai-stat{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:12px}
+.ai-stones{display:flex;gap:10px;justify-content:center;margin:14px 0}.ai-stones i{width:64px;height:64px;border-radius:14px;background:var(--surface-2);border:1px solid var(--line);display:grid;place-items:center;font-size:28px;font-style:normal}
+.ai-stones i.ok{background:var(--accent-soft);border-color:var(--accent-ink)}.ai-stones i.bad{background:#ff5c7a33;border-color:#ff5c7a;animation:aiShake .35s}
+@keyframes aiShake{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.ai-trail{font-size:12px;letter-spacing:1px;line-height:1.6;word-break:break-all;text-align:center}
+.ai-rl{text-align:center}.ai-tagger{font-size:46px;line-height:1.1;margin:6px 0 12px;transition:transform .15s}.ai-tagger small{display:block;font-size:12px;color:var(--muted);margin-top:4px}
+.ai-rl.red .ai-tagger{transform:scale(1.15)}.ai-rl.warn .ai-tagger small{color:#ff8a3d}.ai-rl.red .ai-tagger small{color:#ff5c7a;font-weight:700}
+.ai-track{position:relative;height:46px;border-radius:12px;background:linear-gradient(90deg,var(--surface-2) 0 92%,var(--accent-soft) 92%);border:1px solid var(--line);margin:4px 0 10px}
+.ai-track i{position:absolute;top:50%;transform:translate(-50%,-50%);font-size:26px;font-style:normal;transition:left .05s linear}
+.ai-foot{margin-top:14px;display:flex;flex-direction:column;gap:10px}
+.ai-result{display:flex;align-items:baseline;gap:10px;justify-content:center}.ai-result span{font-size:12px;color:var(--muted)}.ai-result strong{font:800 28px system-ui;color:var(--accent-ink)}.ai-result small{font-size:11px;color:var(--muted)}

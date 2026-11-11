@@ -26,9 +26,20 @@ export function playBridge(g, side) {
   const nextStage = over ? g.stages.length - 1 : stage;
   return {...g, stage: nextStage, step, score, cleared, broken: [], previewMs: g.previews ? g.previews[nextStage] : g.previewMs, last: {ok: true, stageClear}, over};
 }
-export function bridgeBotTarget(seed, difficulty = 'normal') {
-  const r = seededRandom(`brbot:${seed}:${difficulty}`);
-  const l = lvl(difficulty), max = LENS[l].reduce((a, n) => a + n, 0) * 10 + 60 + [3, 3, 3, 2, 2][l] * 10;
-  return Math.round(max * [0.66, 0.72, 0.77, 0.81, 0.85][l]) + Math.round(r() * 12);
+// AI 도 같은 다리를 실제로 건너요: 단계가 올라갈수록 기억이 흐려져요. 한 칸씩 고른 기록(moves)을 AI 차례 화면에서 보여줘요.
+const BOT_MEM = [0.78, 0.83, 0.905, 0.955, 0.98];
+export function bridgeBotRun(seed, difficulty = 'normal') {
+  const r = seededRandom(`brbot:${seed}:${difficulty}`), l = lvl(difficulty);
+  let g = createBridge(seed, difficulty); const moves = [];
+  for (let guard = 0; !g.over && guard < 200; guard++) {
+    const w = g.widths[g.stage], safe = g.stages[g.stage][g.step], broken = g.broken || [];
+    const remember = r() < BOT_MEM[l] - 0.03 * g.stage;
+    let side = safe;
+    if (!remember) { const opts = Array.from({length: w}, (_, i) => i).filter((i) => !broken.includes(i)); side = opts[Math.floor(r() * opts.length)]; }
+    const before = {stage: g.stage, step: g.step, lives: g.lives, width: w};
+    g = playBridge(g, side); moves.push({...before, side, ok: !!g.last?.ok, stageClear: !!g.last?.stageClear});
+  }
+  return {moves, score: g.score, cleared: g.cleared, lives: g.lives, total: g.stages.length};
 }
+export function bridgeBotTarget(seed, difficulty = 'normal') { return bridgeBotRun(seed, difficulty).score; }
 export const bridgeAdvice = (g) => { const side = g.stages[g.stage][g.step], w = g.widths?.[g.stage] ?? 2; return {side, note: `이번 칸은 ${w === 3 ? ['왼쪽', '가운데', '오른쪽'][side] : side ? '오른쪽' : '왼쪽'}이 안전해요!`}; };

@@ -459,6 +459,28 @@ body.to-lounge #app{opacity:0;transform:scale(.98);transition:opacity .24s ease,
 [data-theme="dark"] .play-panel,[data-theme="dark"] .hand-panel,[data-theme="dark"] .score-panel,[data-theme="dark"] .result-box,[data-theme="dark"] .hint-row{background:rgba(14,20,38,.78);backdrop-filter:blur(10px)}
 [data-theme="light"]{--bg:#e9ecf5;--surface:#ffffff;--line:rgba(20,30,60,.12);--text:#1b2440;--muted:#5d6782}
 .chip-packs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px}.chip-pack{display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 6px;border-radius:16px;border:1px solid rgba(247,206,85,.35);background:rgba(247,206,85,.08);color:var(--text)}.chip-pack .cp-amt{font-size:16px;font-weight:900;color:var(--gold)}.chip-pack small{font-size:10px;color:var(--muted)}.chip-pack b{font-size:13px;padding:4px 10px;border-radius:999px;background:var(--gold);color:#141a2c}
+
+/* AI 차례: AI 가 먼저 플레이하는 장면 */
+.ai-turn{margin-top:12px}.ai-turn h2{font-size:18px;margin:8px 0 12px}
+.ai-badge{display:inline-flex;align-items:center;gap:6px;font:700 12px system-ui;color:var(--accent-ink);background:var(--accent-soft);padding:6px 10px;border-radius:999px}.ai-badge small{font-weight:500;opacity:.8}
+.ai-replay{background:var(--surface);border:1px solid var(--line);border-radius:17px;padding:14px;min-height:220px}
+.ai-note{font-size:11.5px;color:var(--muted);margin:0 0 10px}
+.ai-rows{display:flex;flex-direction:column;gap:6px}
+.ai-row{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:11px;background:var(--surface-2);border:1px solid var(--line);animation:aiIn .3s ease}
+.ai-row span{width:20px;font:600 11px system-ui;color:var(--subtle)}.ai-row b{flex:1;font:700 17px system-ui;letter-spacing:2px}.ai-row b small{font:500 11px system-ui;letter-spacing:0;color:var(--muted)}.ai-row em{font-style:normal;font:700 13px system-ui;color:var(--accent-ink)}
+.ai-row.win{border-color:var(--accent-ink);background:var(--accent-soft)}.ai-row.lose em,.ai-row.lose b{color:var(--muted)}.ai-row.thinking{opacity:.6}.ai-row.thinking b{letter-spacing:0;font-size:13px}
+@keyframes aiIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.ai-stat{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:12px}
+.ai-stones{display:flex;gap:10px;justify-content:center;margin:14px 0}.ai-stones i{width:64px;height:64px;border-radius:14px;background:var(--surface-2);border:1px solid var(--line);display:grid;place-items:center;font-size:28px;font-style:normal}
+.ai-stones i.ok{background:var(--accent-soft);border-color:var(--accent-ink)}.ai-stones i.bad{background:#ff5c7a33;border-color:#ff5c7a;animation:aiShake .35s}
+@keyframes aiShake{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.ai-trail{font-size:12px;letter-spacing:1px;line-height:1.6;word-break:break-all;text-align:center}
+.ai-rl{text-align:center}.ai-tagger{font-size:46px;line-height:1.1;margin:6px 0 12px;transition:transform .15s}.ai-tagger small{display:block;font-size:12px;color:var(--muted);margin-top:4px}
+.ai-rl.red .ai-tagger{transform:scale(1.15)}.ai-rl.warn .ai-tagger small{color:#ff8a3d}.ai-rl.red .ai-tagger small{color:#ff5c7a;font-weight:700}
+.ai-track{position:relative;height:46px;border-radius:12px;background:linear-gradient(90deg,var(--surface-2) 0 92%,var(--accent-soft) 92%);border:1px solid var(--line);margin:4px 0 10px}
+.ai-track i{position:absolute;top:50%;transform:translate(-50%,-50%);font-size:26px;font-style:normal;transition:left .05s linear}
+.ai-foot{margin-top:14px;display:flex;flex-direction:column;gap:10px}
+.ai-result{display:flex;align-items:baseline;gap:10px;justify-content:center}.ai-result span{font-size:12px;color:var(--muted)}.ai-result strong{font:800 28px system-ui;color:var(--accent-ink)}.ai-result small{font-size:11px;color:var(--muted)}
 </style></head><body><div id="app"><div id="boot" style="position:fixed;inset:0;display:grid;place-content:center;justify-items:center;gap:12px;background:#0b1020;color:#a3adc4;font:13px system-ui,sans-serif;z-index:99"><div style="width:34px;height:34px;border-radius:50%;border:3px solid rgba(255,255,255,.1);border-top-color:#f7ce55;animation:bootspin .9s linear infinite"></div><p style="margin:0">라운지 준비 중…</p><style>@keyframes bootspin{to{transform:rotate(360deg)}}</style></div></div><script src="./account.js"></script><script type="module">
 // ==== app.config.js ====
 // Public app configuration only. NEVER put API keys, mTLS keys or secrets here.
@@ -752,7 +774,8 @@ function baseballAdvice(g) {
   return {guess: pick, note: `가능한 정답이 ${c.length}개 남았어요. ${pick.join('')} 을(를) 시도해 보세요.`};
 }
 // AI opponent solves its own hidden code from the same seed; its result becomes the target score.
-function baseballBotTarget(seed, difficulty='normal') {
+// baseballBotRun: AI 가 실제로 한 추리 과정 (AI 차례 화면에서 한 줄씩 보여줘요)
+function baseballBotRun(seed, difficulty='normal') {
   const r = seededRandom(`bbbot:${seed}:${difficulty}`);
   const secret = shuffle(DIGITS, seededRandom(`baseball-ai:${seed}`)).slice(0, BB_LEN);
   const sloppy = byLevel(difficulty, [.3, .15, .05, 0, 0]), smart = byLevel(difficulty, [0, 0, 0, 0.6, 1]);
@@ -765,10 +788,11 @@ function baseballBotTarget(seed, difficulty='normal') {
       for (const g of pool.slice(0, 40)) { const parts = {}; for (const c of pool) { const j = judge(c, g); const k = `${j.strike}${j.ball}`; parts[k] = (parts[k] || 0) + 1; } const worst = Math.max(...Object.values(parts)); if (worst < best) { best = worst; guess = g; } }
     }
     const j = judge(secret, guess); history.push({guess, ...j});
-    if (j.strike === BB_LEN) return scoreFor(t);
+    if (j.strike === BB_LEN) return {secret, history, solved: true, score: scoreFor(t)};
   }
-  return 0;
+  return {secret, history, solved: false, score: 0};
 }
+function baseballBotTarget(seed, difficulty='normal') { return baseballBotRun(seed, difficulty).score; }
 
 
 // ==== src/games/nim.js ====
@@ -1085,11 +1109,29 @@ function stepRedLight(g, dt, holding) {
   if (t >= RL_TIME) return {...n, timeout: true, over: true, score: finishScore(n)};
   return n;
 }
-const BOT = [124, 128, 130, 126, 112];
-function redLightBotTarget(seed, difficulty = 'normal') {
-  const r = seededRandom(`rlbot:${seed}:${difficulty}`);
-  return BOT[lvl(difficulty)] + Math.round(r() * 6);
+// AI 도 같은 술래 패턴으로 실제로 달려요: 경고가 뜨면 반응 시간 뒤에 손을 떼고, 빨간불이 끝나면 다시 눌러요.
+// 반응이 늦으면 잡혀요. frames: AI 차례 화면에서 보여줄 위치 기록 (100ms 마다)
+const BOT_REACT = [[60, 170], [70, 185], [80, 200], [85, 205], [90, 210]], BOT_RESUME = [[460, 820], [300, 580], [250, 480], [200, 400], [170, 320]], BOT_PAUSE = [0.05, 0.03, 0.025, 0.018, 0.012];
+function redLightBotRun(seed, difficulty = 'normal') {
+  const r = seededRandom(`rlbot:${seed}:${difficulty}`), l = lvl(difficulty);
+  let g = createRedLight(seed, difficulty), holding = true, releaseAt = null, pressAt = null, lastPhase = null;
+  const frames = [], DT = 20;
+  for (let guard = 0; !g.over && guard < 3000; guard++) {
+    const ph = phaseAt(g, g.t);
+    if (ph !== lastPhase) { lastPhase = ph;
+      if (ph.type === 'warn') { const [a1, b1] = BOT_REACT[l]; releaseAt = g.t + a1 + r() * (b1 - a1); }
+      if (ph.type === 'green' && !holding) { const [a2, b2] = BOT_RESUME[l]; pressAt = g.t + a2 + r() * (b2 - a2); } }
+    if (holding && releaseAt !== null && g.t >= releaseAt) { holding = false; releaseAt = null; }
+    if (!holding && pressAt !== null && g.t >= pressAt) { if (ph.type === 'green') holding = true; pressAt = null; }
+    if (!holding && ph.type === 'green' && pressAt === null) { const [a2, b2] = BOT_RESUME[l]; pressAt = g.t + a2 + r() * (b2 - a2); }
+    if (holding && ph.type === 'green' && g.t % 100 < DT && r() < BOT_PAUSE[l]) { holding = false; pressAt = g.t + 300 + r() * 500; } // 겁이 나서 잠깐 멈칫
+    if (frames.length === 0 || g.t - frames.at(-1).t >= 100) frames.push({t: Math.round(g.t), pos: Math.round(g.pos * 10) / 10, phase: ph.type, holding});
+    g = stepRedLight(g, DT, holding);
+  }
+  frames.push({t: Math.round(g.t), pos: Math.round(g.pos * 10) / 10, phase: phaseAt(g, g.t).type, holding, end: true});
+  return {frames, score: g.score, caught: g.caught, finished: g.finished, timeout: g.timeout};
 }
+function redLightBotTarget(seed, difficulty = 'normal') { return redLightBotRun(seed, difficulty).score; }
 const redLightAdvice = () => ({warn: true, note: '힌트 켜짐: 술래가 돌아보기 직전에 화면이 빨갛게 번쩍여요. 번쩍이면 바로 손을 떼세요!'});
 
 
@@ -1122,11 +1164,22 @@ function playBridge(g, side) {
   const nextStage = over ? g.stages.length - 1 : stage;
   return {...g, stage: nextStage, step, score, cleared, broken: [], previewMs: g.previews ? g.previews[nextStage] : g.previewMs, last: {ok: true, stageClear}, over};
 }
-function bridgeBotTarget(seed, difficulty = 'normal') {
-  const r = seededRandom(`brbot:${seed}:${difficulty}`);
-  const l = lvl(difficulty), max = LENS[l].reduce((a, n) => a + n, 0) * 10 + 60 + [3, 3, 3, 2, 2][l] * 10;
-  return Math.round(max * [0.66, 0.72, 0.77, 0.81, 0.85][l]) + Math.round(r() * 12);
+// AI 도 같은 다리를 실제로 건너요: 단계가 올라갈수록 기억이 흐려져요. 한 칸씩 고른 기록(moves)을 AI 차례 화면에서 보여줘요.
+const BOT_MEM = [0.78, 0.83, 0.905, 0.955, 0.98];
+function bridgeBotRun(seed, difficulty = 'normal') {
+  const r = seededRandom(`brbot:${seed}:${difficulty}`), l = lvl(difficulty);
+  let g = createBridge(seed, difficulty); const moves = [];
+  for (let guard = 0; !g.over && guard < 200; guard++) {
+    const w = g.widths[g.stage], safe = g.stages[g.stage][g.step], broken = g.broken || [];
+    const remember = r() < BOT_MEM[l] - 0.03 * g.stage;
+    let side = safe;
+    if (!remember) { const opts = Array.from({length: w}, (_, i) => i).filter((i) => !broken.includes(i)); side = opts[Math.floor(r() * opts.length)]; }
+    const before = {stage: g.stage, step: g.step, lives: g.lives, width: w};
+    g = playBridge(g, side); moves.push({...before, side, ok: !!g.last?.ok, stageClear: !!g.last?.stageClear});
+  }
+  return {moves, score: g.score, cleared: g.cleared, lives: g.lives, total: g.stages.length};
 }
+function bridgeBotTarget(seed, difficulty = 'normal') { return bridgeBotRun(seed, difficulty).score; }
 const bridgeAdvice = (g) => { const side = g.stages[g.stage][g.step], w = g.widths?.[g.stage] ?? 2; return {side, note: `이번 칸은 ${w === 3 ? ['왼쪽', '가운데', '오른쪽'][side] : side ? '오른쪽' : '왼쪽'}이 안전해요!`}; };
 
 
@@ -1174,10 +1227,15 @@ function playMinority(g, side) {
   const rec = {round: g.round, me: side, picks, count, minority, won};
   return {...g, bots, round, score, rank, history: [...g.history, rec], last: rec, over};
 }
-function minorityBotTarget(seed, difficulty = 'normal') {
-  const r = seededRandom(`mibot:${seed}:${difficulty}`);
-  return byLevel(difficulty, [60, 72, 84, 96, 108]) + Math.round(r() * 10);
+// AI 도 같은 9명 판에서 실제로 골라요: 다른 참가자 버릇을 읽는 정도가 난이도마다 달라요. rounds: AI 차례 화면용 기록
+const BOT_READ = [0.35, 0.8, 1, 1, 1];
+function minorityBotRun(seed, difficulty = 'normal') {
+  const r = seededRandom(`mibot:${seed}:${difficulty}`), read = byLevel(difficulty, BOT_READ);
+  let g = createMinority(seed, difficulty);
+  while (!g.over) { const adv = minorityAdvice(g); const side = adv.side !== null && r() < read ? adv.side : (r() < 0.5 ? 0 : 1); g = playMinority(g, side); }
+  return {rounds: g.history.map((h) => ({topic: g.topics[h.round], me: h.me, count: h.count, minority: h.minority, won: h.won})), score: g.score, rank: g.rank};
 }
+function minorityBotTarget(seed, difficulty = 'normal') { return minorityBotRun(seed, difficulty).score; }
 function minorityAdvice(g) {
   const c = [0, 0], unknown = [];
   for (const b of g.bots) { const s = intent(b, g); if (s === null) unknown.push(b); else c[s]++; }
@@ -2378,8 +2436,32 @@ function start(mode){
  const g=createRound(selectedGame,seed,difficulty);
  const challenger=mode==='friend'&&invitedGame===selectedGame&&invitedTarget!==null?{score:invitedTarget,name:invitedFrom}:null;
  session={id:selectedGame,mode,seed,difficulty,game:g,challenger,botTarget:mode==='ai'?aiTarget(selectedGame,seed,difficulty):null,flipped:false,hint:null,hintKey:null,award:0,input:[],bid:0,bet:1,preview:null,previewedStage:-1,rl:null,t0:0,sel:null};
+ // 점수 대결 게임은 AI 가 먼저 실제로 플레이하는 걸 보여주고, 그다음 내 차례 (점수만 띡 나오지 않게)
+ if(mode==='ai'&&AI_RUN[selectedGame]){session.aiRun=AI_RUN[selectedGame](seed,difficulty);session.botTarget=session.aiRun.score;session.rp={i:0,done:false};screen='aiturn';rulesOpen=false;render();window.scrollTo?.(0,0);startReplay();return;}
  screen='game';rulesOpen=false;render();window.scrollTo?.(0,0);
 }
+// ───────── AI 차례: AI 가 같은 판을 실제로 플레이하는 장면 (숫자 탐정·징검다리·무궁화·소수결) ─────────
+const AI_RUN={baseball:baseballBotRun,bridge:bridgeBotRun,redlight:redLightBotRun,minority:minorityBotRun};
+let replayTimer=0;
+function stopReplay(){clearInterval(replayTimer);replayTimer=0;}
+function replayLen(){const r=session.aiRun;return session.id==='baseball'?r.history.length:session.id==='bridge'?r.moves.length:session.id==='minority'?r.rounds.length:r.frames.length;}
+function startReplay(){stopReplay();const s=session,step=s.id==='redlight'?50:s.id==='bridge'?520:s.id==='minority'?1100:950; // 무궁화는 2배속
+ replayTimer=setInterval(()=>{if(session!==s||screen!=='aiturn')return stopReplay();s.rp.i+=1;if(s.rp.i>=replayLen()){s.rp.i=replayLen();s.rp.done=true;stopReplay();}patchReplay();},step);}
+function patchReplay(){const el=document.getElementById('aiReplay');if(el)el.innerHTML=aiReplayBody();const f=document.getElementById('aiFoot');if(f)f.innerHTML=aiFoot();}
+function aiFoot(){const s=session;return s.rp.done?`<div class="ai-result"><span>AI 점수</span><strong>${fmt(s.aiRun.score)}점</strong><small>이 점수를 넘으면 승리!</small></div><button class="btn primary full" data-action="my-turn">▶ 이제 내 차례</button>`
+ :`<button class="btn secondary full" data-action="ai-skip">⏭ 건너뛰고 결과 보기</button>`;}
+function aiReplayBody(){const s=session,r=s.aiRun,i=s.rp.i;
+ if(s.id==='baseball'){const rows=r.history.slice(0,i);return `<p class="ai-note">AI 도 자기만의 숨은 세 자리 숫자를 추리해요 (기회 ${BB_TRIES}번)</p><div class="ai-rows">${rows.map((h,k)=>`<div class="ai-row ${h.strike===BB_LEN?'win':''}"><span>${k+1}</span><b>${h.guess.join(' ')}</b><em>${h.strike===BB_LEN?'정답! 🎉':`${h.strike}S ${h.ball}B`}</em></div>`).join('')}${!s.rp.done?'<div class="ai-row thinking"><span>…</span><b>생각 중</b><em>🤔</em></div>':!r.solved?'<div class="ai-row lose"><span>✕</span><b>못 맞혔어요</b><em>0점</em></div>':''}</div>`;}
+ if(s.id==='bridge'){const m=r.moves[Math.min(i,r.moves.length)-1],done=r.moves.slice(0,i),lives=m?(m.ok?m.lives:m.lives-1):r.moves[0]?.lives??3;
+  const cur=m||r.moves[0];const stones=cur?Array.from({length:cur.width},(_,k)=>`<i class="${m&&k===m.side?(m.ok?'ok':'bad'):''}">${m&&k===m.side?(m.ok?'🦶':'💥'):''}</i>`).join(''):'';
+  return `<p class="ai-note">AI 가 기억한 안전한 돌을 골라 건너요</p><div class="ai-bridge"><div class="ai-stat"><span>단계 ${cur?cur.stage+1:1}/${r.total}</span><span>${cur?cur.step+1:1}번째 칸</span><span>${'♥'.repeat(Math.max(0,lives))}${'♡'.repeat(Math.max(0,(r.moves[0]?.lives??3)-lives))}</span></div><div class="ai-stones">${stones}</div><div class="ai-trail">${done.map(x=>x.ok?'🟩':'🟥').join('')}</div></div>${s.rp.done?`<p class="ai-note">${r.cleared>=r.total?'끝까지 건넜어요! 🏁':`${r.cleared}단계까지 건넜어요`}</p>`:''}`;}
+ if(s.id==='redlight'){const f=r.frames[Math.min(i,r.frames.length-1)]||{pos:0,t:0,phase:'green'},pct=Math.min(100,f.pos/RL_GOAL*100),face=f.phase==='red'?'👀':f.phase==='warn'?'⚠️':'🙈';
+  return `<p class="ai-note">AI 가 술래 눈치를 보며 달려요 (2배속)</p><div class="ai-rl ${f.phase}"><div class="ai-tagger">${face}<small>${f.phase==='red'?'돌아봤다!':f.phase==='warn'?'무궁화 꽃이…':'피었습니다~'}</small></div><div class="ai-track"><i style="left:${pct}%">${s.rp.done&&r.caught?'💀':s.rp.done&&r.finished?'🏁':f.holding?'🏃':'🧍'}</i></div><div class="ai-stat"><span>${(f.t/1000).toFixed(1)}초</span><span>${Math.round(pct)}%</span></div></div>`;}
+ if(s.id==='minority'){const rows=r.rounds.slice(0,i);return `<p class="ai-note">AI 가 다른 8명의 버릇을 읽고 적은 쪽을 골라요</p><div class="ai-rows">${rows.map((x,k)=>`<div class="ai-row ${x.won?'win':''}"><span>${k+1}</span><b>${esc(x.topic[x.me])}<small> ${x.count[0]}:${x.count[1]}</small></b><em>${x.won?`+${MI_POINT}`:x.minority===null?'동점':'✕'}</em></div>`).join('')}${!s.rp.done?'<div class="ai-row thinking"><span>…</span><b>고르는 중</b><em>🤔</em></div>':`<div class="ai-row"><span>🏆</span><b>${r.rank}등</b><em>${fmt(r.score)}점</em></div>`}</div>`;}
+ return '';}
+function aiTurnView(){const s=session,g=GAME_BY_ID[s.id];return `<div class="page"><main class="shell">${header({back:true,title:g.title})}${GAME_STAGE_SLOT}
+ <section class="ai-turn"><div class="ai-badge">🤖 AI 차례 <small>${esc(LEVEL_KO[s.difficulty]||'')}</small></div><h2>AI 가 먼저 플레이해요</h2>
+ <div id="aiReplay" class="ai-replay">${aiReplayBody()}</div><div id="aiFoot" class="ai-foot">${aiFoot()}</div></section></main></div>`;}
 function currentTurnKey(){const g=session.game;return session.id==='triad'||session.id==='minority'?g.round:session.id==='bridge'?`${g.stage}:${g.step}`:session.id==='redlight'?'rl':g.turn;}
 function opponentScore(){if(!session)return null;if(session.mode==='live'){const o=liveOthers();return o.length?Math.max(...o.map(p=>p.score)):null;}if(session.challenger)return session.challenger.score;if(session.mode==='ai'){if(session.botTarget!==null)return session.botTarget;return session.game.cpuScore;}return null;}
 function statusText(){
@@ -2487,14 +2569,15 @@ function settings(){
 
 // 게임 색은 라운지에서 그 게임이 놓인 테이블 네온 색을 따라가요 (라운지 ↔ 게임 화면 색이 이어지게)
 const ZONE_TINT={blind:'rose',trust:'rose',auction:'rose',marbles:'rose',minority:'rose',baseball:'sky',nim:'sky',redlight:'lime',bridge:'lime',gomoku:'violet',dots:'violet'};
-function render(){const gid=['intro','game','result'].includes(screen)?(session&&screen!=='intro'?session.id:selectedGame):null;const de=document.documentElement;if(de?.dataset){if(gid&&GAME_BY_ID[gid])de.dataset.game=ZONE_TINT[gid]||GAME_BY_ID[gid].color;else delete de.dataset.game;}
- root.innerHTML=screen==='live'?liveView():screen==='home'?home():screen==='intro'?intro():screen==='game'?gameView():screen==='result'?result():screen==='wallet'?wallet():screen==='settings'?settings():records();renderToast();if(screen==='game'){bindTracer();bindRedLight();bindBridge();bindGameExtras();if(session?.mode==='live'){sendLiveProgress();syncStage();}}syncGameStage();if(screen==='live'){liveTick();syncStage();}renderChatDock();}
+function render(){const gid=['intro','game','result','aiturn'].includes(screen)?(session&&screen!=='intro'?session.id:selectedGame):null;const de=document.documentElement;if(de?.dataset){if(gid&&GAME_BY_ID[gid])de.dataset.game=ZONE_TINT[gid]||GAME_BY_ID[gid].color;else delete de.dataset.game;}
+ root.innerHTML=screen==='aiturn'?aiTurnView():screen==='live'?liveView():screen==='home'?home():screen==='intro'?intro():screen==='game'?gameView():screen==='result'?result():screen==='wallet'?wallet():screen==='settings'?settings():records();renderToast();if(screen==='game'){bindTracer();bindRedLight();bindBridge();bindGameExtras();if(session?.mode==='live'){sendLiveProgress();syncStage();}}syncGameStage();if(screen==='live'){liveTick();syncStage();}renderChatDock();}
 // 라운지가 허브: 라운지에서 들어온 게임은 어디서 나가든 그 테이블 앞으로 돌아가요 (번 칩도 같이 알려줌)
 function toLounge(){if(screen==='game'&&session&&!session.game.over){if(!confirm(session.mode==='live'?'이번 판을 포기할까요? 지금 점수로 기록돼요.':'진행 중인 게임을 그만두고 라운지로 돌아갈까요? 이 판의 보상은 지급되지 않아요.'))return true;
   if(session.mode==='live')live?.conn?.send({t:'done',score:session.game.score,round:session.liveRound});}
  const q=new URLSearchParams();if(invitedRoom)q.set('room',invitedRoom);const gid=live?.state?.game||session?.id||partyGame||openGame;if(gid)q.set('back',gid);if(session?.game?.over&&session.award)q.set('won',String(session.award));
  leaveLive();const url='./lounge/index.html'+(q.toString()?`?${q}`:'');document.body.classList.add('to-lounge');setTimeout(()=>{location.href=url;},260);return true;}
 function goBack(){if(rulesOpen){rulesOpen=false;render();return true;}if(screen==='home')return false;
+ if(screen==='aiturn'){stopReplay();if(fromLounge)return toLounge();setScreen('intro');return true;}
  if(fromLounge&&['intro','live','game','result','wallet'].includes(screen))return toLounge(); // 라운지에서 온 사람은 라운지로 돌아가요
  if(screen==='game')setScreen(session?.mode==='live'?'live':'intro');
  else if(screen==='live'){leaveLive();setScreen('home');}else if(screen==='wallet'){if(fromLounge)return toLounge();setScreen(previousPage==='game'?'home':previousPage);}else setScreen('home');return true;}
@@ -2551,6 +2634,8 @@ root.addEventListener('click',async e=>{
  const target=e.target.closest('[data-action],[data-open],[data-filter],[data-start],[data-buy],[data-lane],[data-number],[data-card],[data-trust],[data-digit],[data-take],[data-bid],[data-mb-bet],[data-mb-guess],[data-mb-hide],[data-side],[data-mi],[data-theme-choice],[data-quick],[data-live-game],[data-live-level],[data-live-mode],[data-live-topic],[data-accuse],[data-side2],[data-sd-cell],[data-sd-num],[data-mg-dir],[data-st-ans],[data-gm-cell],[data-db-line],[data-emoji],[data-chat-quick]');if(!target)return;
  const action=target.dataset.action;
  if(action==='login'){askLogin();return;}
+ if(action==='ai-skip'&&session?.rp){stopReplay();session.rp.i=replayLen();session.rp.done=true;patchReplay();return;}
+ if(action==='my-turn'&&session){stopReplay();screen='game';render();window.scrollTo?.(0,0);return;}
  if(target.disabled)return;
  if(action==='toggle-theme'){toggleTheme();render();return;}
  if(target.dataset.liveGame&&live){live.conn.send({t:'pick',game:target.dataset.liveGame,level:live.state?.level});return;}

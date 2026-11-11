@@ -28,7 +28,8 @@ export function baseballAdvice(g) {
   return {guess: pick, note: `가능한 정답이 ${c.length}개 남았어요. ${pick.join('')} 을(를) 시도해 보세요.`};
 }
 // AI opponent solves its own hidden code from the same seed; its result becomes the target score.
-export function baseballBotTarget(seed, difficulty='normal') {
+// baseballBotRun: AI 가 실제로 한 추리 과정 (AI 차례 화면에서 한 줄씩 보여줘요)
+export function baseballBotRun(seed, difficulty='normal') {
   const r = seededRandom(`bbbot:${seed}:${difficulty}`);
   const secret = shuffle(DIGITS, seededRandom(`baseball-ai:${seed}`)).slice(0, BB_LEN);
   const sloppy = byLevel(difficulty, [.3, .15, .05, 0, 0]), smart = byLevel(difficulty, [0, 0, 0, 0.6, 1]);
@@ -41,7 +42,8 @@ export function baseballBotTarget(seed, difficulty='normal') {
       for (const g of pool.slice(0, 40)) { const parts = {}; for (const c of pool) { const j = judge(c, g); const k = `${j.strike}${j.ball}`; parts[k] = (parts[k] || 0) + 1; } const worst = Math.max(...Object.values(parts)); if (worst < best) { best = worst; guess = g; } }
     }
     const j = judge(secret, guess); history.push({guess, ...j});
-    if (j.strike === BB_LEN) return scoreFor(t);
+    if (j.strike === BB_LEN) return {secret, history, solved: true, score: scoreFor(t)};
   }
-  return 0;
+  return {secret, history, solved: false, score: 0};
 }
+export function baseballBotTarget(seed, difficulty='normal') { return baseballBotRun(seed, difficulty).score; }
