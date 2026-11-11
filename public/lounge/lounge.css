@@ -102,3 +102,13 @@ body[data-theme="day"] .ticker{background:rgba(255,255,255,.75);color:#5a4500}
 .online,.brand b{white-space:nowrap}
 @media (max-width:430px){.brand b{font-size:11.5px;letter-spacing:.02em}.brand small{font-size:10px}.brand-mark{width:26px;height:26px}.online{padding:6px 8px;font-size:11px}.top-right{gap:5px}}
 @media (max-width:430px){.top-right .icon,.top-right .pill{height:34px;min-width:34px;padding:0 8px}.top-right .icon{width:34px;padding:0}.chips b{font-size:13px}}
+
+.table-note{font-size:12.5px;color:var(--muted);margin:0 0 10px;line-height:1.5}.table-note b{color:var(--text)}
+.join-btn{display:inline-block;margin-left:6px;padding:3px 9px;border-radius:999px;background:var(--gold);color:#141a2c;font-weight:800;font-size:11.5px;text-decoration:none;pointer-events:auto}
+
+.table-games{grid-template-columns:1fr}.table-games .game-btn{width:100%;font:inherit;color:inherit;cursor:pointer}
+.seg{display:flex;gap:6px;padding:4px;border-radius:14px;background:rgba(127,140,255,.08);border:1px solid var(--line);margin:0 0 10px}.seg button{flex:1;border:0;background:transparent;color:var(--muted);font-weight:800;font-size:13px;line-height:1;font-family:inherit;padding:10px 6px;border-radius:10px}.seg button.on{background:linear-gradient(135deg,#5f8bff,#8b5cff);color:#fff}
+.wait-card{text-align:center;padding:18px 12px;border-radius:16px;background:rgba(127,140,255,.08);border:1px solid var(--line)}.wait-card h3{margin:10px 0 4px;font-size:16px}.wait-card p{margin:0;font-size:12.5px;color:var(--muted)}
+.wait-dots{display:flex;gap:6px;justify-content:center}.wait-dots i{width:9px;height:9px;border-radius:50%;background:var(--gold);animation:wd 1.2s infinite}.wait-dots i:nth-child(2){animation-delay:.2s}.wait-dots i:nth-child(3){animation-delay:.4s}@keyframes wd{0%,80%,100%{opacity:.25;transform:scale(.8)}40%{opacity:1;transform:scale(1.1)}}
+.invite-pop{position:fixed;left:10px;right:10px;top:calc(100px + var(--safe-t));z-index:30;display:flex;align-items:center;gap:9px;padding:10px;border-radius:16px;background:var(--panel-solid);border:1px solid rgba(247,206,85,.4);box-shadow:var(--shadow);max-width:520px;margin:0 auto}.invite-pop[hidden]{display:none}
+.invite-pop .ip-ico{flex:0 0 38px;height:38px;border-radius:11px;display:grid;place-items:center;color:#fff;font-weight:900}.invite-pop .ip-txt{flex:1;min-width:0}.invite-pop b{display:block;font-size:13px}.invite-pop small{color:var(--muted);font-size:11.5px}.invite-pop .btn{height:34px;padding:0 11px;font-size:12px;white-space:nowrap}
