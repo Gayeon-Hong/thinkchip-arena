@@ -28,4 +28,5 @@ export const PARTY_GAMES={forehead:{id:'forehead',title:'내 단어 맞히기',s
  nunchi:{id:'nunchi',title:'눈치 게임',short:'1부터 차례로 외쳐요. 동시에 외치거나 마지막까지 남으면 탈락!',symbol:'✋',color:'amber',genre:'파티 게임',min:2},
  vote:{id:'vote',title:'사람 소수결',short:'친구들과 둘 중 하나! 적은 쪽만 점수. 채팅으로 떠보고 배신하세요.',symbol:'⚖',color:'cyan',genre:'파티 게임',min:3},
  tele:{id:'tele',title:'마음 맞추기',short:'같은 질문에 몰래 답해요. 다 같이 똑같이 쓸수록 팀 점수 UP!',symbol:'🔮',color:'pink',genre:'협동',min:2,coop:true},
+ onecard:{id:'onecard',title:'원카드',short:'같은 무늬·숫자로 카드를 털어요. 공격 카드로 몰아주고, 한 장 남으면 "원카드!"',symbol:'🃏',color:'plum',genre:'카드 게임',min:2},
  mind:{id:'mind',title:'타이밍 맞추기',short:'말 없이 숫자를 작은 순서대로 내요. 감과 눈치로 하나 되는 협동 게임.',symbol:'⏳',color:'green',genre:'협동',min:2,coop:true}};

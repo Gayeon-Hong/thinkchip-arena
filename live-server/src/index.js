@@ -6,11 +6,11 @@ import {DurableObject} from 'cloudflare:workers';
 const MAX_PLAYERS = 8, LOUNGE_MAX = 20; // LNG* = 3D 라운지 공개방 (게임 대신 함께 돌아다니는 공간)
 const cleanDeco = (v) => String(v || '').replace(/[^a-z0-9._]/g, '').slice(0, 120); // lounge 방 꾸미기 encodeDeco
 const cleanLook = (v) => String(v || '').replace(/[^a-z0-9.]/g, '').slice(0, 300); // lounge/avatar.js encodeLook
-const GAMES = ['flip', 'blind', 'triad', 'trust', 'baseball', 'nim', 'auction', 'maze', 'draw', 'marbles', 'redlight', 'bridge', 'minority', 'forehead', 'liar', 'nunchi', 'vote', 'sudoku', 'merge', 'stroop', 'gomoku', 'dots', 'tele', 'mind'];
+const GAMES = ['flip', 'blind', 'triad', 'trust', 'baseball', 'nim', 'auction', 'maze', 'draw', 'marbles', 'redlight', 'bridge', 'minority', 'forehead', 'liar', 'nunchi', 'vote', 'sudoku', 'merge', 'stroop', 'gomoku', 'dots', 'tele', 'mind', 'onecard'];
 // 목록에서 내린 게임: 예전 방은 계속 열리지만 탈락전 랜덤 뽑기에는 나오지 않아요
 const RETIRED = ['flip', 'triad', 'maze', 'draw', 'sudoku', 'merge', 'stroop'];
 const TURN = ['gomoku', 'dots']; // 1:1 turn games: the server relays moves between the two players of each board
-const PARTY = ['forehead', 'liar', 'nunchi', 'vote', 'tele', 'mind'];
+const PARTY = ['forehead', 'liar', 'nunchi', 'vote', 'tele', 'mind', 'onecard'];
 const MIN_PLAYERS = {liar: 3, vote: 3};
 const FH_TOPICS = ['random', 'people', 'tales', 'custom'];
 // 내 단어 맞히기: everyone sees the others' words but not their own.
@@ -28,7 +28,15 @@ const FH_WORDS = {
 const TELE_PROMPTS = ['빨간 과일 하면?', '여름 하면 떠오르는 것', '편의점에서 제일 먼저 집는 것', '동물원 하면 제일 먼저 보러 갈 동물', '월요일 하면?', '바다 하면?', '겨울 간식 하면?', '학교 하면 떠오르는 것', '1부터 10 중 숫자 하나', '색깔 하나', '아침 메뉴 하면?', '제일 무서운 동물', '생일 선물 하면?', '비 오는 날 먹고 싶은 것', '캠핑 하면?', '야식 하면?', '한국 하면 떠오르는 음식', '크리스마스 하면?', '귀여운 동물 하면?', '운동 하면 떠오르는 것'];
 
 // ── 파티 게임 AI (빈자리 채우기): 사람이 모자라도 AI 1~3명이 같이 해요. 내 단어 맞히기는 대화가 필요해서 제외 ──
-const BOT_GAMES = ['liar', 'nunchi', 'vote', 'tele', 'mind'];
+const BOT_GAMES = ['liar', 'nunchi', 'vote', 'tele', 'mind', 'onecard'];
+// ── 원카드 (일반 트럼프 52장 + 조커 2장으로 하는 전래 카드 놀이) ──
+// 카드: 'S7' = ♠7, 'HA' = ♥A, 'DT' = ◆10, 'XB' = 흑백 조커, 'XC' = 컬러 조커
+const OC_SUITS = ['S', 'H', 'D', 'C'], OC_RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K'];
+const OC_TURN_MS = 15000, OC_ONE_MS = 3000, OC_BROKE = 20;
+const ocDeck = () => [...OC_SUITS.flatMap((su) => OC_RANKS.map((r) => su + r)), 'XB', 'XC'].sort(() => Math.random() - 0.5);
+const SUIT_KO = {S: '♠스페이드', H: '♥하트', D: '◆다이아', C: '♣클로버'};
+const ocLabel = (c) => c === 'XB' ? '흑백 조커' : c === 'XC' ? '컬러 조커' : `${'♠♥◆♣'['SHDC'.indexOf(c[0])]}${c[1] === 'T' ? '10' : c[1]}`;
+const ocPower = (c) => c === 'XC' ? 7 : c === 'XB' ? 5 : c === 'SA' ? 5 : c[1] === 'A' ? 3 : c[1] === '2' ? 2 : 0; // 공격 카드: 2(+2) A(+3) ♠A(+5) 흑조커(+5) 컬러조커(+7)
 // 실시간 점수 대결 시간 제한 (초): 한 사람이 너무 오래 끌지 않게. 시간이 끝나면 그때 점수로 마감
 const TIME_LIMIT = {blind: 60, trust: 50, baseball: 120, nim: 60, auction: 80, marbles: 100, redlight: 40, bridge: 90, minority: 80, flip: 90, triad: 90, maze: 60, draw: 60, sudoku: 240, merge: 120, stroop: 45};
 const limitMs = (g) => (TIME_LIMIT[g] || 90) * 1000;
@@ -379,6 +387,8 @@ export class Room extends DurableObject {
       else if (P.kind === 'nunchi') party = {kind: 'nunchi', next: P.next, calls: P.calls, pend: P.pend, out: P.out, safe: P.safe, deadline: P.deadline, over: P.over};
       else if (P.kind === 'tele') party = {kind: 'tele', idx: P.idx, rounds: P.rounds, stage: P.stage, prompt: P.prompts[P.idx], deadline: P.deadline, answered: Object.keys(P.answers), myAnswer: P.answers[viewer] ?? null, history: P.history, team: P.team};
       else if (P.kind === 'mind') party = {kind: 'mind', level: P.level, maxLevel: P.maxLevel, lives: P.lives, stage: P.stage, deadline: P.deadline, hand: P.hands[viewer] || [], counts: Object.fromEntries(Object.entries(P.hands).map(([k, v]) => [k, v.length])), played: P.played, team: P.team, result: P.result};
+      else if (P.kind === 'onecard') party = {kind: 'onecard', order: P.order, turn: P.turn, cur: P.order[P.turn], dir: P.dir, top: P.top, suit: P.suit, attack: P.attack, deadline: P.deadline, hand: P.hands[viewer] || [],
+        counts: Object.fromEntries(Object.entries(P.hands).map(([k, v]) => [k, v.length])), broke: P.broke, one: P.one, log: P.log.slice(-6), places: P.places, deckLeft: P.deck.length};
       else if (P.kind === 'vote') party = {kind: 'vote', idx: P.idx, rounds: P.rounds, stage: P.stage, topic: P.topics[P.idx], deadline: P.deadline, voted: Object.keys(P.votes), myVote: P.votes[viewer] ?? null, history: P.history};
     }
     const duel = TURN.includes(game) && this.s.duel && phase !== 'lobby' ? this.s.duel : null;
@@ -454,6 +464,11 @@ export class Room extends DurableObject {
     } else if (kind === 'mind') {
       s.party = {kind, ids, level: 1, maxLevel: 3, lives: 3, stage: 'play', hands: {}, played: [], team: 0, result: null, deadline: 0, over: false};
       this.mindDeal();
+    } else if (kind === 'onecard') {
+      const deck = ocDeck(), n = ids.length <= 3 ? 7 : ids.length === 4 ? 6 : 5, hands = {};
+      for (const id of ids) hands[id] = deck.splice(0, n);
+      let top = deck.shift(); while (top[0] === 'X' || ocPower(top)) { deck.push(top); top = deck.shift(); } // 첫 카드는 평범한 카드로
+      s.party = {kind, order: ids, turn: 0, dir: 1, hands, deck, pile: [top], top, suit: top[0], attack: 0, out: [], broke: [], one: null, log: [], deadline: now + OC_TURN_MS, over: false, places: null};
     } else if (kind === 'vote') {
       s.party = {kind, idx: 0, rounds: 5, stage: 'vote', topics: [...DILEMMAS].sort(() => Math.random() - 0.5).slice(0, 5), votes: {}, history: [], deadline: now + 15000, over: false};
     }
@@ -480,6 +495,7 @@ export class Room extends DurableObject {
     const s = this.s, P = s.party, now = Date.now();
     if (s.phase !== 'playing' || !P || P.over || now < s.startAt) return;
     this.botsAct(now); if (P.over) return;
+    if (P.kind === 'onecard') { if (P.one && !P.one.said && now > P.one.until + 500) P.one = null; if (now >= P.deadline) { const cur = P.order[P.turn]; P.log.push(`⏰ ${s.players[cur]?.name} 시간 초과`); this.ocDraw(cur); } return; }
     const name = (id) => s.players[id]?.name || '?';
     if (P.kind === 'liar') {
       if (P.stage === 'hint' && now >= P.deadline) { P.hints.push({pid: P.order[P.turn % P.order.length], text: '(패스)'}); this.liarNextHint(); }
@@ -553,6 +569,18 @@ export class Room extends DurableObject {
       for (const b of bots) { const h = P.hands[b.pid]; if (!h?.length) continue;
         const key = `${b.pid}:m${h[0]}:${top}`; if (P.bt[key] === undefined) P.bt[key] = Math.max(now, P.lastAt) + 1400 + (h[0] - top) * rnd(110, 170);
         if (now >= P.bt[key]) { delete P.bt[key]; this.mindPlay(b.pid); P.lastAt = Date.now(); return; } }
+    } else if (P.kind === 'onecard') {
+      if (P.one && !P.one.said) { // 원카드 외치기: 주인이면 금방, 남이면 조금 늦게 (사람에게 기회를 줘요)
+        for (const b of bots) { const mine = P.one.pid === b.pid; if (due(`${b.pid}:one:${P.one.until}`, mine ? 600 : 1300, mine ? 1500 : 2700)) { this.ocOne(b.pid); break; } } }
+      const cur = P.order[P.turn]; if (!isBot(cur) || P.broke.includes(cur)) return;
+      if (!due(`${cur}:oc${P.turn}:${P.pile.length}:${P.attack}`, 1100, 2400)) return;
+      const h = P.hands[cur], ok = h.filter((c) => this.ocCanPlay(c)), nxt = P.order[(P.turn + P.dir + P.order.length) % P.order.length], danger = (P.hands[nxt]?.length || 9) <= 2;
+      if (!ok.length) return this.ocDraw(cur);
+      const plain = ok.filter((c) => !ocPower(c) && c[0] !== 'X'), atk = ok.filter((c) => ocPower(c));
+      let card = P.attack ? atk.sort((a, b) => ocPower(a) - ocPower(b))[0] : danger && (atk.length || ok.some((c) => c[1] === 'J')) ? (atk[0] || ok.find((c) => c[1] === 'J')) : (plain.find((c) => c[1] !== '7') || plain[0] || ok[0]);
+      const counts = {}; for (const c of h) if (c !== card && c[0] !== 'X') counts[c[0]] = (counts[c[0]] || 0) + 1;
+      const suit = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || card[0];
+      return this.ocPlay(cur, card, suit);
     } else if (P.kind === 'vote') {
       if (P.stage === 'vote') for (const b of bots) { if (b.pid in P.votes || !due(b.pid + ':s' + P.idx, 2000, 9000)) continue; P.votes[b.pid] = Math.random() < 0.5 ? 0 : 1; }
     }
@@ -583,6 +611,44 @@ export class Room extends DurableObject {
       P.level += 1; P.stage = 'between'; P.deadline = Date.now() + 3500; this.sysChat(`✅ ${P.level - 1}단계 성공! 다음은 한 사람당 ${P.level}장`);
     }
   }
+  // ── 원카드 진행 ──
+  ocCanPlay(c) { const P = this.s.party, top = P.top;
+    if (P.attack > 0) { const pw = ocPower(c); if (!pw || pw < ocPower(top)) return false; return c[0] === 'X' || top[0] === 'X' || c[0] === P.suit || c[1] === top[1]; } // 공격 받는 중: 같거나 센 공격 카드로만 막아요
+    if (c[0] === 'X' || top[0] === 'X') return true;
+    return c[0] === P.suit || c[1] === top[1]; }
+  ocTake(pid, n) { const P = this.s.party, h = P.hands[pid];
+    for (let i = 0; i < n; i++) { if (!P.deck.length) { const keep = P.pile.pop(); P.deck = P.pile.sort(() => Math.random() - 0.5); P.pile = [keep]; } if (!P.deck.length) break; h.push(P.deck.shift()); }
+    if (h.length > OC_BROKE && !P.broke.includes(pid)) { P.broke.push(pid); P.log.push(`💥 ${this.s.players[pid]?.name} 파산! (카드 ${h.length}장)`); P.pile.unshift(...h); P.hands[pid] = []; } }
+  ocAdvance(skip = 0) { const P = this.s.party; const alive = () => P.order.filter((id) => !P.broke.includes(id));
+    if (alive().length <= 1) return this.ocEnd(alive()[0] || null);
+    let i = P.turn; for (let k = 0; k <= skip; k++) { do { i = (i + P.dir + P.order.length) % P.order.length; } while (P.broke.includes(P.order[i])); }
+    P.turn = i; P.deadline = Date.now() + OC_TURN_MS; if (P.bt) for (const k of Object.keys(P.bt)) if (k.includes(':oc')) delete P.bt[k]; }
+  ocDraw(pid) { const P = this.s.party, n = P.attack || 1, nm = this.s.players[pid]?.name;
+    this.ocTake(pid, n); P.log.push(P.attack ? `🩸 ${nm} 공격 받아 ${n}장 먹음` : `🃏 ${nm} 한 장 받음`); P.attack = 0; if (P.one?.pid === pid) P.one = null;
+    if (!P.over) this.ocAdvance(); }
+  ocPlay(pid, card, suit) { const P = this.s.party, h = P.hands[pid], i = h.indexOf(card), nm = this.s.players[pid]?.name; if (i < 0 || !this.ocCanPlay(card)) return;
+    h.splice(i, 1); P.pile.push(card); P.top = card; P.suit = card[0] === 'X' ? P.suit : card[0];
+    const pw = ocPower(card); let skip = 0, again = false;
+    if (pw) { P.attack += pw; P.log.push(`⚔ ${nm} ${ocLabel(card)} 공격! 누적 +${P.attack}`); }
+    else if (card[1] === 'J') { skip = 1; P.log.push(`⏭ ${nm} J — 다음 사람 건너뛰기`); }
+    else if (card[1] === 'Q') { P.dir *= -1; P.log.push(`🔄 ${nm} Q — 방향 반대로`); }
+    else if (card[1] === 'K') { again = true; P.log.push(`👑 ${nm} K — 한 번 더!`); }
+    else if (card[1] === '7') { P.suit = OC_SUITS.includes(suit) ? suit : card[0]; P.log.push(`🎨 ${nm} 7 — 무늬를 ${SUIT_KO[P.suit]}(으)로`); }
+    else P.log.push(`${nm} ${ocLabel(card)}`);
+    if (!h.length) return this.ocEnd(pid);
+    if (h.length === 1) P.one = {pid, until: Date.now() + OC_ONE_MS, said: false};
+    if (again) { P.deadline = Date.now() + OC_TURN_MS; return; }
+    this.ocAdvance(skip); }
+  ocOne(pid) { const P = this.s.party, o = P.one; if (!o || o.said || Date.now() > o.until + 500) return;
+    const owner = this.s.players[o.pid]?.name;
+    if (pid === o.pid) { o.said = true; P.log.push(`☝ ${owner} "원카드!"`); this.sysChat(`☝ ${owner}: 원카드!`); }
+    else { o.said = true; this.ocTake(o.pid, 1); P.log.push(`🚨 ${this.s.players[pid]?.name}님이 먼저 외쳐서 ${owner} 한 장 받음`); this.sysChat(`🚨 ${this.s.players[pid]?.name}: 원카드! (${owner} 벌칙 +1장)`); } }
+  ocEnd(winner) { const P = this.s.party; if (P.over) return;
+    const rest = P.order.filter((id) => id !== winner && !P.broke.includes(id)).sort((a, b) => P.hands[a].length - P.hands[b].length), pts = [100, 60, 40, 25, 15, 10, 5, 5];
+    P.places = [winner, ...rest, ...P.broke].filter(Boolean);
+    P.places.forEach((id, k) => { const q = this.s.players[id]; if (q) q.score = P.broke.includes(id) ? 0 : pts[k] ?? 5; });
+    this.sysChat(winner ? `🏆 ${this.s.players[winner]?.name}님이 카드를 다 털었어요! 원카드 승리` : '원카드 끝!');
+    this.endParty(); }
   liarNextHint() {
     const P = this.s.party; P.turn += 1;
     if (P.turn >= P.order.length * P.laps) { P.stage = 'vote'; P.deadline = Date.now() + 40000; this.sysChat('🕵️ 설명 끝! 거짓말쟁이라고 생각하는 사람에게 투표하세요.'); }
@@ -817,6 +883,13 @@ export class Room extends DurableObject {
       case 'tele': {
         const P = s.party; if (s.phase !== 'playing' || P?.kind !== 'tele' || P.stage !== 'answer' || !p.inRound || Date.now() < s.startAt) return;
         const a = cleanChat(m.text).slice(0, 20); if (!a) return; P.answers[pid] = a; break;
+      }
+      case 'oc': { // 원카드: {a:'play', card, suit} / {a:'draw'} / {a:'one'}
+        const P = s.party; if (s.phase !== 'playing' || P?.kind !== 'onecard' || P.over || !p.inRound || Date.now() < s.startAt) return;
+        if (m.a === 'one') { this.ocOne(pid); break; }
+        if (P.order[P.turn] !== pid) return;
+        if (m.a === 'draw') this.ocDraw(pid); else if (m.a === 'play') this.ocPlay(pid, String(m.card || ''), String(m.suit || ''));
+        break;
       }
       case 'mindplay': {
         const P = s.party, hand = P?.hands?.[pid];
