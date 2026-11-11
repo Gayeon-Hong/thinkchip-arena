@@ -379,7 +379,8 @@ export class Room extends DurableObject {
       else if (P.kind === 'vote') party = {kind: 'vote', idx: P.idx, rounds: P.rounds, stage: P.stage, topic: P.topics[P.idx], deadline: P.deadline, voted: Object.keys(P.votes), myVote: P.votes[viewer] ?? null, history: P.history};
     }
     const duel = TURN.includes(game) && this.s.duel && phase !== 'lobby' ? this.s.duel : null;
-    return {t: 'state', code, phase, game, level, seed, round, startAt, serverNow: Date.now(), players, fh, party, duel, series: this.s.series, fhTopic: this.s.fhTopic || 'random'};
+    const T = this.s.turns, turns = T && phase !== 'lobby' ? {order: T.order, idx: T.idx, startAt: T.startAt} : null;
+    return {t: 'state', code, phase, game, level, seed, round, startAt, serverNow: Date.now(), players, fh, party, duel, series: this.s.series, fhTopic: this.s.fhTopic || 'random', turnMode: this.s.turnMode !== false, turns};
   }
   async save() { await this.ctx.storage.put('s', this.s); }
   broadcast(msg) { const text = JSON.stringify(msg); for (const ws of this.ctx.getWebSockets()) { try { ws.send(text); } catch {} } }
@@ -399,9 +400,16 @@ export class Room extends DurableObject {
     if (t.length) await this.ctx.storage.setAlarm(Math.max(Date.now() + 20, Math.min(...t)));
   }
   // A round ends when everybody still connected who started it has finished.
+  nextTurn() { // 다음 사람 차례 (나간 사람은 건너뛰어요)
+    const s = this.s, T = s.turns, on = this.online(); if (!T) return;
+    do { T.idx += 1; } while (T.idx < T.order.length && (!on.has(T.order[T.idx]) || s.players[T.order[T.idx]]?.done));
+    T.startAt = Date.now() + 3300; this.lastSnap = null;
+    if (T.idx < T.order.length) this.sysChat(`🎮 이제 ${s.players[T.order[T.idx]]?.name || '?'}님 차례!`);
+  }
   checkRound() {
     if (this.s.phase !== 'playing') return;
     const on = this.online(), live = Object.values(this.s.players).filter((p) => p.inRound && on.has(p.pid));
+    const T = this.s.turns; if (T && T.idx < T.order.length && !on.has(T.order[T.idx]) && Date.now() >= this.s.startAt) { const cur = this.s.players[T.order[T.idx]]; if (cur) cur.done = true; this.nextTurn(); }
     if (Date.now() < this.s.startAt) {
       if (live.length < 2) { this.s.phase = 'lobby'; for (const p of Object.values(this.s.players)) { p.inRound = false; p.ready = false; } }
       return;
@@ -684,11 +692,17 @@ export class Room extends DurableObject {
   }
   async webSocketMessage(ws, raw) {
     const pid = ws.deserializeAttachment()?.pid, p = pid && this.s.players[pid];
-    if (!p || typeof raw !== 'string' || raw.length > 500) return;
+    if (!p || typeof raw !== 'string' || raw.length > 24000 || (raw.length > 500 && !raw.startsWith('{"t":"snap"'))) return;
     let m; try { m = JSON.parse(raw); } catch { return; }
     const isHost = this.hostId() === pid, s = this.s;
     switch (m.t) {
       case 'ping': ws.send(JSON.stringify({t: 'pong', serverNow: Date.now()})); return;
+      case 'snap': { // 차례대로 모드: 지금 차례인 사람의 게임 화면 상태를 다른 사람에게 그대로 중계 (저장하지 않아요)
+        const T = s.turns; if (s.phase !== 'playing' || !T || T.order[T.idx] !== pid) return;
+        this.lastSnap = {pid, d: m.d, k: m.k}; const out = JSON.stringify({t: 'snap', pid, d: m.d, k: m.k});
+        for (const w of this.ctx.getWebSockets()) { if (w === ws) continue; try { w.send(out); } catch {} } return;
+      }
+      case 'turnmode': if (!isHost || s.phase === 'playing') return; s.turnMode = !!m.v; break;
       case 'mode':
         if (!isHost || s.phase === 'playing') return;
         s.series = m.kind === 'single' ? null : this.newSeries(m.kind, m.len);
@@ -736,7 +750,11 @@ export class Room extends DurableObject {
             s.party = null;
           } else if (PARTY.includes(s.game)) { s.fh = null; this.startParty(s.game); }
           else { s.fh = null; s.party = null; }
-          s.duel = null;
+          s.duel = null; s.turns = null; this.lastSnap = null;
+          if (s.turnMode !== false && !TURN.includes(s.game) && !PARTY.includes(s.game) && s.game !== 'forehead') { // 차례대로: 한 사람씩, 나머지는 관전
+            const order = Object.values(s.players).filter((q) => q.inRound && !isBot(q.pid)).map((q) => q.pid).sort(() => Math.random() - 0.5);
+            s.turns = {order, idx: 0, startAt: s.startAt};
+          }
           if (TURN.includes(s.game)) {
             const sr = s.series, ids = Object.values(s.players).filter((q) => q.inRound).sort((a, b) => a.joinedAt - b.joinedAt).map((q) => q.pid);
             const pairs = sr?.kind === 'tournament' && sr.started ? (sr.bracket[sr.stage] || []).map((m) => [m.a, m.b]) : ids.reduce((acc, id, i) => (i % 2 ? acc[acc.length - 1].push(id) : acc.push([id]), acc), []);
@@ -748,8 +766,9 @@ export class Room extends DurableObject {
       }
       case 'progress': case 'done':
         if (s.phase !== 'playing' || !p.inRound || p.done || m.round !== s.round) return;
+        if (s.turns && s.turns.order[s.turns.idx] !== pid) return; // 차례대로: 내 차례에만
         p.score = Math.max(0, Math.min(100000, Math.round(Number(m.score) || 0)));
-        if (m.t === 'done') p.done = true;
+        if (m.t === 'done') { p.done = true; if (s.turns) this.nextTurn(); }
         break;
       case 'move': {
         const bd = s.duel?.boards?.[m.b];

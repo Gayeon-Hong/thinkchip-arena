@@ -290,6 +290,7 @@ function joinLive(code,pickGame){leaveLive();const pid=livePid();
   onState:m=>onLiveState(m),
   onChat:m=>onChat(m),
   onChatLog:items=>{if(!live)return;live.chat=items;renderChatDock();},
+  onSnap:m=>{if(!live)return;live.spec={pid:m.pid,d:m.d,k:m.k};if(screen==='spectate'&&!live.specRaf){live.specRaf=requestAnimationFrame(()=>{if(live)live.specRaf=0;if(screen==='spectate')render();});}},
   onEmoji:m=>{if(stage)stage.say(m.pid,m.e);const p=live?.state?.players?.find(x=>x.pid===m.pid);flash(`${p?esc(p.name):'누군가'} ${m.e}`);},
   onStatus:st=>{if(!live)return;live.status=st;if(screen==='live')render();},
   onError:code=>{if(!live)return;live.error=code;flash(code==='full'?'방이 꽉 찼어요 (최대 8명).':code==='lost'?'연결이 끊겼어요. 다시 입장해 주세요.':'방에 들어가지 못했어요.');if(code==='full'){leaveLive();}if(screen==='live')render();}});
@@ -299,6 +300,11 @@ function leaveLive(){if(stage){stage.destroy();stage=null;}if(!live)return;clear
 function onLiveState(m){if(wantInvite&&live&&!live.autoInvited&&m&&m.t==='state'){live.autoInvited=true;setTimeout(()=>inviteToRoom(),400);}if(!live)return;const prev=live.state;live.state=m;live.code=m.code||live.code;
  const me=m.players.find(p=>p.pid===livePid());
  if(live.pendingPick&&me?.host){live.conn.send({t:'pick',game:live.pendingPick,level:difficulty});live.pendingPick=null;}
+ if(m.turns&&m.phase==='playing'&&me?.inRound&&live.startedRound===m.round){ // 차례대로: 내 차례가 오면 카운트다운 뒤 시작, 아니면 관전
+  const cur=m.turns.order[m.turns.idx];
+  if(cur===livePid()&&!me.done&&live.myTurnRound!==`${m.round}:${m.turns.idx}`){live.myTurnRound=`${m.round}:${m.turns.idx}`;screen='spectate';live.spec=null;render();clearTimeout(live.turnT);live.turnT=setTimeout(()=>{if(live&&live.state?.turns?.order?.[live.state.turns.idx]===livePid())beginLiveGame(true);},Math.max(0,m.turns.startAt-live.conn.serverNow()));return;}
+  if(screen==='spectate'){if(prev?.turns?.idx!==m.turns.idx)live.spec=null;render();return;}}
+ if(m.phase!=='playing'&&screen==='spectate'){screen='live';}
  if(m.phase==='playing'&&me?.inRound&&live.startedRound!==m.round){if(screen!=='live'){screen='live';}render();return;}
  if(screen==='game'&&session?.mode==='live'){
   if(Number.isInteger(session.duelIdx)&&m.duel?.boards?.[session.duelIdx]){const bd=m.duel.boards[session.duelIdx];
@@ -308,12 +314,29 @@ function onLiveState(m){if(wantInvite&&live&&!live.autoInvited&&m&&m.t==='state'
  if(screen==='live'){const ae=document.activeElement;if(ae&&ae.tagName==='INPUT'&&root.contains(ae)){live.dirty=true;return;}render();}
  if(prev&&prev.phase==='playing'&&m.phase==='result'&&screen==='live'){const r=liveRanking(),me=livePid();if(m.series?.done){if(m.series.champion.includes(me))flash('🏆 최종 우승! 축하해요');}else if(r[0]?.pid===me&&(r.length<2||r[0].score>r[1].score))flash('🏆 이번 판 1등!');}}
 function liveRanking(){return [...(live?.state?.players||[])].filter(p=>p.inRound).sort((a,b)=>b.score-a.score);}
-function beginLiveGame(){const st=live.state;live.startedRound=st.round;clearInterval(live.cd);live.cd=null;
+function beginLiveGame(myTurn){const st=live.state;live.startedRound=st.round;clearInterval(live.cd);live.cd=null;
  if(PARTY_IDS.includes(st.game)){screen='live';chatOpen=false;render();return;}
- selectedGame=st.game;difficulty=st.level;let g=createRound(st.game,st.seed,st.level);let duelIdx;
+ if(st.turns&&!myTurn){const cur=st.turns.order[st.turns.idx];if(cur!==livePid()){screen='spectate';live.spec=null;render();window.scrollTo?.(0,0);return;}live.myTurnRound=`${st.round}:${st.turns.idx}`;}
+ const tIdx=st.turns?st.turns.order.indexOf(livePid()):-1,seed=tIdx>=0?`${st.seed}:${tIdx}`:st.seed; // 차례대로: 사람마다 다른 판 (앞사람 걸 보고 외우지 못하게)
+ selectedGame=st.game;difficulty=st.level;let g=createRound(st.game,seed,st.level);let duelIdx;
  if(['gomoku','dots'].includes(st.game)){duelIdx=st.duel?.boards?.findIndex(b=>b.players.includes(livePid()));if(duelIdx<0||duelIdx===undefined){screen='live';render();return;}const bd=st.duel.boards[duelIdx];g=replayDuel(st.game,st.seed,st.level,bd);}
- session={id:st.game,mode:'live',seed:st.seed,difficulty:st.level,game:g,challenger:null,botTarget:null,liveRound:st.round,lastSent:-1,duelIdx,t0:0,sel:null,flipped:false,hint:null,hintKey:null,award:0,input:[],bid:0,bet:1,preview:null,previewedStage:-1,rl:null};
- screen='game';rulesOpen=false;render();window.scrollTo?.(0,0);}
+ session={id:st.game,mode:'live',seed,difficulty:st.level,game:g,challenger:null,botTarget:null,liveRound:st.round,lastSent:-1,duelIdx,t0:0,sel:null,flipped:false,hint:null,hintKey:null,award:0,input:[],bid:0,bet:1,preview:null,previewedStage:-1,rl:null,turn:!!st.turns};
+ screen='game';rulesOpen=false;render();window.scrollTo?.(0,0);if(st.turns)startSnaps();}
+// 차례대로: 내 게임 화면 상태를 0.2초마다(바뀌었을 때만) 다른 사람에게 중계
+const SNAP_UI=['input','bid','bet','flipped','sel','preview','previewedStage','hint','t0','rl'];let snapTimer=0;
+function startSnaps(){clearInterval(snapTimer);let last='',k=0;const s0=session;
+ const tick=()=>{if(!live||session!==s0||screen!=='game'){clearInterval(snapTimer);return;}const ui={};for(const f of SNAP_UI)if(s0[f]!==undefined)ui[f]=s0[f];
+  let d;try{d=JSON.stringify({g:s0.game,ui});}catch{return;}if(d===last||d.length>22000)return;last=d;live.conn.send({t:'snap',d,k:++k});};
+ snapTimer=setInterval(tick,200);tick();}
+function spectateView(){const st=live?.state,T=st?.turns;if(!st||!T)return '';const cur=T.order[T.idx],cp=st.players.find(p=>p.pid===cur),myI=T.order.indexOf(livePid()),G=GAME_BY_ID[st.game]||liveGameInfo(st.game);
+ const queue=T.order.map((id,i)=>{const p=st.players.find(x=>x.pid===id);return `<span class="tq ${i<T.idx?'done':i===T.idx?'now':''} ${id===livePid()?'me':''}">${i+1}. ${esc(p?.name||'?')}${id===livePid()?' (나)':''}${p?.done?` · ${fmt(p.score)}점`:''}</span>`;}).join('');
+ const mine=cur===livePid();let body='';
+ if(mine)body=`<div class="spec-wait"><b>내 차례!</b><p>잠시 뒤 시작해요…</p></div>`;
+ else if(live.spec&&live.spec.pid===cur){let sp=null;try{sp=JSON.parse(live.spec.d);}catch{}
+  if(sp){const real=session;session={id:st.game,mode:'live',seed:'',difficulty:st.level,game:sp.g,challenger:null,botTarget:null,liveRound:st.round,award:0,spectating:true,...sp.ui};let html='';try{html=gameView().replace(GAME_STAGE_SLOT,'');}catch(e){html='';}session=real;
+   body=`<div class="spectate-view" inert>${html}</div>`;}}
+ if(!body)body=`<div class="spec-wait"><b>${esc(cp?.name||'?')}님 차례</b><p>곧 화면이 보여요…</p></div>`;
+ return `<div class="page"><main class="shell"><div class="spec-top"><span class="mini-kicker">${esc(G.title||'')} · 차례대로</span><h2>${mine?'🎮 내 차례':`👀 ${esc(cp?.name||'?')}님 플레이 중`}</h2><div class="turn-queue">${queue}</div>${!mine&&myI>T.idx?`<p class="fineprint">내 차례까지 ${myI-T.idx}명 남았어요</p>`:''}</div>${body}<button class="btn tertiary full" data-action="live-leave" style="margin-top:12px">방 나가기</button></main></div>`;}
 function liveTick(){if(!live)return;const st=live.state,me=liveMe();clearInterval(live.cd);live.cd=null;
  if(st?.phase==='playing'&&st.party&&live.startedRound===st.round){
   const upd=()=>{if(!live||screen!=='live')return clearInterval(live?.cd);const el=document.getElementById('ptTime'),dl=live.state?.party?.deadline;if(el&&dl){const left=Math.max(0,dl-live.conn.serverNow());el.textContent=`${Math.ceil(left/1000)}초`;el.classList.toggle('urgent',left<5000);}};
@@ -370,7 +393,7 @@ function liveView(){
  ${st.phase!=='playing'&&isHost&&!(st.series?.started&&!st.series?.done)?modePicker(st):''}
  ${st.phase!=='playing'?`<div class="choice-title">이번 판 게임 <small>${isHost?'방장이 골라요':'방장이 고르는 중'}</small></div>
  ${PARTY_IDS.includes(st.game)?`<p class="fineprint party-rule">${esc(LIVE_EXTRA[st.game].short)} (${LIVE_EXTRA[st.game].min}명 이상)</p>`:''}${isHost?`<div class="live-games">${[...Object.values(LIVE_EXTRA),...GAMES].map(g=>`<button data-live-game="${g.id}" class="${g.color} ${st.game===g.id?'active':''} ${PARTY_IDS.includes(g.id)?'party':''}"><span>${g.symbol}</span>${esc(g.title)}${PARTY_IDS.includes(g.id)?`<em>${g.coop?'협동':'파티'} · ${g.min}명+</em>`:''}</button>`).join('')}</div>
-  ${st.game==='forehead'?topicPicker(st):''}${BOT_PARTY.includes(st.game)?botPicker(st):''}<div class="live-levels" ${PARTY_IDS.includes(st.game)?'hidden':''}>${LEVELS.map(k=>`<button data-live-level="${k}" class="${st.level===k?'active':''}">${LEVEL_KO[k]}</button>`).join('')}</div>`
+  ${st.game==='forehead'?topicPicker(st):''}${BOT_PARTY.includes(st.game)?botPicker(st):''}${!PARTY_IDS.includes(st.game)&&!['gomoku','dots'].includes(st.game)?`<div class="choice-title">진행 방식</div><div class="live-modes turnmode"><button data-live-turn="1" class="${st.turnMode!==false?'active':''}">👀 차례대로<small>한 명씩, 나머진 관전</small></button><button data-live-turn="0" class="${st.turnMode===false?'active':''}">⚡ 동시에<small>다 같이 한 번에</small></button></div>`:''}<div class="live-levels" ${PARTY_IDS.includes(st.game)?'hidden':''}>${LEVELS.map(k=>`<button data-live-level="${k}" class="${st.level===k?'active':''}">${LEVEL_KO[k]}</button>`).join('')}</div>`
  :`<div class="live-picked ${G.color}"><span>${G.symbol}</span><div><b>${esc(G.title)}</b><small>${esc(G.short)}</small></div></div>`}
  <button class="btn ${ready?'secondary':'primary'} full live-ready" data-action="live-ready">${ready?'준비 취소':st.series?.done?'새 시리즈 시작 · 준비':st.series?.started?`다음 판 준비 (${seriesNextLabel(st.series)})`:st.phase==='result'?'한 판 더! 준비 완료':'준비 완료'}</button>
  <p class="fineprint">${enough?'모두 준비하면 3초 뒤 같은 판으로 동시에 시작해요.':'친구가 들어오면 시작할 수 있어요. 초대하기를 눌러 링크를 보내세요.'}</p>`:''}
@@ -662,7 +685,7 @@ function complete(){if(!session||!session.game.over)return;
  profile.best[s.id]=Math.max(Number(profile.best[s.id]||0),g.score);
  profile.history=[{id:s.id,score:g.score,mode:s.mode,at:new Date().toISOString(),victory},...profile.history].slice(0,30);
  saveProfile();
- if(s.mode==='live'){live?.conn?.send({t:'done',score:g.score,round:s.liveRound});screen='live';render();window.scrollTo?.(0,0);return;}
+ if(s.mode==='live'){live?.conn?.send({t:'done',score:g.score,round:s.liveRound});clearInterval(snapTimer);screen=s.turn&&live?.state?.phase==='playing'?'spectate':'live';live&&(live.spec=null);render();window.scrollTo?.(0,0);return;}
  screen='result';render();window.scrollTo?.(0,0);
 }
 function result(){const s=session,g=s.game,enemy=opponentScore(),victory=calcVictory();
@@ -702,7 +725,7 @@ function settings(){
 // 게임 색은 라운지에서 그 게임이 놓인 테이블 네온 색을 따라가요 (라운지 ↔ 게임 화면 색이 이어지게)
 const ZONE_TINT={blind:'rose',trust:'rose',auction:'rose',marbles:'rose',minority:'rose',baseball:'sky',nim:'sky',redlight:'lime',bridge:'lime',gomoku:'violet',dots:'violet'};
 function render(){const gid=['intro','game','result','aiturn'].includes(screen)?(session&&screen!=='intro'?session.id:selectedGame):null;const de=document.documentElement;if(de?.dataset){if(gid&&GAME_BY_ID[gid])de.dataset.game=ZONE_TINT[gid]||GAME_BY_ID[gid].color;else delete de.dataset.game;}
- root.innerHTML=screen==='aiturn'?aiTurnView():screen==='live'?liveView():screen==='home'?home():screen==='intro'?intro():screen==='game'?gameView():screen==='result'?result():screen==='wallet'?wallet():screen==='settings'?settings():records();renderToast();if(screen==='game'){bindTracer();bindRedLight();bindBridge();bindGameExtras();if(session?.mode==='live'){sendLiveProgress();syncStage();}}syncGameStage();if(screen==='live'){liveTick();syncStage();}renderChatDock();}
+ root.innerHTML=screen==='spectate'?spectateView():screen==='aiturn'?aiTurnView():screen==='live'?liveView():screen==='home'?home():screen==='intro'?intro():screen==='game'?gameView():screen==='result'?result():screen==='wallet'?wallet():screen==='settings'?settings():records();renderToast();if(screen==='game'){bindTracer();bindRedLight();bindBridge();bindGameExtras();if(session?.mode==='live'){sendLiveProgress();syncStage();}}syncGameStage();if(screen==='live'){liveTick();syncStage();}renderChatDock();}
 // 라운지가 허브: 라운지에서 들어온 게임은 어디서 나가든 그 테이블 앞으로 돌아가요 (번 칩도 같이 알려줌)
 function toLounge(){if(screen==='game'&&session&&!session.game.over){if(!confirm(session.mode==='live'?'이번 판을 포기할까요? 지금 점수로 기록돼요.':'진행 중인 게임을 그만두고 라운지로 돌아갈까요? 이 판의 보상은 지급되지 않아요.'))return true;
   if(session.mode==='live')live?.conn?.send({t:'done',score:session.game.score,round:session.liveRound});}
@@ -763,7 +786,7 @@ async function requestAd(){if(loadingAd)return;
  finally{loadingAd=false;render();}
 }
 root.addEventListener('click',async e=>{
- const target=e.target.closest('[data-action],[data-open],[data-filter],[data-start],[data-buy],[data-lane],[data-number],[data-card],[data-trust],[data-digit],[data-take],[data-bid],[data-mb-bet],[data-mb-guess],[data-mb-hide],[data-side],[data-mi],[data-theme-choice],[data-quick],[data-live-game],[data-live-bots],[data-live-level],[data-live-mode],[data-live-topic],[data-accuse],[data-side2],[data-sd-cell],[data-sd-num],[data-mg-dir],[data-st-ans],[data-gm-cell],[data-db-line],[data-emoji],[data-chat-quick]');if(!target)return;
+ const target=e.target.closest('[data-action],[data-open],[data-filter],[data-start],[data-buy],[data-lane],[data-number],[data-card],[data-trust],[data-digit],[data-take],[data-bid],[data-mb-bet],[data-mb-guess],[data-mb-hide],[data-side],[data-mi],[data-theme-choice],[data-quick],[data-live-game],[data-live-bots],[data-live-turn],[data-live-level],[data-live-mode],[data-live-topic],[data-accuse],[data-side2],[data-sd-cell],[data-sd-num],[data-mg-dir],[data-st-ans],[data-gm-cell],[data-db-line],[data-emoji],[data-chat-quick]');if(!target)return;
  const action=target.dataset.action;
  if(action==='login'){askLogin();return;}
  if(action==='ai-skip'&&session?.rp){stopReplay();session.rp.i=replayLen();session.rp.done=true;patchReplay();return;}
@@ -788,6 +811,7 @@ root.addEventListener('click',async e=>{
  if(action==='live-create'){joinLive(newRoomCode(),null);return;}
  if(action==='live-create-here'){joinLive(newRoomCode(),selectedGame);screen='live';render();return;}
  if(action==='live-join'){const c=live?live.code:normalizeCode(document.getElementById('roomCode')?.value||roomDraft);if(c.length<4)return flash('방 코드 4자리를 입력해 주세요.');joinLive(c,null);return;}
+ if(target.dataset.liveTurn!==undefined&&live){live.conn.send({t:'turnmode',v:target.dataset.liveTurn==='1'});return;}
  if(target.dataset.liveBots!==undefined&&live){live.conn.send({t:'bots',n:Number(target.dataset.liveBots)});return;}
  if(action==='live-ready'&&live){const me=liveMe();live.conn.send({t:'ready',v:!(me?.ready)});return;}
  if(action==='live-invite'&&live){await inviteToRoom();return;}

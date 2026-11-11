@@ -10,7 +10,7 @@ export const normalizeCode = (s) => String(s || '').toUpperCase().replace(/[^A-Z
 // 3D 라운지 드레스룸에서 꾸민 내 캐릭터 (lounge/avatar.js 가 저장). 다른 사람 화면의 무대에 이 모습으로 서요.
 const myLook = () => { try { return (localStorage.getItem('thinkchip:look') || '').slice(0, 300); } catch { return ''; } };
 
-export function connectLive({code, name, pid, onState, onEmoji, onChat, onChatLog, onStatus, onError}) {
+export function connectLive({code, name, pid, onState, onEmoji, onChat, onChatLog, onStatus, onError, onSnap}) {
   let ws = null, closedByUser = false, tries = 0, offset = 0, timer = null, ping = null;
   const open = () => {
     onStatus?.(tries ? 'reconnecting' : 'connecting');
@@ -24,6 +24,7 @@ export function connectLive({code, name, pid, onState, onEmoji, onChat, onChatLo
       else if (m.t === 'emoji') onEmoji?.(m);
       else if (m.t === 'chat') onChat?.(m);
       else if (m.t === 'chatlog') onChatLog?.(m.items || []);
+      else if (m.t === 'snap') onSnap?.(m);
       else if (m.t === 'error') { closedByUser = true; onError?.(m.code); }
     };
     ws.onclose = () => {
