@@ -493,6 +493,10 @@ body.to-lounge #app{opacity:0;transform:scale(.98);transition:opacity .24s ease,
 .spectate-view .topbar,.spectate-view .bottom-nav,.spectate-view .leave-game,.spectate-view .hint-row button{display:none}
 .spec-wait{text-align:center;padding:48px 10px;background:var(--surface);border:1px solid var(--line);border-radius:17px}.spec-wait b{font-size:18px}.spec-wait p{color:var(--muted);font-size:12.5px;margin:8px 0 0}
 .live-modes.turnmode button small{display:block;font-size:10px;opacity:.75;font-weight:500}
+
+.live-timer{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:60;padding:6px 14px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font:700 14px system-ui;font-variant-numeric:tabular-nums;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.live-timer.urgent{color:#ff5c7a;border-color:#ff5c7a;animation:ltPulse 1s infinite}@keyframes ltPulse{50%{transform:translateX(-50%) scale(1.08)}}
+.live-timer{display:flex;align-items:center;gap:8px}.live-timer button{font:700 11.5px system-ui;padding:4px 9px;border-radius:999px;border:1px solid var(--line);background:var(--accent-soft);color:var(--accent-ink)}
 </style></head><body><div id="app"><div id="boot" style="position:fixed;inset:0;display:grid;place-content:center;justify-items:center;gap:12px;background:#0b1020;color:#a3adc4;font:13px system-ui,sans-serif;z-index:99"><div style="width:34px;height:34px;border-radius:50%;border:3px solid rgba(255,255,255,.1);border-top-color:#f7ce55;animation:bootspin .9s linear infinite"></div><p style="margin:0">라운지 준비 중…</p><style>@keyframes bootspin{to{transform:rotate(360deg)}}</style></div></div><script src="./account.js"></script><script type="module">
 // ==== app.config.js ====
 // Public app configuration only. NEVER put API keys, mTLS keys or secrets here.
@@ -2269,6 +2273,17 @@ function beginLiveGame(myTurn){const st=live.state;live.startedRound=st.round;cl
  if(['gomoku','dots'].includes(st.game)){duelIdx=st.duel?.boards?.findIndex(b=>b.players.includes(livePid()));if(duelIdx<0||duelIdx===undefined){screen='live';render();return;}const bd=st.duel.boards[duelIdx];g=replayDuel(st.game,st.seed,st.level,bd);}
  session={id:st.game,mode:'live',seed,difficulty:st.level,game:g,challenger:null,botTarget:null,liveRound:st.round,lastSent:-1,duelIdx,t0:0,sel:null,flipped:false,hint:null,hintKey:null,award:0,input:[],bid:0,bet:1,preview:null,previewedStage:-1,rl:null,turn:!!st.turns};
  screen='game';rulesOpen=false;render();window.scrollTo?.(0,0);if(st.turns)startSnaps();}
+// 실시간 점수 대결 시간 제한: 남은 시간을 화면 위에 띄우고, 시간이 끝나면 지금 점수로 마감
+function liveDeadline(){const st=live?.state;if(!st||st.phase!=='playing')return 0;return st.turns?st.turns.deadline||0:st.endAt||0;}
+let limitTimer=setInterval(()=>{const dl=liveDeadline();let el=document.getElementById('liveTimer');
+ const show=dl&&(screen==='spectate'||(screen==='game'&&session?.mode==='live'&&!session.game.over));
+ if(!show){if(el)el.remove();return;}
+ const left=dl-live.conn.serverNow();if(!el){el=document.createElement('div');el.id='liveTimer';el.className='live-timer';document.body.appendChild(el);}
+ const sec=Math.max(0,Math.ceil(left/1000)),mine=screen==='game'&&session?.mode==='live'&&!session.game.over;
+ if(!el.firstChild){el.innerHTML='<span></span><button type="button" data-skip-turn="1">⏭ 넘기기</button>';}
+ el.firstChild.textContent=`⏱ ${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')}`;el.lastChild.hidden=!mine;el.classList.toggle('urgent',left<10000);
+ el.onclick=e=>{if(!e.target.closest('[data-skip-turn]')||!session||session.game.over)return;if(!confirm('이번 차례를 여기서 끝낼까요? 지금 점수로 기록돼요.'))return;session.game={...session.game,over:true};flash('⏭ 차례를 넘겼어요');complete();};
+ if(screen==='game'&&session?.mode==='live'&&!session.game.over&&left<=0&&(!live.state.turns||live.state.turns.order[live.state.turns.idx]===livePid())){session.game={...session.game,over:true};flash('⏰ 시간 끝! 지금 점수로 마감해요');complete();}},250);limitTimer.unref?.(); // 테스트(node)에서 프로세스가 안 끝나는 것 방지
 // 차례대로: 내 게임 화면 상태를 0.2초마다(바뀌었을 때만) 다른 사람에게 중계
 const SNAP_UI=['input','bid','bet','flipped','sel','preview','previewedStage','hint','t0','rl'];let snapTimer=0;
 function startSnaps(){clearInterval(snapTimer);let last='',k=0;const s0=session;

@@ -322,6 +322,17 @@ function beginLiveGame(myTurn){const st=live.state;live.startedRound=st.round;cl
  if(['gomoku','dots'].includes(st.game)){duelIdx=st.duel?.boards?.findIndex(b=>b.players.includes(livePid()));if(duelIdx<0||duelIdx===undefined){screen='live';render();return;}const bd=st.duel.boards[duelIdx];g=replayDuel(st.game,st.seed,st.level,bd);}
  session={id:st.game,mode:'live',seed,difficulty:st.level,game:g,challenger:null,botTarget:null,liveRound:st.round,lastSent:-1,duelIdx,t0:0,sel:null,flipped:false,hint:null,hintKey:null,award:0,input:[],bid:0,bet:1,preview:null,previewedStage:-1,rl:null,turn:!!st.turns};
  screen='game';rulesOpen=false;render();window.scrollTo?.(0,0);if(st.turns)startSnaps();}
+// 실시간 점수 대결 시간 제한: 남은 시간을 화면 위에 띄우고, 시간이 끝나면 지금 점수로 마감
+function liveDeadline(){const st=live?.state;if(!st||st.phase!=='playing')return 0;return st.turns?st.turns.deadline||0:st.endAt||0;}
+let limitTimer=setInterval(()=>{const dl=liveDeadline();let el=document.getElementById('liveTimer');
+ const show=dl&&(screen==='spectate'||(screen==='game'&&session?.mode==='live'&&!session.game.over));
+ if(!show){if(el)el.remove();return;}
+ const left=dl-live.conn.serverNow();if(!el){el=document.createElement('div');el.id='liveTimer';el.className='live-timer';document.body.appendChild(el);}
+ const sec=Math.max(0,Math.ceil(left/1000)),mine=screen==='game'&&session?.mode==='live'&&!session.game.over;
+ if(!el.firstChild){el.innerHTML='<span></span><button type="button" data-skip-turn="1">⏭ 넘기기</button>';}
+ el.firstChild.textContent=`⏱ ${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')}`;el.lastChild.hidden=!mine;el.classList.toggle('urgent',left<10000);
+ el.onclick=e=>{if(!e.target.closest('[data-skip-turn]')||!session||session.game.over)return;if(!confirm('이번 차례를 여기서 끝낼까요? 지금 점수로 기록돼요.'))return;session.game={...session.game,over:true};flash('⏭ 차례를 넘겼어요');complete();};
+ if(screen==='game'&&session?.mode==='live'&&!session.game.over&&left<=0&&(!live.state.turns||live.state.turns.order[live.state.turns.idx]===livePid())){session.game={...session.game,over:true};flash('⏰ 시간 끝! 지금 점수로 마감해요');complete();}},250);limitTimer.unref?.(); // 테스트(node)에서 프로세스가 안 끝나는 것 방지
 // 차례대로: 내 게임 화면 상태를 0.2초마다(바뀌었을 때만) 다른 사람에게 중계
 const SNAP_UI=['input','bid','bet','flipped','sel','preview','previewedStage','hint','t0','rl'];let snapTimer=0;
 function startSnaps(){clearInterval(snapTimer);let last='',k=0;const s0=session;

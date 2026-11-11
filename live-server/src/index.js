@@ -29,6 +29,9 @@ const TELE_PROMPTS = ['빨간 과일 하면?', '여름 하면 떠오르는 것',
 
 // ── 파티 게임 AI (빈자리 채우기): 사람이 모자라도 AI 1~3명이 같이 해요. 내 단어 맞히기는 대화가 필요해서 제외 ──
 const BOT_GAMES = ['liar', 'nunchi', 'vote', 'tele', 'mind'];
+// 실시간 점수 대결 시간 제한 (초): 한 사람이 너무 오래 끌지 않게. 시간이 끝나면 그때 점수로 마감
+const TIME_LIMIT = {blind: 60, trust: 50, baseball: 120, nim: 60, auction: 80, marbles: 100, redlight: 40, bridge: 90, minority: 80, flip: 90, triad: 90, maze: 60, draw: 60, sudoku: 240, merge: 120, stroop: 45};
+const limitMs = (g) => (TIME_LIMIT[g] || 90) * 1000;
 const BOTS = [{pid: 'bot1', name: '🤖 지우', look: ''}, {pid: 'bot2', name: '🤖 민수', look: ''}, {pid: 'bot3', name: '🤖 하린', look: ''}];
 const isBot = (id) => /^bot[1-3]$/.test(String(id));
 const TELE_ANSWERS = {'빨간 과일 하면?': ['사과', '딸기', '사과', '체리'], '여름 하면 떠오르는 것': ['수박', '바다', '수박', '에어컨'], '편의점에서 제일 먼저 집는 것': ['삼각김밥', '음료수', '라면', '삼각김밥'],
@@ -379,8 +382,8 @@ export class Room extends DurableObject {
       else if (P.kind === 'vote') party = {kind: 'vote', idx: P.idx, rounds: P.rounds, stage: P.stage, topic: P.topics[P.idx], deadline: P.deadline, voted: Object.keys(P.votes), myVote: P.votes[viewer] ?? null, history: P.history};
     }
     const duel = TURN.includes(game) && this.s.duel && phase !== 'lobby' ? this.s.duel : null;
-    const T = this.s.turns, turns = T && phase !== 'lobby' ? {order: T.order, idx: T.idx, startAt: T.startAt} : null;
-    return {t: 'state', code, phase, game, level, seed, round, startAt, serverNow: Date.now(), players, fh, party, duel, series: this.s.series, fhTopic: this.s.fhTopic || 'random', turnMode: this.s.turnMode !== false, turns};
+    const T = this.s.turns, turns = T && phase !== 'lobby' ? {order: T.order, idx: T.idx, startAt: T.startAt, deadline: T.deadline} : null;
+    return {t: 'state', code, phase, game, level, seed, round, startAt, serverNow: Date.now(), players, fh, party, duel, series: this.s.series, fhTopic: this.s.fhTopic || 'random', turnMode: this.s.turnMode !== false, turns, endAt: !T && phase === 'playing' ? this.s.endAt || 0 : 0};
   }
   async save() { await this.ctx.storage.put('s', this.s); }
   broadcast(msg) { const text = JSON.stringify(msg); for (const ws of this.ctx.getWebSockets()) { try { ws.send(text); } catch {} } }
@@ -394,6 +397,7 @@ export class Room extends DurableObject {
     const t = [], s = this.s;
     if (s.phase === 'playing') {
       if (s.fh?.endAt) t.push(s.fh.endAt + 200);
+      if (s.turns?.deadline) t.push(s.turns.deadline + 1600); if (s.endAt) t.push(s.endAt + 1600);
       if (s.party && !s.party.over) { if (s.party.deadline) t.push(s.party.deadline + 50); if (s.party.kind === 'nunchi' && s.party.pend) t.push(s.party.pend.at + 470);
         const bt = this.nextBotAt(); if (bt) t.push(bt + 10); if (Object.values(s.players).some((q) => q.inRound && isBot(q.pid))) t.push(Math.max(Date.now() + 400, s.startAt + 50)); } // AI 가 있으면 자주 깨워요
     }
@@ -403,13 +407,16 @@ export class Room extends DurableObject {
   nextTurn() { // 다음 사람 차례 (나간 사람은 건너뛰어요)
     const s = this.s, T = s.turns, on = this.online(); if (!T) return;
     do { T.idx += 1; } while (T.idx < T.order.length && (!on.has(T.order[T.idx]) || s.players[T.order[T.idx]]?.done));
-    T.startAt = Date.now() + 3300; this.lastSnap = null;
+    T.startAt = Date.now() + 3300; T.deadline = T.startAt + limitMs(s.game); this.lastSnap = null;
     if (T.idx < T.order.length) this.sysChat(`🎮 이제 ${s.players[T.order[T.idx]]?.name || '?'}님 차례!`);
   }
   checkRound() {
     if (this.s.phase !== 'playing') return;
     const on = this.online(), live = Object.values(this.s.players).filter((p) => p.inRound && on.has(p.pid));
-    const T = this.s.turns; if (T && T.idx < T.order.length && !on.has(T.order[T.idx]) && Date.now() >= this.s.startAt) { const cur = this.s.players[T.order[T.idx]]; if (cur) cur.done = true; this.nextTurn(); }
+    const T = this.s.turns, now = Date.now();
+    if (T && T.idx < T.order.length && now >= this.s.startAt && (!on.has(T.order[T.idx]) || (T.deadline && now >= T.deadline + 1500))) { // 나갔거나 시간 초과 → 지금 점수로 마감
+      const cur = this.s.players[T.order[T.idx]]; if (cur) { cur.done = true; if (on.has(cur.pid)) this.sysChat(`⏰ ${cur.name}님 시간 끝! ${cur.score}점으로 마감`); } this.nextTurn(); }
+    if (!T && this.s.endAt && now >= this.s.endAt + 1500) { let any = false; for (const q of live) if (!q.done) { q.done = true; any = true; } if (any) this.sysChat('⏰ 시간 끝! 지금 점수로 마감해요'); }
     if (Date.now() < this.s.startAt) {
       if (live.length < 2) { this.s.phase = 'lobby'; for (const p of Object.values(this.s.players)) { p.inRound = false; p.ready = false; } }
       return;
@@ -751,9 +758,10 @@ export class Room extends DurableObject {
           } else if (PARTY.includes(s.game)) { s.fh = null; this.startParty(s.game); }
           else { s.fh = null; s.party = null; }
           s.duel = null; s.turns = null; this.lastSnap = null;
+          s.endAt = !TURN.includes(s.game) && !PARTY.includes(s.game) && s.game !== 'forehead' ? s.startAt + limitMs(s.game) : 0; // 동시에 모드 마감
           if (s.turnMode !== false && !TURN.includes(s.game) && !PARTY.includes(s.game) && s.game !== 'forehead') { // 차례대로: 한 사람씩, 나머지는 관전
             const order = Object.values(s.players).filter((q) => q.inRound && !isBot(q.pid)).map((q) => q.pid).sort(() => Math.random() - 0.5);
-            s.turns = {order, idx: 0, startAt: s.startAt};
+            s.turns = {order, idx: 0, startAt: s.startAt, deadline: s.startAt + limitMs(s.game)};
           }
           if (TURN.includes(s.game)) {
             const sr = s.series, ids = Object.values(s.players).filter((q) => q.inRound).sort((a, b) => a.joinedAt - b.joinedAt).map((q) => q.pid);
