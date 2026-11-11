@@ -505,6 +505,17 @@
 
   document.querySelector('.dock-right').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; ({games: openGames, closet: () => goToZone(ZONES.find((z) => z.closet)), desk: () => goToZone(ZONES.find((z) => z.desk)), friends: openFriends, room: openRoomDeco})[b.dataset.open]?.(); };
   $('chipsBtn').onclick = openDesk;
+  // 왼쪽 위 로고: 라운지를 떠나지 않고 방 정보·이동 메뉴를 열어요 (예전엔 옛 홈으로 나가서 돌아올 길이 없었어요)
+  $('brandBtn').onclick = (e) => { e.preventDefault(); openSheet({kicker: room.public ? 'PUBLIC LOUNGE' : 'FRIEND ROOM', title: room.public ? '🌐 공개 라운지' : `👥 친구 방 · ${room.code}`, html: `
+    <div class="card"><p>${room.public ? '누구나 들어올 수 있는 라운지예요. 친구들끼리만 모이려면 친구 방을 만들어 보세요.' : '방 코드로 들어온 친구들만 있는 라운지예요. 방장이 꾸민 방이 보여요.'}</p></div>
+    <div class="game-list">
+      <button class="game-btn" data-go="games"><i style="background:#8b7bff">🎮</i><span><b>게임 고르기</b><small>테이블별 24가지 게임</small></span></button>
+      <button class="game-btn" data-go="friends"><i style="background:#3fcf8e">👥</i><span><b>${room.public ? '친구 방 만들기 · 입장' : '친구 방 설정'}</b><small>방 코드로 같이 놀기</small></span></button>
+      ${room.public ? '' : '<button class="game-btn" data-go="public"><i style="background:#38bdf8">🌐</i><span><b>공개 라운지로 가기</b><small>모두가 모이는 곳</small></span></button>'}
+      <a class="game-btn" href="${ARENA_HOME}" style="text-decoration:none;color:inherit"><i style="background:#ffb020">📋</i><span><b>목록으로 보기</b><small>2D 게임 목록 화면 (아레나 입장 버튼으로 돌아와요)</small></span></a>
+    </div>`});
+    $('sheetBody').onclick = (ev) => { const b = ev.target.closest('[data-go]'); if (!b) return; const g = b.dataset.go; closeSheet(); if (g === 'games') openGames(); else if (g === 'friends') openFriends(); else if (g === 'public') switchRoom(null); };
+  };
   const VIEWS = [{name: '전경', pitch: 0.82, dist: null}, {name: '눈높이', pitch: 0.28, dist: 11}, {name: '탑뷰', pitch: 1.3, dist: null}];
   let viewIdx = 0;
   if ($('viewBtn')) $('viewBtn').onclick = () => { viewIdx = (viewIdx + 1) % VIEWS.length; const v = VIEWS[viewIdx]; camState.pitch = v.pitch; if (v.dist) camState.dist = v.dist; else resize(); toast(`${v.name} 보기 · 화면을 밀어서 돌려 보세요`); };

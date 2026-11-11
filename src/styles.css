@@ -433,3 +433,5 @@ a.hero-cta{text-decoration:none}
 .live-stage{margin:0 0 14px;border-radius:18px;background:radial-gradient(120% 90% at 50% 100%,rgba(124,140,255,.22),transparent 70%),var(--surface);border:1px solid var(--line);overflow:hidden;min-height:0}
 .live-stage:empty{display:none}
 .tc-stage .tc-name{position:absolute;transform:translate(-50%,0);font:700 10.5px/1 system-ui,sans-serif;color:var(--text);background:var(--surface);border:1px solid var(--line);padding:3px 7px;border-radius:999px;white-space:nowrap}
+
+.lounge-link{display:grid;place-items:center;text-decoration:none;font-size:16px}
