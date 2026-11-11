@@ -26,6 +26,20 @@ const FH_WORDS = {
   '스포츠': ['축구', '야구', '농구', '배구', '탁구', '테니스', '골프', '수영', '마라톤', '볼링', '스키', '태권도', '복싱', '양궁', '배드민턴', '스케이트', '씨름', '펜싱', '서핑', '클라이밍', '줄넘기', '당구', '유도', '역도'],
 };
 const TELE_PROMPTS = ['빨간 과일 하면?', '여름 하면 떠오르는 것', '편의점에서 제일 먼저 집는 것', '동물원 하면 제일 먼저 보러 갈 동물', '월요일 하면?', '바다 하면?', '겨울 간식 하면?', '학교 하면 떠오르는 것', '1부터 10 중 숫자 하나', '색깔 하나', '아침 메뉴 하면?', '제일 무서운 동물', '생일 선물 하면?', '비 오는 날 먹고 싶은 것', '캠핑 하면?', '야식 하면?', '한국 하면 떠오르는 음식', '크리스마스 하면?', '귀여운 동물 하면?', '운동 하면 떠오르는 것'];
+
+// ── 파티 게임 AI (빈자리 채우기): 사람이 모자라도 AI 1~3명이 같이 해요. 내 단어 맞히기는 대화가 필요해서 제외 ──
+const BOT_GAMES = ['liar', 'nunchi', 'vote', 'tele', 'mind'];
+const BOTS = [{pid: 'bot1', name: '🤖 지우', look: ''}, {pid: 'bot2', name: '🤖 민수', look: ''}, {pid: 'bot3', name: '🤖 하린', look: ''}];
+const isBot = (id) => /^bot[1-3]$/.test(String(id));
+const TELE_ANSWERS = {'빨간 과일 하면?': ['사과', '딸기', '사과', '체리'], '여름 하면 떠오르는 것': ['수박', '바다', '수박', '에어컨'], '편의점에서 제일 먼저 집는 것': ['삼각김밥', '음료수', '라면', '삼각김밥'],
+  '동물원 하면 제일 먼저 보러 갈 동물': ['사자', '기린', '판다', '사자'], '월요일 하면?': ['출근', '피곤', '출근', '등교'], '바다 하면?': ['파도', '모래', '수영', '파도'], '겨울 간식 하면?': ['붕어빵', '군고구마', '붕어빵', '호떡'],
+  '학교 하면 떠오르는 것': ['급식', '선생님', '시험', '급식'], '1부터 10 중 숫자 하나': ['7', '3', '7', '1'], '색깔 하나': ['빨강', '파랑', '파랑', '노랑'], '아침 메뉴 하면?': ['토스트', '밥', '시리얼', '토스트'],
+  '제일 무서운 동물': ['상어', '호랑이', '뱀', '상어'], '생일 선물 하면?': ['케이크', '꽃', '케이크', '돈'], '비 오는 날 먹고 싶은 것': ['파전', '라면', '파전', '짬뽕'], '캠핑 하면?': ['고기', '텐트', '불멍', '고기'],
+  '야식 하면?': ['치킨', '라면', '치킨', '족발'], '한국 하면 떠오르는 음식': ['김치', '비빔밥', '김치', '불고기'], '크리스마스 하면?': ['산타', '트리', '산타', '선물'], '귀여운 동물 하면?': ['고양이', '강아지', '판다', '고양이'], '운동 하면 떠오르는 것': ['헬스', '축구', '달리기', '헬스']};
+const LIAR_BLUFF = ['음… 다들 아는 거예요', '생각보다 흔해요', '저는 좋아해요 ㅎㅎ', '자주 봐요', '이름만 들어도 알 걸요?'];
+const LIAR_FEEL = {'동물': ['동물원에 있어요', '귀여울 수도 무서울 수도', '털이 있을 수도'], '음식': ['맛있어요', '배고플 때 생각나요', '한국에서 많이 먹어요'], '직업': ['일하는 사람이에요', '유니폼이 있을 수도', '어릴 때 꿈이었을지도'],
+  '물건': ['집에 하나쯤 있어요', '매일 쓸 수도', '손에 들 수 있어요'], '장소': ['가 본 적 있을 거예요', '사람이 많을 때가 있어요', '주말에 가요'], '스포츠': ['땀 흘려요', 'TV에서 봤어요', '공이 있을 수도']};
+const rnd = (a, b) => a + Math.random() * (b - a), pickR = (a) => a[Math.floor(Math.random() * a.length)];
 const BASE_CATS = () => Object.keys(FH_WORDS).filter((k) => !k.startsWith('__'));
 const DILEMMAS = [['평생 여름', '평생 겨울'], ['과거로 가기', '미래로 가기'], ['투명인간', '순간이동'], ['짜장면', '짬뽕'], ['부먹', '찍먹'], ['산', '바다'], ['아침형', '저녁형'], ['고양이', '강아지'], ['카톡 답장 바로', '천천히'], ['돈 많은 백수', '바쁜 부자'], ['민초 좋아', '민초 싫어'], ['깻잎 떼줘도 됨', '절대 안 됨'], ['여행은 계획', '여행은 즉흥'], ['콜라', '사이다'], ['치킨', '피자'], ['영화관', '집에서 넷플'], ['혼밥 가능', '혼밥 불가'], ['첫눈에 반함', '천천히 스며듦'], ['1억 받고 10년 늙기', '그냥 살기'], ['라면에 계란 넣기', '안 넣기']];
 const norm = (t) => String(t || '').toLowerCase().replace(/[\s.,!?~\-_'"]/g, '');
@@ -333,12 +347,18 @@ export class Room extends DurableObject {
   }
   hpView() { const hp = this.s.hp || {}; return {t: 'hp', today: hp.today || 0, total: hp.total || 0, gb: hp.gb || []}; }
   fresh() { return {code: '', phase: 'lobby', game: 'flip', level: 'normal', seed: '', round: 0, startAt: 0, players: {}, chat: [], series: null}; }
-  online() { const ids = new Set(); for (const ws of this.ctx.getWebSockets()) { if (ws.readyState !== 1) continue; const a = ws.deserializeAttachment(); if (a?.pid) ids.add(a.pid); } return ids; }
-  hostId(on = this.online()) { return Object.values(this.s.players).filter((p) => on.has(p.pid)).sort((a, b) => a.joinedAt - b.joinedAt)[0]?.pid || null; }
+  online() { const ids = new Set(); for (const ws of this.ctx.getWebSockets()) { if (ws.readyState !== 1) continue; const a = ws.deserializeAttachment(); if (a?.pid) ids.add(a.pid); }
+    if (ids.size) for (const id of Object.keys(this.s.players)) if (isBot(id)) ids.add(id); // AI 는 사람이 있을 때만 '접속 중'
+    return ids; }
+  humans() { const ids = new Set(); for (const ws of this.ctx.getWebSockets()) { if (ws.readyState !== 1) continue; const a = ws.deserializeAttachment(); if (a?.pid) ids.add(a.pid); } return ids; }
+  setBots(n) { const s = this.s; n = Math.max(0, Math.min(3, Math.trunc(Number(n) || 0)));
+    for (const b of BOTS) { const want = BOTS.indexOf(b) < n; if (want && !s.players[b.pid]) s.players[b.pid] = {pid: b.pid, name: b.name, look: b.look, deco: '', joinedAt: Date.now() + 1e9, ready: true, score: 0, done: false, inRound: false, bot: true}; if (!want) delete s.players[b.pid]; }
+    if (n) this.sysChat(`🤖 AI ${n}명이 빈자리를 채웠어요`); }
+  hostId(on = this.online()) { return Object.values(this.s.players).filter((p) => on.has(p.pid) && !isBot(p.pid)).sort((a, b) => a.joinedAt - b.joinedAt)[0]?.pid || null; }
   view(viewer) {
     const on = this.online(), host = this.hostId(on);
     const players = Object.values(this.s.players).filter((p) => on.has(p.pid) || (this.s.phase !== 'lobby' && p.inRound))
-      .sort((a, b) => a.joinedAt - b.joinedAt).map((p) => ({pid: p.pid, name: p.name, ready: p.ready, score: p.score, done: p.done, inRound: p.inRound, online: on.has(p.pid), host: p.pid === host, look: p.look || '', deco: p.deco || '', pos: this.pos?.[p.pid] || null}));
+      .sort((a, b) => a.joinedAt - b.joinedAt).map((p) => ({pid: p.pid, name: p.name, bot: isBot(p.pid), ready: p.ready, score: p.score, done: p.done, inRound: p.inRound, online: on.has(p.pid), host: p.pid === host, look: p.look || '', deco: p.deco || '', pos: this.pos?.[p.pid] || null}));
     const {code, phase, game, level, seed, round, startAt} = this.s;
     let fh = null;
     if (game === 'forehead' && this.s.fh && phase !== 'lobby') {
@@ -373,7 +393,8 @@ export class Room extends DurableObject {
     const t = [], s = this.s;
     if (s.phase === 'playing') {
       if (s.fh?.endAt) t.push(s.fh.endAt + 200);
-      if (s.party && !s.party.over) { if (s.party.deadline) t.push(s.party.deadline + 50); if (s.party.kind === 'nunchi' && s.party.pend) t.push(s.party.pend.at + 470); }
+      if (s.party && !s.party.over) { if (s.party.deadline) t.push(s.party.deadline + 50); if (s.party.kind === 'nunchi' && s.party.pend) t.push(s.party.pend.at + 470);
+        const bt = this.nextBotAt(); if (bt) t.push(bt + 10); if (Object.values(s.players).some((q) => q.inRound && isBot(q.pid))) t.push(Math.max(Date.now() + 400, s.startAt + 50)); } // AI 가 있으면 자주 깨워요
     }
     if (t.length) await this.ctx.storage.setAlarm(Math.max(Date.now() + 20, Math.min(...t)));
   }
@@ -443,6 +464,7 @@ export class Room extends DurableObject {
   tickParty() {
     const s = this.s, P = s.party, now = Date.now();
     if (s.phase !== 'playing' || !P || P.over || now < s.startAt) return;
+    this.botsAct(now); if (P.over) return;
     const name = (id) => s.players[id]?.name || '?';
     if (P.kind === 'liar') {
       if (P.stage === 'hint' && now >= P.deadline) { P.hints.push({pid: P.order[P.turn % P.order.length], text: '(패스)'}); this.liarNextHint(); }
@@ -488,6 +510,62 @@ export class Room extends DurableObject {
         P.idx += 1; P.votes = {};
         if (P.idx >= P.rounds) this.endParty(); else { P.stage = 'vote'; P.deadline = now + 15000; }
       }
+    }
+  }
+  // AI 차례 처리: 각 AI 마다 '다음에 움직일 시각'(P.bt)을 정해 두고, 그 시각이 되면 행동해요
+  botsAct(now) {
+    const s = this.s, P = s.party; if (!P || P.over) return;
+    const bots = Object.values(s.players).filter((q) => q.inRound && isBot(q.pid)); if (!bots.length) return;
+    P.bt = P.bt || {}; const due = (id, a, b) => { if (P.bt[id] === undefined) P.bt[id] = now + rnd(a, b); return now >= P.bt[id]; }, clear = (id) => { delete P.bt[id]; };
+    if (P.kind === 'liar') {
+      if (P.stage === 'hint') { const cur = P.order[P.turn % P.order.length]; if (isBot(cur) && due(cur + ':h' + P.turn, 2500, 5000)) {
+        const len = [...String(P.word).replace(/\s/g, '')].length, liar = cur === P.liar;
+        const text = liar ? (Math.random() < 0.5 ? pickR(LIAR_BLUFF) : `${pickR([2, 3, 3, 4])}글자… 맞나? ㅎㅎ`) : (Math.random() < 0.55 ? `${len}글자예요 · ${pickR(LIAR_FEEL[P.cat] || LIAR_BLUFF)}` : pickR(LIAR_FEEL[P.cat] || LIAR_BLUFF));
+        P.hints.push({pid: cur, text}); this.liarNextHint(); } }
+      else if (P.stage === 'vote') for (const b of bots) { if (P.votes[b.pid] || !due(b.pid + ':v', 3000, 9000)) continue;
+        const others = P.order.filter((id) => id !== b.pid), sus = b.pid !== P.liar && Math.random() < 0.38 ? P.liar : pickR(others); P.votes[b.pid] = sus;
+        if (this.racers().every((q) => P.votes[q.pid])) { this.liarTally(); return; } }
+      else if (P.stage === 'lastguess' && isBot(P.liar) && due(P.liar + ':g', 3000, 6000)) { P.guess = pickR(FH_WORDS[P.cat] || [P.word]); this.sysChat(`🤖 ${s.players[P.liar]?.name}: '${P.guess}'?`); this.liarFinish(norm(P.guess) === norm(P.word)); }
+    } else if (P.kind === 'nunchi') {
+      for (const b of bots) { if (P.safe.includes(b.pid) || P.out.includes(b.pid) || P.pend?.pid === b.pid) continue;
+        if (P.bt[b.pid] === undefined) P.bt[b.pid] = s.startAt + rnd(1200, Math.max(2500, P.deadline - s.startAt - 1500));
+        if (now >= P.bt[b.pid]) { clear(b.pid); this.nunchiCall(b.pid, now); } }
+    } else if (P.kind === 'tele') {
+      if (P.stage === 'answer') for (const b of bots) { if (b.pid in P.answers || !due(b.pid + ':t' + P.idx, 3000, 12000)) continue; P.answers[b.pid] = pickR(TELE_ANSWERS[P.prompts[P.idx]] || ['몰라요']); }
+    } else if (P.kind === 'mind') {
+      if (P.stage !== 'play') return;
+      const top = P.played.length ? P.played[P.played.length - 1].n : 0; P.lastAt = P.lastAt || now;
+      for (const b of bots) { const h = P.hands[b.pid]; if (!h?.length) continue;
+        const key = `${b.pid}:m${h[0]}:${top}`; if (P.bt[key] === undefined) P.bt[key] = Math.max(now, P.lastAt) + 1400 + (h[0] - top) * rnd(110, 170);
+        if (now >= P.bt[key]) { delete P.bt[key]; this.mindPlay(b.pid); P.lastAt = Date.now(); return; } }
+    } else if (P.kind === 'vote') {
+      if (P.stage === 'vote') for (const b of bots) { if (b.pid in P.votes || !due(b.pid + ':s' + P.idx, 2000, 9000)) continue; P.votes[b.pid] = Math.random() < 0.5 ? 0 : 1; }
+    }
+  }
+  nextBotAt() { const P = this.s.party; if (!P?.bt || P.over) return null; const t = Object.values(P.bt).filter((x) => x > Date.now() - 5000); return t.length ? Math.min(...t) : null; }
+  nunchiCall(pid, now) { // 눈치 게임: 숫자 외치기 (사람·AI 공통)
+    const s = this.s, P = s.party, p = s.players[pid]; if (!P || !p) return;
+    if (P.pend && now - P.pend.at < 450) { // 동시에 외침! 둘 다 탈락, 번호는 그대로
+      P.out.push(P.pend.pid, pid); P.calls.push({...P.pend, ok: false, clash: true}, {pid, n: P.pend.n, at: now, ok: false, clash: true});
+      this.sysChat(`💥 ${s.players[P.pend.pid]?.name}·${p.name} 동시에 ${P.pend.n}! 둘 다 탈락`); P.next = P.pend.n; P.pend = null;
+    } else {
+      if (P.pend) { P.safe.push(P.pend.pid); P.calls.push({...P.pend, ok: true}); P.next = P.pend.n + 1; }
+      P.pend = {pid, n: P.next, at: now};
+    }
+  }
+  mindPlay(pid) { // 타이밍 맞추기: 가장 작은 카드 내기 (사람·AI 공통)
+    const s = this.s, P = s.party, p = s.players[pid], hand = P?.hands?.[pid]; if (!hand?.length) return;
+    const card = hand.shift(), lower = [];
+    for (const [id, h] of Object.entries(P.hands)) while (h.length && h[0] < card) lower.push({pid: id, n: h.shift()});
+    P.played.push({pid, n: card, ok: !lower.length});
+    if (lower.length) {
+      P.lives -= 1; for (const c of lower) P.played.push({...c, ok: false, burned: true});
+      this.sysChat(`💥 ${p.name}님 ${card}! 더 작은 수 ${lower.map((c) => c.n).join(', ')}이(가) 남아 있었어요. 목숨 -1`);
+      if (P.lives <= 0) { this.mindEnd(false); return; }
+    }
+    if (Object.values(P.hands).every((h) => !h.length)) {
+      if (P.level >= P.maxLevel) { this.mindEnd(true); return; }
+      P.level += 1; P.stage = 'between'; P.deadline = Date.now() + 3500; this.sysChat(`✅ ${P.level - 1}단계 성공! 다음은 한 사람당 ${P.level}장`);
     }
   }
   liarNextHint() {
@@ -592,12 +670,12 @@ export class Room extends DurableObject {
     for (const ws of this.ctx.getWebSockets()) { if (ws !== server && ws.deserializeAttachment()?.pid === pid) { try { ws.close(4001, 'replaced'); } catch {} } }
     const on = this.online();
     if (!this.s.players[pid] && on.size >= (code.startsWith('LNG') ? LOUNGE_MAX : MAX_PLAYERS)) { server.send(JSON.stringify({t: 'error', code: 'full'})); server.close(4002, 'full'); return new Response(null, {status: 101, webSocket: client}); }
-    if (!on.size && this.s.phase !== 'lobby') { const hp = this.s.hp; this.s = this.fresh(); if (hp) this.s.hp = hp; } // everyone had left: start over (방명록·방문자 수는 남겨요)
+    if (!this.humans().size && this.s.phase !== 'lobby') { const hp = this.s.hp; this.s = this.fresh(); if (hp) this.s.hp = hp; } // everyone had left: start over (방명록·방문자 수는 남겨요)
     this.s.code = code;
     const p = this.s.players[pid] || {pid, joinedAt: Date.now(), ready: false, score: 0, done: false, inRound: false};
     this.s.players[pid] = {...p, name, look: cleanLook(url.searchParams.get('look')), deco: cleanDeco(url.searchParams.get('deco'))};
     // Forget players who left long ago so the room does not fill with ghosts.
-    for (const [id, q] of Object.entries(this.s.players)) if (id !== pid && !on.has(id) && !q.inRound) delete this.s.players[id];
+    for (const [id, q] of Object.entries(this.s.players)) if (id !== pid && !on.has(id) && !q.inRound && !isBot(id)) delete this.s.players[id];
     server.serializeAttachment({pid});
     this.visit(pid);
     await this.sync();
@@ -617,9 +695,14 @@ export class Room extends DurableObject {
         if (s.series && PARTY.includes(s.game)) s.game = 'flip';
         for (const q of Object.values(s.players)) q.ready = false;
         s.phase = 'lobby'; break;
+      case 'bots': // 방장: 파티 게임 빈자리를 AI 로 채우기 (0~3명)
+        if (!isHost || s.phase === 'playing') return;
+        if (!BOT_GAMES.includes(s.game)) { this.sysChat('AI 는 거짓말쟁이·눈치·소수결·마음 맞추기·타이밍 게임에서만 같이 할 수 있어요.'); return; }
+        this.setBots(m.n); break;
       case 'pick':
         if (!isHost || s.phase === 'playing') return;
         if (GAMES.includes(m.game)) s.game = m.game;
+        if (!BOT_GAMES.includes(s.game)) this.setBots(0); // AI 는 파티 게임에서만
         if (LEVELS.includes(m.level)) s.level = m.level;
         if (FH_TOPICS.includes(m.topic)) s.fhTopic = m.topic;
         for (const q of Object.values(s.players)) q.ready = false;
@@ -627,7 +710,7 @@ export class Room extends DurableObject {
       case 'ready': {
         if (s.phase === 'playing') return;
         if (s.phase === 'result') { s.phase = 'lobby'; for (const q of Object.values(s.players)) { q.ready = false; } }
-        p.ready = !!m.v;
+        p.ready = !!m.v; for (const q of Object.values(s.players)) if (isBot(q.pid)) q.ready = true;
         const on = this.online(), here = Object.values(s.players).filter((q) => on.has(q.pid));
         if (s.series?.done) s.series = this.newSeries(s.series.kind, s.series.len); // champion decided → a new series on the next start
         if (here.length >= 2 && here.every((q) => q.ready) && here.length < (MIN_PLAYERS[s.game] || 2)) { for (const q of here) q.ready = false; this.sysChat(`이 게임은 ${MIN_PLAYERS[s.game]}명 이상 있어야 시작할 수 있어요.`); break; }
@@ -702,14 +785,7 @@ export class Room extends DurableObject {
       case 'call': {
         const P = s.party, now = Date.now(); if (s.phase !== 'playing' || P?.kind !== 'nunchi' || P.over || now < s.startAt || !p.inRound) return;
         if (P.safe.includes(pid) || P.out.includes(pid) || P.pend?.pid === pid) return;
-        if (P.pend && now - P.pend.at < 450) { // 동시에 외침! 둘 다 탈락, 번호는 그대로
-          P.out.push(P.pend.pid, pid); P.calls.push({...P.pend, ok: false, clash: true}, {pid, n: P.pend.n, at: now, ok: false, clash: true});
-          this.sysChat(`💥 ${s.players[P.pend.pid]?.name}·${p.name} 동시에 ${P.pend.n}! 둘 다 탈락`); P.next = P.pend.n; P.pend = null;
-        } else {
-          if (P.pend) { P.safe.push(P.pend.pid); P.calls.push({...P.pend, ok: true}); P.next = P.pend.n + 1; }
-          P.pend = {pid, n: P.next, at: now};
-        }
-        break;
+        this.nunchiCall(pid, now); break;
       }
       case 'tele': {
         const P = s.party; if (s.phase !== 'playing' || P?.kind !== 'tele' || P.stage !== 'answer' || !p.inRound || Date.now() < s.startAt) return;
@@ -718,19 +794,7 @@ export class Room extends DurableObject {
       case 'mindplay': {
         const P = s.party, hand = P?.hands?.[pid];
         if (s.phase !== 'playing' || P?.kind !== 'mind' || P.stage !== 'play' || !hand?.length || Date.now() < s.startAt) return;
-        const card = hand.shift(), lower = [];
-        for (const [id, h] of Object.entries(P.hands)) while (h.length && h[0] < card) lower.push({pid: id, n: h.shift()});
-        P.played.push({pid, n: card, ok: !lower.length});
-        if (lower.length) {
-          P.lives -= 1; for (const c of lower) P.played.push({...c, ok: false, burned: true});
-          this.sysChat(`💥 ${p.name}님 ${card}! 더 작은 수 ${lower.map((c) => c.n).join(', ')}이(가) 남아 있었어요. 목숨 -1`);
-          if (P.lives <= 0) { this.mindEnd(false); break; }
-        }
-        if (Object.values(P.hands).every((h) => !h.length)) {
-          if (P.level >= P.maxLevel) { this.mindEnd(true); break; }
-          P.level += 1; P.stage = 'between'; P.deadline = Date.now() + 3500; this.sysChat(`✅ ${P.level - 1}단계 성공! 다음은 한 사람당 ${P.level}장`);
-        }
-        break;
+        this.mindPlay(pid); P.lastAt = Date.now(); break;
       }
       case 'side': {
         const P = s.party; if (s.phase !== 'playing' || P?.kind !== 'vote' || P.stage !== 'vote' || !p.inRound || ![0, 1].includes(m.v) || Date.now() < s.startAt) return;

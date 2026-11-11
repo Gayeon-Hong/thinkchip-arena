@@ -2303,16 +2303,19 @@ function liveView(){
  ${seriesPanel(st)}
  ${showRes&&rank.length?`<div class="live-result"><span class="mini-kicker">${st.phase==='result'?`ROUND ${st.round} RESULT`:'LIVE SCORES'}</span>${st.party?.kind==='liar'&&st.phase==='result'?`<p class="liar-reveal">😈 거짓말쟁이: <b>${esc(st.players.find(p=>p.pid===st.party.liar)?.name||'?')}</b> · 제시어: <b>${esc(st.party.word||'')}</b>${st.party.guess?` · 마지막 추리: '${esc(st.party.guess)}'`:''}</p>`:''}<h2>${st.phase==='result'?(st.party?.kind==='liar'?(st.party.winner==='liar'?'😈 거짓말쟁이 승리!':'🎉 시민 승리!'):LIVE_EXTRA[st.game]?.coop?(st.party?.result==='lose'?`💔 아쉬워요! 팀 점수 ${rank[0]?.score||0}점`:`🤝 팀 점수 ${rank[0]?.score||0}점!`):rank.length>1&&rank[0].score===rank[1].score?'🤝 공동 1등!':`🏆 ${esc(rank[0].name)} 승리!`):me?.inRound?'다른 친구를 기다리는 중…':st.series?.started?'이번 판은 관전 중이에요 👀':'진행 중인 판이 끝나면 같이 해요'}</h2>
   <ol>${rank.map((p,i)=>`<li class="${p.pid===livePid()?'me':''}"><span>${i+1}</span><b>${esc(p.name)}${st.game==='forehead'&&st.fh?.words?.[p.pid]?` <small class="fh-reveal">${esc(st.fh.words[p.pid])}</small>`:''}</b><em>${fmt(p.score)}점</em>${p.done?'':p.online?'<i>플레이 중</i>':'<i>나감</i>'}</li>`).join('')}</ol></div>`:''}
- <div class="live-players">${ps.filter(p=>p.online).map(p=>`<div class="live-p ${p.ready?'ready':''} ${p.pid===livePid()?'me':''}"><span class="lp-av">${p.host?'👑':'🙂'}</span><b>${esc(p.name)}${p.pid===livePid()?' (나)':''}</b><em>${p.ready?'준비 완료':'대기'}</em></div>`).join('')}${ps.filter(p=>p.online).length<8?'<div class="live-p empty"><span class="lp-av">＋</span><b>친구 기다리는 중</b><em>최대 8명</em></div>':''}</div>
+ <div class="live-players">${ps.filter(p=>p.online).map(p=>`<div class="live-p ${p.ready?'ready':''} ${p.pid===livePid()?'me':''}"><span class="lp-av">${p.host?'👑':p.bot?'🤖':'🙂'}</span><b>${esc(p.name)}${p.pid===livePid()?' (나)':''}</b><em>${p.ready?'준비 완료':'대기'}</em></div>`).join('')}${ps.filter(p=>p.online).length<8?'<div class="live-p empty"><span class="lp-av">＋</span><b>친구 기다리는 중</b><em>최대 8명</em></div>':''}</div>
  ${st.phase!=='playing'&&isHost&&!(st.series?.started&&!st.series?.done)?modePicker(st):''}
  ${st.phase!=='playing'?`<div class="choice-title">이번 판 게임 <small>${isHost?'방장이 골라요':'방장이 고르는 중'}</small></div>
  ${PARTY_IDS.includes(st.game)?`<p class="fineprint party-rule">${esc(LIVE_EXTRA[st.game].short)} (${LIVE_EXTRA[st.game].min}명 이상)</p>`:''}${isHost?`<div class="live-games">${[...Object.values(LIVE_EXTRA),...GAMES].map(g=>`<button data-live-game="${g.id}" class="${g.color} ${st.game===g.id?'active':''} ${PARTY_IDS.includes(g.id)?'party':''}"><span>${g.symbol}</span>${esc(g.title)}${PARTY_IDS.includes(g.id)?`<em>${g.coop?'협동':'파티'} · ${g.min}명+</em>`:''}</button>`).join('')}</div>
-  ${st.game==='forehead'?topicPicker(st):''}<div class="live-levels" ${PARTY_IDS.includes(st.game)?'hidden':''}>${LEVELS.map(k=>`<button data-live-level="${k}" class="${st.level===k?'active':''}">${LEVEL_KO[k]}</button>`).join('')}</div>`
+  ${st.game==='forehead'?topicPicker(st):''}${BOT_PARTY.includes(st.game)?botPicker(st):''}<div class="live-levels" ${PARTY_IDS.includes(st.game)?'hidden':''}>${LEVELS.map(k=>`<button data-live-level="${k}" class="${st.level===k?'active':''}">${LEVEL_KO[k]}</button>`).join('')}</div>`
  :`<div class="live-picked ${G.color}"><span>${G.symbol}</span><div><b>${esc(G.title)}</b><small>${esc(G.short)}</small></div></div>`}
  <button class="btn ${ready?'secondary':'primary'} full live-ready" data-action="live-ready">${ready?'준비 취소':st.series?.done?'새 시리즈 시작 · 준비':st.series?.started?`다음 판 준비 (${seriesNextLabel(st.series)})`:st.phase==='result'?'한 판 더! 준비 완료':'준비 완료'}</button>
  <p class="fineprint">${enough?'모두 준비하면 3초 뒤 같은 판으로 동시에 시작해요.':'친구가 들어오면 시작할 수 있어요. 초대하기를 눌러 링크를 보내세요.'}</p>`:''}
  <div class="live-emojis">${['👍','😮','😂','🔥','😭','👏'].map(e=>`<button data-emoji="${e}">${e}</button>`).join('')}</div>
  <button class="btn tertiary full" data-action="live-leave">방 나가기</button></section>`+foot;}
+// 파티 게임 빈자리 채우기: 방장이 AI 0~3명을 넣어요 (내 단어 맞히기는 대화가 필요해서 제외)
+const BOT_PARTY=['liar','nunchi','vote','tele','mind'];
+function botPicker(st){const n=st.players.filter(p=>p.bot).length;return `<div class="choice-title">AI 로 빈자리 채우기 <small>사람이 모자랄 때</small></div><div class="live-modes bots">${[0,1,2,3].map(k=>`<button data-live-bots="${k}" class="${n===k?'active':''}">${k?`🤖 ${k}명`:'없음'}</button>`).join('')}</div>`;}
 function topicPicker(st){const isHost=liveMe()?.host,cur=st.fhTopic||'random';const opts=[['random','🎲 랜덤 단어','동물·음식·직업…'],['people','🏛 역사 인물','세종대왕, 아인슈타인…'],['tales','📖 동화 캐릭터','흥부, 신데렐라…'],['custom','✍️ 친구가 정해주기','서로 단어를 몰래 정해줘요']];
  return `<div class="choice-title">출제 방식 <small>${isHost?'방장이 골라요':''}</small></div><div class="live-modes topic">${opts.map(([k,t,d])=>`<button ${isHost?`data-live-topic="${k}"`:'disabled'} class="${cur===k?'active':''}"><b>${t}</b><small>${d}</small></button>`).join('')}</div>`;}
 function assignView(st,me){const f=st.fh,target=st.players.find(p=>p.pid===f.assignTo),n=st.players.filter(p=>p.inRound).length,done=f.words?.[f.assignTo];
@@ -2697,7 +2700,7 @@ async function requestAd(){if(loadingAd)return;
  finally{loadingAd=false;render();}
 }
 root.addEventListener('click',async e=>{
- const target=e.target.closest('[data-action],[data-open],[data-filter],[data-start],[data-buy],[data-lane],[data-number],[data-card],[data-trust],[data-digit],[data-take],[data-bid],[data-mb-bet],[data-mb-guess],[data-mb-hide],[data-side],[data-mi],[data-theme-choice],[data-quick],[data-live-game],[data-live-level],[data-live-mode],[data-live-topic],[data-accuse],[data-side2],[data-sd-cell],[data-sd-num],[data-mg-dir],[data-st-ans],[data-gm-cell],[data-db-line],[data-emoji],[data-chat-quick]');if(!target)return;
+ const target=e.target.closest('[data-action],[data-open],[data-filter],[data-start],[data-buy],[data-lane],[data-number],[data-card],[data-trust],[data-digit],[data-take],[data-bid],[data-mb-bet],[data-mb-guess],[data-mb-hide],[data-side],[data-mi],[data-theme-choice],[data-quick],[data-live-game],[data-live-bots],[data-live-level],[data-live-mode],[data-live-topic],[data-accuse],[data-side2],[data-sd-cell],[data-sd-num],[data-mg-dir],[data-st-ans],[data-gm-cell],[data-db-line],[data-emoji],[data-chat-quick]');if(!target)return;
  const action=target.dataset.action;
  if(action==='login'){askLogin();return;}
  if(action==='ai-skip'&&session?.rp){stopReplay();session.rp.i=replayLen();session.rp.done=true;patchReplay();return;}
@@ -2722,6 +2725,7 @@ root.addEventListener('click',async e=>{
  if(action==='live-create'){joinLive(newRoomCode(),null);return;}
  if(action==='live-create-here'){joinLive(newRoomCode(),selectedGame);screen='live';render();return;}
  if(action==='live-join'){const c=live?live.code:normalizeCode(document.getElementById('roomCode')?.value||roomDraft);if(c.length<4)return flash('방 코드 4자리를 입력해 주세요.');joinLive(c,null);return;}
+ if(target.dataset.liveBots!==undefined&&live){live.conn.send({t:'bots',n:Number(target.dataset.liveBots)});return;}
  if(action==='live-ready'&&live){const me=liveMe();live.conn.send({t:'ready',v:!(me?.ready)});return;}
  if(action==='live-invite'&&live){await inviteToRoom();return;}
  if(action==='live-leave'){if(fromLounge){toLounge();return;}leaveLive();setScreen('home');return;}
