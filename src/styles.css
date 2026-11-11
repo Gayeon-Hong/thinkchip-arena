@@ -481,3 +481,6 @@ body.to-lounge #app{opacity:0;transform:scale(.98);transition:opacity .24s ease,
 .ai-track i{position:absolute;top:50%;transform:translate(-50%,-50%);font-size:26px;font-style:normal;transition:left .05s linear}
 .ai-foot{margin-top:14px;display:flex;flex-direction:column;gap:10px}
 .ai-result{display:flex;align-items:baseline;gap:10px;justify-content:center}.ai-result span{font-size:12px;color:var(--muted)}.ai-result strong{font:800 28px system-ui;color:var(--accent-ink)}.ai-result small{font-size:11px;color:var(--muted)}
+
+/* 심리전 AI 한마디 (진심일 수도 블러핑일 수도) */
+.ai-tell{margin:-4px 0 10px;padding:8px 12px;border-radius:12px;background:var(--surface);border:1px dashed var(--line);font-size:12.5px;line-height:1.5;color:var(--text)}.ai-tell b{color:var(--accent-ink);margin-right:4px}

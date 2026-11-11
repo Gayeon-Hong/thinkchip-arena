@@ -27,6 +27,7 @@ import {defaultProfile,normalizeProfile,awardRun,spendChips,awardAd,grantPaid,AD
 import {listChipPacks,buyChipPack,restoreChipOrders} from './toss.js';
 import {TOSS_CONFIG,shareInvite,showRewardedAd,initToss,bindBackHandler,exitApp,isRewardedAdSupported} from './toss.js';
 import {LIVE_URL} from './live.config.js';
+import {aiTell,aiTellReact,BLUFF_GAMES} from './games/bluff.js';
 // 계정 (public/account.js): 로그인하면 칩이 계정(서버)에 저장돼요. 없으면(파일로 연 데모·테스트) 예전처럼 이 기기 지갑.
 const ACC=globalThis.ThinkChipAccount||null;if(ACC)ACC.init(LIVE_URL);
 const acctOn=()=>!!(ACC&&ACC.api);
@@ -464,6 +465,14 @@ function syncGameStage(){const host=document.getElementById('gameStage');
  const my=s.game.score,foe=s.mode==='ai'&&s.botTarget===null?s.game.cpuScore:null;
  if(!s._st){s._st={my,foe,end:false};if(screen==='game')gstage.say('foe',pickLine(['한 판 붙자 😏','봐주는 거 없다 ㅋㅋ','긴장되네 🤔']));return;}
  const st=s._st;
+ // 심리전: 매 판 AI 의 한마디 (진심일 수도, 블러핑일 수도) + 판이 끝나면 반응
+ if(s.mode==='ai'&&BLUFF_GAMES.includes(s.id)){const tk=s.game.turn,tell=!s.game.over?aiTell(s.id,s.game):null,box=document.getElementById('aiTell');
+  if(box){box.hidden=!tell;if(tell)box.innerHTML=`<b>🤖 AI</b> ${esc(tell.text)}`;}
+  if(st.tk!==tk){const prev=st.tell;if(prev&&st.tk!==undefined&&s.game.last){const won=s.id==='trust'?s.game.last.mine==='betray'?s.game.last.cpu==='cooperate':s.game.last.cpu==='cooperate':s.id==='marbles'?!!s.game.last.win:s.id==='auction'?s.game.last.winner!=='cpu':s.game.last.outcome!=='lose';
+    const line=aiTellReact(prev,won,`${s.seed}:${tk}`);if(line){gstage.say('foe',line);gstage.react('foe',prev.truth===false&&!won?'smug':won?'hmm':'happy');}
+    if(tell)setTimeout(()=>{if(gstage&&session===s&&s.game.turn===tk)gstage.say('foe',tell.text);},1800);}
+   else if(tell)gstage.say('foe',tell.text);
+   st.tk=tk;st.tell=tell;}}
  if(screen==='result'&&!st.end){st.end=true;const v=calcVictory();
   if(v===true){gstage.say('me',pickLine(GLINES.me.win));setTimeout(()=>gstage&&gstage.say('foe',pickLine(GLINES.foe.lose)),700);}
   else if(v===false){gstage.say('foe',pickLine(GLINES.foe.win));setTimeout(()=>gstage&&gstage.say('me',pickLine(GLINES.me.lose)),700);}
@@ -472,7 +481,7 @@ function syncGameStage(){const host=document.getElementById('gameStage');
  else if(my<st.my){gstage.say('me',pickLine(GLINES.me.down));gstage.react('foe','smug');}
  if(foe!=null&&st.foe!=null&&foe>st.foe){gstage.say('foe',pickLine(GLINES.foe.up));gstage.react('me','hmm');}
  st.my=my;st.foe=foe;}
-const GAME_STAGE_SLOT='<div id="gameStage" class="live-stage game-stage" aria-hidden="true"></div>';
+const GAME_STAGE_SLOT='<div id="gameStage" class="live-stage game-stage" aria-hidden="true"></div><div id="aiTell" class="ai-tell" hidden></div>';
 // ── 채팅 (실시간 방 안에서만) ──
 function onChat(m){if(!live)return;if(stage&&!m.sys)stage.say(m.pid,m.text);live.chat=[...(live.chat||[]),m].slice(-60);const mine=m.pid===livePid();
  if(!chatOpen&&!mine&&!chatMuted.has(m.pid)){live.unread=(live.unread||0)+1;const pk=document.getElementById('chatPeek');if(pk){pk.textContent=m.sys?m.text:`${m.name}: ${m.text}`;pk.classList.add('show');clearTimeout(chatPeekTimer);chatPeekTimer=setTimeout(()=>pk.classList.remove('show'),3200);}}

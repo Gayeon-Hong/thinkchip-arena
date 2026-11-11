@@ -2,7 +2,7 @@ import {readFile,writeFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {resolve,dirname} from 'node:path';
 const base=resolve(dirname(fileURLToPath(import.meta.url)),'..');
-const order=['app.config.js','src/util.js','src/catalog.js','src/games/flip.js','src/games/blind.js','src/games/triad.js','src/games/trust.js','src/games/baseball.js','src/games/nim.js','src/games/auction.js','src/games/geometry.js','src/games/maze.js','src/games/draw.js','src/games/marbles.js','src/games/redlight.js','src/games/bridge.js','src/games/minority.js','src/games/dots.js','src/games/gomoku.js','src/games/stroop.js','src/games/merge.js','src/games/sudoku.js','src/live.config.js','src/live.js','src/wallet.js','src/theme.js','src/icons.js','src/toss.js','src/main.js'];
+const order=['app.config.js','src/util.js','src/catalog.js','src/games/flip.js','src/games/blind.js','src/games/triad.js','src/games/trust.js','src/games/baseball.js','src/games/nim.js','src/games/auction.js','src/games/geometry.js','src/games/maze.js','src/games/draw.js','src/games/marbles.js','src/games/redlight.js','src/games/bridge.js','src/games/minority.js','src/games/bluff.js','src/games/dots.js','src/games/gomoku.js','src/games/stroop.js','src/games/merge.js','src/games/sudoku.js','src/live.config.js','src/live.js','src/wallet.js','src/theme.js','src/icons.js','src/toss.js','src/main.js'];
 let code='';
 for(const file of order){
  let source=await readFile(resolve(base,file),'utf8');
