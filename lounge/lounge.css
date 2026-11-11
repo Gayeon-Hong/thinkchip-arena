@@ -101,3 +101,4 @@ body[data-theme="day"] .ticker{background:rgba(255,255,255,.75);color:#5a4500}
 @media (min-width:720px){.chat{right:auto;width:440px}.dock-right{top:calc(110px + var(--safe-t))}}
 .online,.brand b{white-space:nowrap}
 @media (max-width:430px){.brand b{font-size:11.5px;letter-spacing:.02em}.brand small{font-size:10px}.brand-mark{width:26px;height:26px}.online{padding:6px 8px;font-size:11px}.top-right{gap:5px}}
+@media (max-width:430px){.top-right .icon,.top-right .pill{height:34px;min-width:34px;padding:0 8px}.top-right .icon{width:34px;padding:0}.chips b{font-size:13px}}

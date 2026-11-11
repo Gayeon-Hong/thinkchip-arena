@@ -72,17 +72,19 @@
   for (let i = -ROOM + 1; i < ROOM; i += 2) box(0.02, 0.005, ROOM * 2, M(0x5b4231, {roughness: 0.6}), i, 0.002, 0).castShadow = false; // 마루 결
   const rug = cyl(5.2, 5.2, 0.04, mats.rug, 0, 0.02, 0, 64); rug.castShadow = false;
   const rugRing = new THREE.Mesh(new THREE.TorusGeometry(5.05, 0.05, 8, 96), mats.rugTrim); rugRing.rotation.x = Math.PI / 2; rugRing.position.y = 0.05; scene.add(rugRing);
-  const backWall = box(ROOM * 2, 6.5, 0.4, mats.wall, 0, 3.1, -ROOM); const leftWall = box(0.4, 6.5, ROOM * 2, mats.wall, -ROOM, 3.1, 0);
-  for (let x = -ROOM + 2; x < ROOM; x += 4) box(0.08, 6, 0.12, mats.gold, x, 3, -ROOM + 0.25); // 벽 골드 라인
-  for (let z = -ROOM + 2; z < ROOM; z += 4) box(0.12, 6, 0.08, mats.gold, -ROOM + 0.25, 3, z);
-  box(ROOM * 2, 0.08, 0.1, mats.gold, 0, 0.35, -ROOM + 0.25); box(0.1, 0.08, ROOM * 2, mats.gold, -ROOM + 0.25, 0.35, 0);
+  // 벽은 그룹으로 묶어서, 카메라가 벽 뒤로 돌아가면 그 벽만 숨겨요 (방을 어느 각도에서든 볼 수 있게)
+  const backWallG = new THREE.Group(), leftWallG = new THREE.Group(); scene.add(backWallG, leftWallG);
+  box(ROOM * 2, 6.5, 0.4, mats.wall, 0, 3.1, -ROOM, backWallG); box(0.4, 6.5, ROOM * 2, mats.wall, -ROOM, 3.1, 0, leftWallG);
+  for (let x = -ROOM + 2; x < ROOM; x += 4) box(0.08, 6, 0.12, mats.gold, x, 3, -ROOM + 0.25, backWallG); // 벽 골드 라인
+  for (let z = -ROOM + 2; z < ROOM; z += 4) box(0.12, 6, 0.08, mats.gold, -ROOM + 0.25, 3, z, leftWallG);
+  box(ROOM * 2, 0.08, 0.1, mats.gold, 0, 0.35, -ROOM + 0.25, backWallG); box(0.1, 0.08, ROOM * 2, mats.gold, -ROOM + 0.25, 0.35, 0, leftWallG);
 
   // 전광판 (진짜 데이터: 오늘의 메인 매치, 내 칩, 접속자, 최근 소식)
   const boardCanvas = document.createElement('canvas'); boardCanvas.width = 1536; boardCanvas.height = 384;
   const bctx = boardCanvas.getContext('2d'); const boardTex = new THREE.CanvasTexture(boardCanvas); boardTex.encoding = THREE.sRGBEncoding;
-  box(11.4, 3.0, 0.25, M(0x05070d, {roughness: 0.3}), 0, 4.0, -ROOM + 0.45);
+  box(11.4, 3.0, 0.25, M(0x05070d, {roughness: 0.3}), 0, 4.0, -ROOM + 0.45, backWallG);
   const screenMesh = new THREE.Mesh(new THREE.PlaneGeometry(11, 2.75), new THREE.MeshBasicMaterial({map: boardTex, toneMapped: false}));
-  screenMesh.position.set(0, 4.0, -ROOM + 0.6); scene.add(screenMesh);
+  screenMesh.position.set(0, 4.0, -ROOM + 0.6); backWallG.add(screenMesh);
   let news = [];
   function drawBoard() {
     const c = bctx, W = 1536, H = 384, g = dailyGame(), p = profile();
@@ -197,13 +199,13 @@
   function say(p, text) {
     if (!p) return;
     p.bubble.textContent = String(text).slice(0, 70); p.bubble.classList.add('show');
-    clearTimeout(p.bubbleTimer); p.bubbleTimer = setTimeout(() => p.bubble.classList.remove('show'), 6000);
-    if (p.id) lookAtSpeaker = {id: p.id, av: p.av, at: clock.elapsedTime};
+    p.bubbleUntil = simT + 6; if (!p.id) setTimeout(() => p.bubble.classList.remove('show'), 6000); // 비서처럼 players 밖의 말풍선 // 시간은 화면 시간(simT)으로 재요 — 영상 녹화(수동 프레임)에서도 똑같이 보이게
+    if (p.id) lookAtSpeaker = {id: p.id, av: p.av, at: simT};
     const expr = A.exprFromText(text); if (expr) setExpr(p, expr);
   }
   function setExpr(p, expr, ms = 5000) {
     p.av.userData.face.set(expr); p.mood = expr === 'laugh' || expr === 'happy' ? 'cheer' : expr === 'hmm' ? 'think' : null;
-    clearTimeout(p.exprTimer); p.exprTimer = setTimeout(() => { p.av.userData.face.set('happy'); p.mood = null; }, ms);
+    p.exprUntil = simT + ms / 1000;
   }
   function walkTo(p, x, z, then) {
     const lim = ROOM - 1.2; p.target = {x: Math.max(-lim, Math.min(lim, x)), z: Math.max(-lim, Math.min(lim, z)), then};
@@ -227,10 +229,10 @@
   // 입력: 탭 = 이동/선택, 드래그 = 회전, 핀치/휠 = 확대
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), pointers = new Map();
   let drag = null, pinch0 = 0, dist0 = 0;
-  canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture?.(e.pointerId); pointers.set(e.pointerId, {x: e.clientX, y: e.clientY}); if (pointers.size === 1) drag = {x: e.clientX, y: e.clientY, yaw: camState.yaw, moved: false}; if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); dist0 = camState.dist; drag = null; } });
+  canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture?.(e.pointerId); pointers.set(e.pointerId, {x: e.clientX, y: e.clientY}); if (pointers.size === 1) drag = {x: e.clientX, y: e.clientY, yaw: camState.yaw, pitch: camState.pitch, moved: false}; if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); dist0 = camState.dist; drag = null; } });
   canvas.addEventListener('pointermove', (e) => { if (!pointers.has(e.pointerId)) return; pointers.set(e.pointerId, {x: e.clientX, y: e.clientY});
     if (pointers.size === 2) { const [a, b] = [...pointers.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y); camState.dist = Math.max(9, Math.min(34, dist0 * (pinch0 / Math.max(1, d)))); return; }
-    if (drag) { const dx = e.clientX - drag.x; if (Math.abs(dx) > 6) drag.moved = true; if (drag.moved && !camState.closeUp) camState.yaw = drag.yaw - dx * 0.006; } });
+    if (drag) { const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.hypot(dx, dy) > 6) drag.moved = true; if (drag.moved && !camState.closeUp) { camState.yaw = drag.yaw - dx * 0.006; camState.pitch = Math.max(0.12, Math.min(1.35, drag.pitch + dy * 0.004)); } } }); // 좌우로 밀면 회전, 위아래로 밀면 눕혀 보기·내려다보기
   const up = (e) => { const wasTap = drag && !drag.moved && pointers.size === 1; pointers.delete(e.pointerId); if (wasTap) onTap(e.clientX, e.clientY); if (pointers.size === 0) drag = null; };
   canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', (e) => { pointers.delete(e.pointerId); drag = null; });
   canvas.addEventListener('wheel', (e) => { e.preventDefault(); camState.dist = Math.max(9, Math.min(34, camState.dist + e.deltaY * 0.01)); }, {passive: false});
@@ -255,10 +257,17 @@
     if (v3.z > 1) { el.style.display = 'none'; return; }
     el.style.display = ''; el.style.left = ((v3.x + 1) / 2) * innerWidth + 'px'; el.style.top = ((1 - v3.y) / 2) * innerHeight + 'px';
   }
+  let simT = 0, manual = false;
   function tick() {
+    if (manual) return; // 녹화 모드: __lounge.step() 이 한 프레임씩 그려요
     requestAnimationFrame(tick);
-    const dt = Math.min(0.05, clock.getDelta()), t = clock.elapsedTime;
+    frame(Math.min(0.05, clock.getDelta()));
+  }
+  function frame(dt) {
+    simT += dt; const t = simT;
     for (const p of players.values()) {
+      if (p.bubbleUntil && t > p.bubbleUntil) { p.bubble.classList.remove('show'); p.bubbleUntil = 0; }
+      if (p.exprUntil && t > p.exprUntil) { p.av.userData.face.set('happy'); p.mood = null; p.exprUntil = 0; }
       const pos = p.av.position;
       if (p.target) {
         const dx = p.target.x - pos.x, dz = p.target.z - pos.z, d = Math.hypot(dx, dz);
@@ -275,14 +284,85 @@
       A.animateAvatar(p.av, t, p.target ? 'walk' : p.mood || 'idle', p.phase);
       project({x: pos.x, z: pos.z}, 2.75, p.tag); project({x: pos.x, z: pos.z}, 3.15, p.bubble);
     }
-    if (secretary) { A.animateAvatar(secretary, t, 'idle', 1.3); const wp = new THREE.Vector3(); secretary.getWorldPosition(wp); project({x: wp.x, z: wp.z}, 2.75, npcTag); }
+    if (secretary) { A.animateAvatar(secretary, t, 'idle', 1.3); const wp = new THREE.Vector3(); secretary.getWorldPosition(wp); project({x: wp.x, z: wp.z}, 2.75, npcTag); project({x: wp.x, z: wp.z}, 3.15, deskBubble); }
     const mz = ZONES.find((z) => z.main); if (mz.spin) mz.spin.rotation.y += dt * 0.6;
-    for (const z of ZONES) if (z.sign) z.sign.visible = !camState.closeUp; // 드레스룸 클로즈업 땐 간판이 화면을 가리지 않게
+    if (furniture.tank && furniture.tank.visible) furniture.tank.children.forEach((c) => { if (c.userData.swim != null) c.position.x = Math.sin(t * 0.8 + c.userData.swim * 2) * 0.7; });
+    for (const z of ZONES) if (z.sign) z.sign.visible = !camState.closeUp && (camState.pitch > 0.5 || z.sign.getWorldPosition(v3).distanceTo(camera.position) > 7); // 클로즈업·눈높이 보기에선 가까운 간판이 화면을 가리지 않게
     for (const z of ZONES) if (z.sign) z.sign.lookAt(camera.position.x, z.sign.getWorldPosition(v3).y, camera.position.z);
     placeCamera(false);
+    backWallG.visible = camera.position.z > -ROOM + 0.5; leftWallG.visible = camera.position.x > -ROOM + 0.5;
     renderer.render(scene, camera);
   }
 
+
+  // ───────── 방 꾸미기 (씽크칩으로 벽지·바닥·러그·가구 구매) ─────────
+  // 내가 꾸민 방은 내 화면에 늘 보이고, 내가 만든 친구 방에선 들어온 친구들에게도 그대로 보여요 (미니홈피처럼).
+  const DECOR = {
+    wall: [{id: 'navy', name: '네이비', price: 0, c: 0x141c33}, {id: 'cream', name: '크림', price: 60, c: 0xe9dfc9}, {id: 'mint', name: '민트', price: 60, c: 0x9fd8c8}, {id: 'pink', name: '체리 핑크', price: 60, c: 0xf2b6c6}, {id: 'black', name: '블랙', price: 80, c: 0x0b0b10}, {id: 'sky', name: '하늘', price: 60, c: 0xa9c8f0}],
+    floor: [{id: 'oak', name: '원목', price: 0, c: 0x7a5a43}, {id: 'white', name: '화이트 우드', price: 80, c: 0xd9cdbd}, {id: 'marble', name: '대리석', price: 100, c: 0xcfd2d8}, {id: 'walnut', name: '월넛', price: 70, c: 0x4a3326}, {id: 'pinktile', name: '핑크 타일', price: 80, c: 0xe9b7c4}],
+    rug: [{id: 'navy', name: '네이비', price: 0, c: 0x1c2747}, {id: 'red', name: '레드', price: 40, c: 0x7a1f2b}, {id: 'green', name: '포레스트', price: 40, c: 0x1f5a3e}, {id: 'purple', name: '퍼플', price: 40, c: 0x4a2f7a}, {id: 'beige', name: '베이지', price: 40, c: 0xcdb99a}],
+    items: [{id: 'arcade', name: '아케이드 기계', price: 150}, {id: 'trophy', name: '트로피 장식장', price: 120}, {id: 'tank', name: '어항', price: 130}, {id: 'piano', name: '피아노', price: 200}, {id: 'tree', name: '반짝이 트리', price: 90}, {id: 'bean', name: '빈백 소파', price: 70}, {id: 'neon', name: '네온 하트', price: 60}, {id: 'plants', name: '화분 세트', price: 50}],
+  };
+  const ROOM_KEY = 'thinkchip:room:v1';
+  const DEFAULT_DECO = {wall: 'navy', floor: 'oak', rug: 'navy', items: []};
+  const encodeDeco = (d) => [d.wall, d.floor, d.rug, (d.items || []).join('_')].join('.');
+  const decodeDeco = (str) => { const [w, f, r, it] = String(str || '').split('.'); const ok = (cat, v) => DECOR[cat].some((x) => x.id === v);
+    return {wall: ok('wall', w) ? w : 'navy', floor: ok('floor', f) ? f : 'oak', rug: ok('rug', r) ? r : 'navy', items: String(it || '').split(/[_+]/).filter((x) => DECOR.items.some((y) => y.id === x))}; };
+  let myRoom = (() => { const v = store.get(ROOM_KEY, null); return v && v.deco ? {deco: Object.assign({}, DEFAULT_DECO, v.deco), owned: Array.isArray(v.owned) ? v.owned : []} : {deco: {...DEFAULT_DECO}, owned: []}; })();
+  let shownDeco = myRoom.deco; // 지금 화면에 보이는 방 (친구 방이면 방장 방)
+  const furniture = {};
+  (function buildFurniture() {
+    const G = (id, x, z, ry = 0) => { const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; g.visible = false; scene.add(g); furniture[id] = g; return g; };
+    let g = G('arcade', -9.4, 6.6, Math.PI / 2); box(1.1, 2.2, 0.9, M(0x2b2f8a), 0, 1.1, 0, g); box(0.9, 0.7, 0.05, M(0x0b1430, {emissive: 0x5b6cff, emissiveIntensity: 0.9}), 0, 1.6, 0.46, g); box(1.0, 0.12, 0.5, M(0x1a1d55), 0, 1.05, 0.6, g); cyl(0.06, 0.06, 0.16, M(0xff4d5e), -0.2, 1.17, 0.62, 12, g); cyl(0.05, 0.05, 0.05, M(0xf7ce55), 0.2, 1.13, 0.62, 12, g);
+    g = G('trophy', 2.2, -10.3); box(2.2, 2.4, 0.5, mats.wood, 0, 1.2, 0, g); for (let i = 0; i < 3; i++) box(2.0, 0.05, 0.45, mats.gold, 0, 0.5 + i * 0.7, 0.03, g); for (let i = 0; i < 4; i++) { cyl(0.12, 0.08, 0.3, mats.gold, -0.75 + i * 0.5, 1.37, 0.05, 12, g); cyl(0.05, 0.05, 0.08, mats.gold, -0.75 + i * 0.5, 1.2, 0.05, 8, g); }
+    g = G('tank', 9.5, -6.2, -Math.PI / 2); box(2.0, 0.8, 0.8, mats.wood, 0, 0.4, 0, g); const w = box(1.9, 1.0, 0.7, new THREE.MeshPhysicalMaterial({color: 0x7fd3ff, transparent: true, opacity: 0.45, roughness: 0.05}), 0, 1.3, 0, g); w.castShadow = false;
+      [0xff8a4c, 0xf7ce55, 0xff6fc8].forEach((c, i) => { const fsh = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), M(c)); fsh.scale.x = 1.6; fsh.position.set(-0.5 + i * 0.5, 1.2 + (i % 2) * 0.25, 0); fsh.userData.swim = i; g.add(fsh); });
+    g = G('piano', 6.5, 9.4, Math.PI); box(2.0, 1.1, 0.7, M(0x0b0b10, {roughness: 0.2}), 0, 0.85, 0, g); box(1.9, 0.06, 0.35, M(0xffffff), 0, 1.0, 0.45, g); for (let i = 0; i < 9; i++) box(0.06, 0.06, 0.2, M(0x0b0b10), -0.8 + i * 0.2, 1.04, 0.38, g); box(0.9, 0.5, 0.4, M(0x0b0b10), 0, 0.25, 0.9, g);
+    g = G('tree', -9.2, -9.2); cyl(0.12, 0.15, 0.6, mats.wood, 0, 0.3, 0, 8, g); [[1.0, 1.0], [0.8, 1.7], [0.55, 2.3]].forEach(([r, y]) => { const cn = new THREE.Mesh(new THREE.ConeGeometry(r, 1.0, 16), M(0x2f8f5b)); cn.position.y = y; cn.castShadow = true; g.add(cn); });
+      const star = cyl(0.18, 0.18, 0.06, M(0xf7ce55, {emissive: 0xf7ce55, emissiveIntensity: 0.8}), 0, 2.95, 0, 5, g); star.rotation.x = Math.PI / 2; for (let i = 0; i < 10; i++) { const bl = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), M([0xff4d5e, 0xf7ce55, 0x5b6cff][i % 3], {emissive: [0xff4d5e, 0xf7ce55, 0x5b6cff][i % 3], emissiveIntensity: 0.6})); const a = i * 2.1, y = 0.9 + (i / 10) * 1.6, r = 0.95 - (i / 10) * 0.6; bl.position.set(Math.cos(a) * r, y, Math.sin(a) * r); g.add(bl); }
+    g = G('bean', -3.4, 9.0); [[-0.9, 0xff8a4c], [0.9, 0x8b7bff]].forEach(([x, c]) => { const bb = new THREE.Mesh(new THREE.SphereGeometry(0.75, 20, 14), M(c, {roughness: 0.9})); bb.scale.y = 0.6; bb.position.set(x, 0.45, 0); bb.castShadow = true; g.add(bb); });
+    g = G('neon', -10.7, 2.8, Math.PI / 2); const hs = new THREE.Shape(); hs.moveTo(0, -0.6); hs.bezierCurveTo(-1.2, 0.2, -0.5, 1.0, 0, 0.45); hs.bezierCurveTo(0.5, 1.0, 1.2, 0.2, 0, -0.6);
+      const heart = new THREE.Mesh(new THREE.ShapeGeometry(hs), new THREE.MeshBasicMaterial({color: 0xff4d8d, toneMapped: false})); heart.position.y = 3.6; g.add(heart); const hl = new THREE.PointLight(0xff4d8d, 0.6, 5, 2); hl.position.set(0, 3.6, 0.5); g.add(hl);
+    g = G('plants', 9.4, 9.4); [[0, 0, 1.2], [-1.1, 0.3, 0.8], [0.4, -1.1, 0.9]].forEach(([x, z, sc]) => { cyl(0.3 * sc, 0.24 * sc, 0.55 * sc, mats.pot, x, 0.28 * sc, z, 16, g); for (let i = 0; i < 4; i++) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.34 * sc, 12, 10), mats.plant); l.position.set(x + Math.cos(i * 1.6) * 0.18 * sc, (0.85 + (i % 2) * 0.25) * sc, z + Math.sin(i * 1.6) * 0.18 * sc); l.scale.y = 1.3; l.castShadow = true; g.add(l); } });
+  })();
+  const pick = (cat, id) => DECOR[cat].find((x) => x.id === id) || DECOR[cat][0];
+  function applyDecor(d) {
+    shownDeco = d;
+    const day = document.body.dataset.theme === 'day';
+    mats.wall.color.setHex(d.wall === 'navy' && day ? mats.wallDay : pick('wall', d.wall).c);
+    mats.floor.color.setHex(d.floor === 'oak' && day ? mats.floorDay : pick('floor', d.floor).c);
+    mats.rug.color.setHex(pick('rug', d.rug).c);
+    for (const [id, g] of Object.entries(furniture)) g.visible = (d.items || []).includes(id);
+  }
+  const decoOwned = (cat, id) => (DECOR[cat].find((x) => x.id === id)?.price || 0) === 0 || myRoom.owned.includes(`${cat}:${id}`);
+  let decoDraft = null, decoTab = 'wall';
+  function openRoomDeco() {
+    decoDraft = decoDraft || JSON.parse(JSON.stringify(myRoom.deco)); applyDecor(decoDraft);
+    const d = decoDraft, due = [];
+    for (const cat of ['wall', 'floor', 'rug']) if (!decoOwned(cat, d[cat])) due.push({cat, id: d[cat], price: pick(cat, d[cat]).price});
+    for (const id of d.items) if (!decoOwned('items', id)) due.push({cat: 'items', id, price: DECOR.items.find((x) => x.id === id).price});
+    const total = due.reduce((a, b) => a + b.price, 0), chips = profile().chips;
+    const tabs = [['wall', '벽지'], ['floor', '바닥'], ['rug', '러그'], ['items', '가구·소품']];
+    const btn = (cat, it) => { const on = cat === 'items' ? d.items.includes(it.id) : d[cat] === it.id; const own = decoOwned(cat, it.id);
+      const sw = it.c != null ? `<i style="display:block;width:100%;height:16px;border-radius:6px;margin-bottom:5px;background:#${it.c.toString(16).padStart(6, '0')}"></i>` : '';
+      return `<button class="item ${on ? 'on' : ''}" data-dcat="${cat}" data-did="${it.id}">${sw}${esc(it.name)}<span class="price ${it.price === 0 ? 'free' : own ? 'owned' : ''}">${it.price === 0 ? '기본' : own ? '보유' : `⬡${it.price}`}</span></button>`; };
+    openSheet({kicker: 'MY ROOM', title: '🏠 방 꾸미기', cls: 'closet', onClose: () => { decoDraft = null; applyDecor(room.public ? myRoom.deco : (hostDeco || myRoom.deco)); }, html: `
+      <div class="tabs">${tabs.map(([id, n]) => `<button data-dtab="${id}" class="${decoTab === id ? 'on' : ''}">${n}</button>`).join('')}</div>
+      <div class="items">${DECOR[decoTab].map((it) => btn(decoTab, it)).join('')}</div>
+      <p style="font-size:11.5px;color:var(--muted);margin:10px 2px 0">${decoTab === 'items' ? '눌러서 놓기 / 빼기. ' : ''}꾸민 방은 내가 만든 친구 방에 들어온 친구들에게도 보여요.</p>
+      <div class="closet-foot"><span class="sum">${total ? `새로 살 것 ${due.length}개 · <b>⬡${total}</b> (보유 ⬡${fmt(chips)})` : '바꾼 방을 저장할 수 있어요'}</span>
+      <button class="btn gold" id="decoSave" ${total > chips ? 'disabled' : ''}>${total ? (total > chips ? '씽크칩 부족' : '구매하고 꾸미기') : '저장하기'}</button></div>`});
+    $('sheetBody').onclick = (e) => { const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.dtab) { decoTab = b.dataset.dtab; openRoomDeco(); return; }
+      if (b.dataset.dcat === 'items') { const i = d.items.indexOf(b.dataset.did); if (i >= 0) d.items.splice(i, 1); else d.items.push(b.dataset.did); openRoomDeco(); return; }
+      if (b.dataset.dcat) { d[b.dataset.dcat] = b.dataset.did; openRoomDeco(); return; }
+      if (b.id === 'decoSave') { if (total > profile().chips) return toast('씽크칩이 부족해요'); if (total) addChips(-total);
+        myRoom.owned = [...new Set([...myRoom.owned, ...due.map((x) => `${x.cat}:${x.id}`)])]; myRoom.deco = JSON.parse(JSON.stringify(d)); store.set(ROOM_KEY, myRoom);
+        if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'deco', deco: encodeDeco(myRoom.deco)}));
+        toast(total ? `구매 완료! -${total} 씽크칩` : '방을 저장했어요'); decoDraft = null; closeSheet(); drawBoard(); setTicker(); }
+    };
+  }
+  let hostDeco = null; // 친구 방 방장이 꾸민 방
   // ───────── UI ─────────
   function toast(msg) { const el = $('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('show'), 2600); }
   function renderChips() { $('chips').textContent = fmt(profile().chips); }
@@ -419,14 +499,18 @@
   const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const newCode = () => Array.from({length: 4}, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
 
-  document.querySelector('.dock-right').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; ({games: openGames, closet: () => goToZone(ZONES.find((z) => z.closet)), desk: () => goToZone(ZONES.find((z) => z.desk)), friends: openFriends})[b.dataset.open]?.(); };
+  document.querySelector('.dock-right').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; ({games: openGames, closet: () => goToZone(ZONES.find((z) => z.closet)), desk: () => goToZone(ZONES.find((z) => z.desk)), friends: openFriends, room: openRoomDeco})[b.dataset.open]?.(); };
   $('chipsBtn').onclick = openDesk;
+  const VIEWS = [{name: '전경', pitch: 0.82, dist: null}, {name: '눈높이', pitch: 0.28, dist: 11}, {name: '탑뷰', pitch: 1.3, dist: null}];
+  let viewIdx = 0;
+  if ($('viewBtn')) $('viewBtn').onclick = () => { viewIdx = (viewIdx + 1) % VIEWS.length; const v = VIEWS[viewIdx]; camState.pitch = v.pitch; if (v.dist) camState.dist = v.dist; else resize(); toast(`${v.name} 보기 · 화면을 밀어서 돌려 보세요`); };
   $('themeBtn').onclick = () => { const day = document.body.dataset.theme !== 'day'; setTheme(day ? 'day' : 'night'); store.set(LOUNGE_KEY, Object.assign(store.get(LOUNGE_KEY, {}), {theme: day ? 'day' : 'night'})); };
   function setTheme(t) {
     document.body.dataset.theme = t; const day = t === 'day'; $('themeBtn').textContent = day ? '☀' : '☾';
     scene.background = new THREE.Color(day ? 0xdfe5f2 : 0x070b16); scene.fog = new THREE.Fog(day ? 0xdfe5f2 : 0x070b16, 26, 60);
     mats.wall.color.setHex(day ? mats.wallDay : 0x141c33); mats.floor.color.setHex(day ? mats.floorDay : 0x7a5a43);
     hemi.intensity = day ? 0.85 : 0.5; sun.intensity = day ? 1.0 : 0.75; renderer.toneMappingExposure = day ? 0.9 : 1.0;
+    if (typeof applyDecor === 'function' && shownDeco) applyDecor(shownDeco);
   }
 
   // 채팅 & 이모티콘
@@ -452,7 +536,7 @@
   function reconnect() { clearTimeout(retryTimer); if (conn) { conn.onclose = null; try { conn.close(); } catch (e) {} } retry = 0; connect(); }
   function connect() {
     if (!CFG.LIVE_URL) { setOnline(false); return; }
-    let ws; const q = new URLSearchParams({pid: ME, name: myName(), look: A.encodeLook(mine.look)});
+    let ws; const q = new URLSearchParams({pid: ME, name: myName(), look: A.encodeLook(mine.look), deco: encodeDeco(myRoom.deco)});
     try { ws = new WebSocket(`${CFG.LIVE_URL}/${room.code}?${q}`); } catch (e) { setOnline(false); return; }
     conn = ws;
     ws.onopen = () => { retry = 0; setOnline(true); sendPose(); clearInterval(pingTimer); pingTimer = setInterval(() => { if (ws.readyState === 1) ws.send('{"t":"ping"}'); }, 20000); };
@@ -473,6 +557,9 @@
         pl.tag.textContent = p.name; online.set(p.pid, p.name);
       }
       for (const id of [...online.keys()]) if (!seen.has(id)) { chatLine('', `${online.get(id)}님이 나갔어요`, true); online.delete(id); despawn(id); }
+      const host = (m.players || []).find((p) => p.host);
+      hostDeco = !room.public && host && host.pid !== ME && host.deco ? decodeDeco(host.deco) : null; // 친구 방이면 방장이 꾸민 방을 보여줘요
+      if (!decoDraft) applyDecor(hostDeco || myRoom.deco);
       gotFirstState = true; setOnline(true); drawBoard(); setTicker();
     } else if (m.t === 'pose') { const p = players.get(m.pid); if (p && m.pid !== ME) walkTo(p, m.x, m.z); }
     else if (m.t === 'chat') { const p = players.get(m.pid); if (m.sys) chatLine('', m.text, true); else { chatLine(m.name, m.text); say(p, m.text); } }
@@ -496,6 +583,12 @@
     walkTo: (x, z) => { walkTo(me, x, z); sendPose(); },
     goZone: (id) => goToZone(ZONES.find((z) => z.id === id)),
     room: () => ({...room}),
+    // 영상 녹화용: 실시간 루프를 멈추고 dt 만큼씩 한 프레임 그리기
+    manual: (on) => { manual = !!on; if (!manual) { clock.getDelta(); tick(); } },
+    step: (dt) => frame(dt),
+    sayAs: (name, text) => { const p = [...players.values()].find((q) => q.name === name); if (p) { say(p, text); if (p !== me) chatLine(name, text); } },
+    walkOther: (name, x, z) => { const p = [...players.values()].find((q) => q.name === name); if (p) walkTo(p, x, z); },
+    face: (yaw, dist, pitch) => { if (yaw != null) camState.yaw = yaw; if (dist != null) camState.dist = dist; if (pitch != null) camState.pitch = pitch; },
   };
   tick();
   setTimeout(() => $('loading').classList.add('done'), 300);

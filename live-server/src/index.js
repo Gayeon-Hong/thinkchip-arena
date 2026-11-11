@@ -4,6 +4,7 @@
 import {DurableObject} from 'cloudflare:workers';
 
 const MAX_PLAYERS = 8, LOUNGE_MAX = 20; // LNG* = 3D 라운지 공개방 (게임 대신 함께 돌아다니는 공간)
+const cleanDeco = (v) => String(v || '').replace(/[^a-z0-9._]/g, '').slice(0, 120); // lounge 방 꾸미기 encodeDeco
 const cleanLook = (v) => String(v || '').replace(/[^a-z0-9.]/g, '').slice(0, 300); // lounge/avatar.js encodeLook
 const GAMES = ['flip', 'blind', 'triad', 'trust', 'baseball', 'nim', 'auction', 'maze', 'draw', 'marbles', 'redlight', 'bridge', 'minority', 'forehead', 'liar', 'nunchi', 'vote', 'sudoku', 'merge', 'stroop', 'gomoku', 'dots', 'tele', 'mind'];
 const TURN = ['gomoku', 'dots']; // 1:1 turn games: the server relays moves between the two players of each board
@@ -66,7 +67,7 @@ export class Room extends DurableObject {
   view(viewer) {
     const on = this.online(), host = this.hostId(on);
     const players = Object.values(this.s.players).filter((p) => on.has(p.pid) || (this.s.phase !== 'lobby' && p.inRound))
-      .sort((a, b) => a.joinedAt - b.joinedAt).map((p) => ({pid: p.pid, name: p.name, ready: p.ready, score: p.score, done: p.done, inRound: p.inRound, online: on.has(p.pid), host: p.pid === host, look: p.look || '', pos: this.pos?.[p.pid] || null}));
+      .sort((a, b) => a.joinedAt - b.joinedAt).map((p) => ({pid: p.pid, name: p.name, ready: p.ready, score: p.score, done: p.done, inRound: p.inRound, online: on.has(p.pid), host: p.pid === host, look: p.look || '', deco: p.deco || '', pos: this.pos?.[p.pid] || null}));
     const {code, phase, game, level, seed, round, startAt} = this.s;
     let fh = null;
     if (game === 'forehead' && this.s.fh && phase !== 'lobby') {
@@ -323,7 +324,7 @@ export class Room extends DurableObject {
     if (!on.size && this.s.phase !== 'lobby') { this.s = this.fresh(); } // everyone had left: start over
     this.s.code = code;
     const p = this.s.players[pid] || {pid, joinedAt: Date.now(), ready: false, score: 0, done: false, inRound: false};
-    this.s.players[pid] = {...p, name, look: cleanLook(url.searchParams.get('look'))};
+    this.s.players[pid] = {...p, name, look: cleanLook(url.searchParams.get('look')), deco: cleanDeco(url.searchParams.get('deco'))};
     // Forget players who left long ago so the room does not fill with ghosts.
     for (const [id, q] of Object.entries(this.s.players)) if (id !== pid && !on.has(id) && !q.inRound) delete this.s.players[id];
     server.serializeAttachment({pid});
@@ -497,7 +498,9 @@ export class Room extends DurableObject {
         return;
       }
       case 'look':
-        p.look = cleanLook(m.look); break; // 드레스룸에서 갈아입으면 모두에게 새 모습으로
+        p.look = cleanLook(m.look); break;
+      case 'deco': // 내 방 꾸미기 (친구 방 방장의 방이 모두에게 보여요)
+        p.deco = cleanDeco(m.deco); break; // 드레스룸에서 갈아입으면 모두에게 새 모습으로
       case 'emoji':
         if (EMOJIS.includes(m.e)) this.broadcast({t: 'emoji', pid, e: m.e});
         return;
