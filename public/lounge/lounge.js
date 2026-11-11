@@ -409,7 +409,9 @@
   setTimeout(hideHint, 7000);
   function chatLine(name, text, sys) {
     const el = document.createElement('div'); el.className = 'msg' + (sys ? ' sys' : ''); el.innerHTML = sys ? esc(text) : `<b>${esc(name)}</b>${esc(text).replace(JOIN_RE, (_, code, id) => `<a class="join-btn" href="${tableHref(id, code)}">🎮 참가하기</a>`)}`;
-    const log = $('chatLog'); log.appendChild(el); while (log.children.length > 30) log.firstChild.remove();
+    const log = $('chatLog'); const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+    log.appendChild(el); while (log.children.length > 60) log.firstChild.remove();
+    if (atBottom) log.scrollTop = log.scrollHeight;
     news.unshift(sys ? text : `${name}: ${String(text).replace(JOIN_RE, '').trim()}`); news = news.slice(0, 5); drawBoard();
   }
   function setTicker() {
