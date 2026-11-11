@@ -1,0 +1,28 @@
+{
+  "name": "toss-arcade-duel",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Think Chip-powered mobile brain-game arcade prototype for Apps in Toss",
+  "scripts": {
+    "dev": "node scripts/dev-server.mjs",
+    "dev:ait": "vite --host 0.0.0.0",
+    "demo": "node scripts/dev-server.mjs",
+    "build": "vite build && ait build",
+    "pack:demo": "node scripts/build-demo.mjs",
+    "test": "node --test tests/*.test.js",
+    "build:web": "vite build",
+    "deploy": "ait deploy",
+    "deploy:web": "node scripts/deploy-web.mjs"
+  },
+  "dependencies": {
+    "@apps-in-toss/web-framework": "^3.9.0"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0",
+    "typescript": "^5.8.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
