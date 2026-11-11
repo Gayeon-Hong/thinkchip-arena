@@ -1754,6 +1754,7 @@ const parsedTarget=rawTarget===null?null:Number(rawTarget);
 const invitedTarget=Number.isFinite(parsedTarget)&&parsedTarget>=0&&parsedTarget<=10000000?parsedTarget:null;
 const invitedFrom=(params.get('from')||'친구').slice(0,16);
 const invitedRoom=normalizeCode(params.get('room'));
+const wantInvite=params.get('invite')==='1'; // 라운지 '카톡으로 친구 부르기' → 방에 들어오자마자 초대 공유
 const fromLounge=params.get('from')==='lounge';
 // 처음 들어오면 3D 라운지가 첫 화면. 라운지 로고(?home=1)나 게임/방 링크로 온 경우만 기존 홈을 보여줘요.
 if(!['home','open','party','room','game','from','seed'].some(k=>params.has(k))&&!/\/lounge\//.test(location.pathname||'')){try{location.replace('./lounge/index.html');}catch{}}
@@ -1981,8 +1982,9 @@ function joinLive(code,pickGame){leaveLive();const pid=livePid();
   onStatus:st=>{if(!live)return;live.status=st;if(screen==='live')render();},
   onError:code=>{if(!live)return;live.error=code;flash(code==='full'?'방이 꽉 찼어요 (최대 8명).':code==='lost'?'연결이 끊겼어요. 다시 입장해 주세요.':'방에 들어가지 못했어요.');if(code==='full'){leaveLive();}if(screen==='live')render();}});
  screen='live';render();}
+async function inviteToRoom(){if(!live)return;const g=liveGameInfo(live.state?.game||partyGame||'blind');const out=await shareInvite(new URLSearchParams({room:live.code}),`${liveName()}님이 씽크칩 아레나에서 '${g.title}' 같이 하재요! 지금 들어와 🎮 방 코드: ${live.code}`);flash(out.ok?'초대 링크를 보냈어요.':`${out.error} 방 코드 ${live.code}를 친구에게 알려주세요.`);}
 function leaveLive(){if(stage){stage.destroy();stage=null;}if(!live)return;clearInterval(live.cd);live.conn?.close();live=null;chatOpen=false;renderChatDock();}
-function onLiveState(m){if(!live)return;const prev=live.state;live.state=m;live.code=m.code||live.code;
+function onLiveState(m){if(wantInvite&&live&&!live.autoInvited&&m&&m.t==='state'){live.autoInvited=true;setTimeout(()=>inviteToRoom(),400);}if(!live)return;const prev=live.state;live.state=m;live.code=m.code||live.code;
  const me=m.players.find(p=>p.pid===livePid());
  if(live.pendingPick&&me?.host){live.conn.send({t:'pick',game:live.pendingPick,level:difficulty});live.pendingPick=null;}
  if(m.phase==='playing'&&me?.inRound&&live.startedRound!==m.round){if(screen!=='live'){screen='live';}render();return;}
@@ -2416,7 +2418,7 @@ root.addEventListener('click',async e=>{
  if(action==='live-create-here'){joinLive(newRoomCode(),selectedGame);screen='live';render();return;}
  if(action==='live-join'){const c=live?live.code:normalizeCode(document.getElementById('roomCode')?.value||roomDraft);if(c.length<4)return flash('방 코드 4자리를 입력해 주세요.');joinLive(c,null);return;}
  if(action==='live-ready'&&live){const me=liveMe();live.conn.send({t:'ready',v:!(me?.ready)});return;}
- if(action==='live-invite'&&live){const out=await shareInvite(new URLSearchParams({room:live.code}),`${liveName()}님이 씽크칩 아레나 실시간 대결에 초대했어요! 방 코드: ${live.code}`);flash(out.ok?'초대 링크를 보냈어요.':`${out.error} 방 코드 ${live.code}를 친구에게 알려주세요.`);return;}
+ if(action==='live-invite'&&live){await inviteToRoom();return;}
  if(action==='live-leave'){leaveLive();setScreen('home');return;}
  if(target.dataset.themeChoice){setTheme(target.dataset.themeChoice);render();return;}
  if(target.dataset.quick){selectedGame='flip';start(target.dataset.quick);return;}

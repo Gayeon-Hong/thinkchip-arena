@@ -193,8 +193,17 @@
     players.set(id, p); return p;
   }
   function despawn(id) { const p = players.get(id); if (!p) return; scene.remove(p.av); p.tag.remove(); p.bubble.remove(); players.delete(id); }
-  function myName() { return (profile().nickname || '').trim() || '나'; }
+  // 이름을 안 정한 사람은 모두 '나'로 보여서 헷갈렸어요 → 처음 들어올 때 '손님 NN' 같은 이름을 하나 정해 저장해요
+  const NAME_POOL = ['여우', '수달', '판다', '고양이', '펭귄', '다람쥐', '토끼', '부엉이', '돌고래', '햄스터', '알파카', '코알라'];
+  function myName() {
+    const p = profile(); let n = (p.nickname || '').trim();
+    if (!n || n === '나') { n = `${NAME_POOL[Math.floor(Math.random() * NAME_POOL.length)]}${Math.floor(Math.random() * 90) + 10}`; p.nickname = n; store.set(PROFILE_KEY, p); firstName = true; }
+    return n;
+  }
+  let firstName = false;
+  const otherName = (p) => (p.pid === ME ? myName() : (!p.name || p.name === '나' || p.name === '플레이어') ? `손님${String(p.pid || '').replace(/[^0-9]/g, '').slice(-2) || ''}` : p.name);
   let me = spawn(ME, myName(), mine.look, (Math.random() - 0.5) * 5, 6 + Math.random() * 2, true);
+  if (firstName) setTimeout(() => toast(`'${myName()}' 으로 입장했어요 · 비서 데스크에서 이름을 바꿀 수 있어요`), 2500);
   try { localStorage.setItem('thinkchip:look', A.encodeLook(mine.look)); } catch (e) {} // 메인 앱 실시간 방에서도 이 모습으로
   const npcTag = makeTag('비서 · 미소', 'npc');
 
@@ -427,12 +436,23 @@
       <h3>${n ? `${[...pending.joined].map(esc).join(', ')}님이 들어왔어요!` : '파티원을 기다리는 중…'}</h3>
       <p>${n ? '곧 게임 방으로 같이 이동해요.' : '라운지 사람들에게 초대를 보냈어요. 누가 참가하면 바로 같이 들어가요.'}</p></div>
       <div style="display:flex;gap:8px;margin-top:12px"><button class="btn ghost full" id="waitCancel">초대 취소</button><button class="btn gold full" id="waitGo" ${n ? '' : 'disabled'}>${n ? '지금 들어가기' : '1명 이상 오면 시작'}</button></div>
+      <button class="btn kakao full" id="waitShare" style="margin-top:8px">📲 카톡으로 친구 부르기</button>
       <button class="btn ghost full" id="waitAi" style="margin-top:8px">기다리기 싫으면 AI 랑 먼저 하기</button>`, onClose: () => { if (pending && !pending.going) cancelWaiting(true); }});
     $('waitCancel').onclick = () => { cancelWaiting(); closeSheet(); };
     $('waitGo').onclick = goTable;
+    $('waitShare').onclick = shareTable;
     $('waitAi').onclick = () => { const id = pending.id; cancelWaiting(); location.href = openHref(id); };
   }
   function cancelWaiting(silent) { if (!pending) return; clearTimeout(pending.timer); if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'chat', text: `[[cancel:${pending.code}]]`})); pending = null; if (!silent) toast('초대를 취소했어요'); }
+  // 카톡 등으로 '같이 하자' 링크 보내기. 브라우저 공유창이 없으면(토스 앱 안) 게임 방으로 먼저 들어가 토스 공유로 보내요
+  async function shareTable() {
+    if (!pending) return; const g = GAME[pending.id], url = tableHref(pending.id, pending.code);
+    const text = `${myName()}님이 씽크칩 아레나에서 '${g.title}' 같이 하재요! 지금 들어와 🎮 (방 코드 ${pending.code})`;
+    if (navigator.share && !/^(localhost|127\.)/.test(location.hostname)) {
+      try { await navigator.share({title: '씽크칩 아레나 같이 하자!', text, url}); toast('초대를 보냈어요. 여기서 기다릴게요'); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    pending.going = true; location.href = url + '&invite=1';
+  }
   function goTable() { if (!pending) return; pending.going = true; clearTimeout(pending.timer); location.href = tableHref(pending.id, pending.code); }
   // 다른 사람의 초대 팝업
   let inviteShown = null;
@@ -449,9 +469,9 @@
   // 채팅으로 오가는 초대 신호 처리. 화면에 보일 채팅이면 true
   function handleSignal(m) {
     const t = String(m.text || ''); let x;
-    if ((x = /^\[\[ok:([A-Z0-9]{4,6})\]\]$/.exec(t))) { if (pending && pending.code === x[1] && m.pid !== ME) { pending.joined.add(m.name || '친구'); renderWaiting(); clearTimeout(pending.timer); pending.timer = setTimeout(goTable, 2500); } return false; }
+    if ((x = /^\[\[ok:([A-Z0-9]{4,6})\]\]$/.exec(t))) { if (pending && pending.code === x[1] && m.pid !== ME) { pending.joined.add(otherName(m)); renderWaiting(); clearTimeout(pending.timer); pending.timer = setTimeout(goTable, 2500); } return false; }
     if ((x = /^\[\[cancel:([A-Z0-9]{4,6})\]\]$/.exec(t))) { hideInvite(x[1]); return false; }
-    JOIN_RE.lastIndex = 0; if ((x = JOIN_RE.exec(t)) && m.pid !== ME) showInvite(m.name, x[1], x[2]);
+    JOIN_RE.lastIndex = 0; if ((x = JOIN_RE.exec(t)) && m.pid !== ME) showInvite(otherName(m), x[1], x[2]);
     JOIN_RE.lastIndex = 0; return true;
   }
   function openZone(zone) {
@@ -625,8 +645,8 @@
       for (const p of m.players || []) {
         if (p.pid === ME || !p.online) continue; seen.add(p.pid);
         let pl = players.get(p.pid);
-        if (pl && pl.look !== (p.look || '')) { const pos = pl.av.position.clone(); despawn(p.pid); pl = null; spawn(p.pid, p.name, p.look || '', pos.x, pos.z); }
-        else if (!pl) { const pos = p.pos || {x: (Math.random() - 0.5) * 6, z: 4 + Math.random() * 2}; pl = spawn(p.pid, p.name, p.look || '', pos.x, pos.z); if (!online.has(p.pid) && gotFirstState) chatLine('', `${p.name}님이 라운지에 들어왔어요`, true); }
+        if (pl && pl.look !== (p.look || '')) { const pos = pl.av.position.clone(); despawn(p.pid); pl = null; spawn(p.pid, otherName(p), p.look || '', pos.x, pos.z); }
+        else if (!pl) { const pos = p.pos || {x: (Math.random() - 0.5) * 6, z: 4 + Math.random() * 2}; pl = spawn(p.pid, otherName(p), p.look || '', pos.x, pos.z); if (!online.has(p.pid) && gotFirstState) chatLine('', `${otherName(p)}님이 라운지에 들어왔어요`, true); }
         pl.tag.textContent = p.name; online.set(p.pid, p.name);
       }
       for (const id of [...online.keys()]) if (!seen.has(id)) { chatLine('', `${online.get(id)}님이 나갔어요`, true); online.delete(id); despawn(id); }
@@ -635,8 +655,8 @@
       if (!decoDraft) applyDecor(hostDeco || myRoom.deco);
       gotFirstState = true; setOnline(true); drawBoard(); setTicker();
     } else if (m.t === 'pose') { const p = players.get(m.pid); if (p && m.pid !== ME) walkTo(p, m.x, m.z); }
-    else if (m.t === 'chat') { const p = players.get(m.pid); if (m.sys) chatLine('', m.text, true); else if (handleSignal(m)) { chatLine(m.name, m.text); say(p, m.text); } }
-    else if (m.t === 'chatlog') { (m.items || []).filter((c) => !/^\[\[(ok|cancel):/.test(c.text || '')).slice(-6).forEach((c) => chatLine(c.name, c.text, c.sys)); }
+    else if (m.t === 'chat') { const p = players.get(m.pid); if (m.sys) chatLine('', m.text, true); else if (handleSignal(m)) { chatLine(otherName(m), m.text); say(p, m.text); } }
+    else if (m.t === 'chatlog') { (m.items || []).filter((c) => !/^\[\[(ok|cancel):/.test(c.text || '')).slice(-6).forEach((c) => chatLine(c.sys ? '' : otherName(c), c.text, c.sys)); }
     else if (m.t === 'error' && m.code === 'full') { toast('공개 라운지가 꽉 차서 옆 라운지로 옮겨요'); const n = Number((room.code || 'LNG1').slice(3)) || 1; switchRoom(null); room.code = `LNG${Math.min(9, n + 1)}`; reconnect(); }
   }
 
