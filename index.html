@@ -1739,6 +1739,8 @@ const invitedTarget=Number.isFinite(parsedTarget)&&parsedTarget>=0&&parsedTarget
 const invitedFrom=(params.get('from')||'친구').slice(0,16);
 const invitedRoom=normalizeCode(params.get('room'));
 const fromLounge=params.get('from')==='lounge';
+// 처음 들어오면 3D 라운지가 첫 화면. 라운지 로고(?home=1)나 게임/방 링크로 온 경우만 기존 홈을 보여줘요.
+if(!['home','open','party','room','game','from','seed'].some(k=>params.has(k))&&!/\/lounge\//.test(location.pathname||'')){try{location.replace('./lounge/');}catch{}}
 const LOUNGE_URL='./lounge/'+(invitedRoom?`?room=${invitedRoom}`:'');
 let storageKey=KEY; // must exist before the first readProfile() call
 let profile=readProfile();

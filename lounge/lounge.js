@@ -9,6 +9,7 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const fmt = (n) => Number(n || 0).toLocaleString('ko-KR');
   const ARENA = new URL('../', location.href); // 메인 앱(게임 아레나)
+  const ARENA_HOME = new URL('../?home=1', location.href).href; // 메인 앱 홈 (첫 화면 라운지로 다시 안 넘어오게)
 
   // ───────── 저장소 (메인 앱과 공유) ─────────
   const PROFILE_KEY = 'brain-arena:mvp:v2', LOUNGE_KEY = 'thinkchip:lounge:v1';
@@ -43,7 +44,7 @@
   const canvas = $('scene');
   let renderer;
   try { renderer = new THREE.WebGLRenderer({canvas, antialias: true, powerPreference: 'high-performance'}); }
-  catch (e) { document.body.insertAdjacentHTML('beforeend', `<div class="nowebgl"><h2>이 기기에서는 3D 라운지를 열 수 없어요</h2><p>게임은 그대로 즐길 수 있어요.</p><a class="btn gold" href="${ARENA}">게임 아레나로 가기</a></div>`); $('loading').classList.add('done'); return; }
+  catch (e) { document.body.insertAdjacentHTML('beforeend', `<div class="nowebgl"><h2>이 기기에서는 3D 라운지를 열 수 없어요</h2><p>게임은 그대로 즐길 수 있어요.</p><a class="btn gold" href="${ARENA_HOME}">게임 아레나로 가기</a></div>`); $('loading').classList.add('done'); return; }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.95;
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
