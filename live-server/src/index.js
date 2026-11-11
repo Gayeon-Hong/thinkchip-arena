@@ -173,7 +173,9 @@ export class User extends DurableObject {
   async init(pid, acct, platform, name) { const u = this.u; u.pid = pid; u.acct = acct; u.platform = platform; u.toss = platform === 'toss'; if (!u.name && name) u.name = cleanName(name); await this.save(); return 'ok'; }
   other(pid) { return this.env.USER.get(this.env.USER.idFromName(pid)); }
   wallet() { const w = this.u.w, d = dayKey(); return {chips: w.chips, paid: Math.min(w.paid, w.chips), earnedToday: w.earn.day === d ? w.earn.total : 0, earnCap: PLAY_DAILY_CAP, adsToday: w.ad.day === d ? w.ad.count : 0, adLimit: AD_DAILY_LIMIT, attended: w.attend === d, imported: w.imported}; }
-  view(extra = {}) { const u = this.u; return {ok: true, pid: u.pid, name: u.name, platform: u.platform, wallet: this.wallet(), data: u.data,
+  // 관리자(ADMIN_PIDS, wrangler.toml): 옷·가구를 전부 가진 것으로 (힌트·칩은 다른 사람과 똑같이)
+  isAdmin() { return String(this.env.ADMIN_PIDS || '').split(/[\s,]+/).filter(Boolean).includes(this.u.pid); }
+  view(extra = {}) { const u = this.u; return {ok: true, pid: u.pid, name: u.name, platform: u.platform, admin: this.isAdmin(), wallet: this.wallet(), data: u.data,
     friends: Object.entries(u.friends).map(([pid, f]) => ({pid, name: f.name, nogift: !!f.toss})), requests: Object.entries(u.inReq).map(([pid, r]) => ({pid, name: r.name, at: r.at})),
     pending: Object.keys(u.outReq), gifts: u.gifts, sentToday: u.sent.day === dayKey() ? u.sent.total : 0, giftMax: GIFT_DAILY_MAX, ...extra}; }
   addChips(n, paid = false) { const w = this.u.w; w.chips = Math.min(9999999, w.chips + n); if (paid) w.paid += n; }

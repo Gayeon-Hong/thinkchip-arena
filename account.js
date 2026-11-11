@@ -35,7 +35,7 @@
 
   function apply(d) {
     if (!d || !d.ok) return;
-    Object.assign(state, {loggedIn: true, pid: d.pid, name: d.name, platform: d.platform, wallet: d.wallet, data: d.data || {},
+    Object.assign(state, {loggedIn: true, pid: d.pid, name: d.name, platform: d.platform, admin: !!d.admin, wallet: d.wallet, data: d.data || {},
       social: {friends: d.friends, requests: d.requests, pending: d.pending, gifts: d.gifts, sentToday: d.sentToday, giftMax: d.giftMax}});
   }
   async function call(op, extra = {}) {

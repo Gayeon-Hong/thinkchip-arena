@@ -521,7 +521,8 @@
     mats.rug.color.setHex(pick('rug', d.rug).c);
     for (const [id, g] of Object.entries(furniture)) g.visible = (d.items || []).includes(id);
   }
-  const decoOwned = (cat, id) => (DECOR[cat].find((x) => x.id === id)?.price || 0) === 0 || myRoom.owned.includes(`${cat}:${id}`);
+  const isAdmin = () => loggedIn() && !!st().admin; // 관리자 계정: 옷·가구 전부 열림
+  const decoOwned = (cat, id) => isAdmin() || (DECOR[cat].find((x) => x.id === id)?.price || 0) === 0 || myRoom.owned.includes(`${cat}:${id}`);
   let decoDraft = null, decoTab = 'wall';
   function openRoomDeco() {
     decoDraft = decoDraft || JSON.parse(JSON.stringify(myRoom.deco)); applyDecor(decoDraft);
@@ -700,6 +701,7 @@
       <div class="card" style="margin-top:12px"><h3>내 기록</h3><div class="stats"><div><b>${acctOn() && !loggedIn() ? '-' : fmt(myChips())}</b><small>씽크칩</small></div><div><b>${plays}</b><small>최근 플레이</small></div><div><b>${wins}</b><small>최근 승리</small></div></div>
       ${bestList.length ? `<p style="margin-top:10px">${bestList.map(([id, s]) => `${esc(GAME[id]?.title || id)} <b style="color:var(--gold)">${fmt(s)}</b>`).join(' · ')}</p>` : '<p style="margin-top:10px">아직 기록이 없어요. 테이블에서 한 판 해볼까요?</p>'}</div>
       <a class="btn ghost full" style="display:grid;place-items:center;text-decoration:none;color:inherit;margin-top:8px" href="${new URL('?wallet=1&from=lounge', ARENA).href}">⬡ 씽크칩 충전 · 지갑</a>
+      ${loggedIn() ? `<p class="table-note" style="text-align:center;user-select:all;-webkit-user-select:all">내 ID ${esc(st().pid)}${isAdmin() ? ' · 👑 관리자' : ''}</p>` : ''}
       ${acctOn() && !IN_TOSS ? (loggedIn() ? `<p class="table-note" style="text-align:center">카카오 계정으로 로그인됨 · <a href="#" id="logoutBtn" style="color:var(--muted)">로그아웃</a></p>` : '<button class="btn kakao full" id="deskLogin" style="margin-top:8px">🔑 로그인하고 칩 모으기</button>') : ''}
       <div class="name-row" style="margin:12px 0"><div class="label-row">내 이름 <small style="color:var(--muted);font-weight:600">· 바꾸면 바로 머리 위 이름이 바뀌어요</small></div><input id="deskName" maxlength="12" value="${esc(p.nickname || '')}" placeholder="라운지에서 보일 이름"></div>
       <div class="card"><h3>비서의 팁</h3><p>${['심리전 테이블에선 채팅 이모티콘으로 표정을 바꿔 블러핑해 보세요 😏', '드레스룸에서 얼굴은 무료로 바꿀 수 있어요.', '친구 방을 만들면 라운지와 파티 게임을 같은 사람들과 할 수 있어요.', '메인 매치는 매일 자정에 바뀌어요.'][new Date().getDate() % 4]}</p></div>`});
@@ -721,7 +723,7 @@
   ];
   let closetTab = 'face', draft = null;
   const priceOf = (cat, id) => (W[cat] || []).find((x) => x.id === id)?.price || 0;
-  const owned = (cat, id) => priceOf(cat, id) === 0 || mine.owned.includes(`${cat}:${id}`);
+  const owned = (cat, id) => isAdmin() || priceOf(cat, id) === 0 || mine.owned.includes(`${cat}:${id}`);
   function unpaid(look) { return ['hair', 'top', 'bottom', 'shoes', 'acc'].filter((c) => !owned(c, look[c])).map((c) => ({cat: c, id: look[c], price: priceOf(c, look[c])})); }
   function rebuildMe() {
     const pos = me.av.position.clone(), ry = me.av.rotation.y; scene.remove(me.av);
