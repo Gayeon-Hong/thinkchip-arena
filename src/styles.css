@@ -48,14 +48,14 @@
 
 /* in-game accent follows the game color */
 html[data-game]{--accent:var(--gx);--accent-hover:var(--gx);--accent-ink:var(--gx-ink);--accent-soft:var(--gx-soft);--focus:var(--gx-ink)}
-html[data-game="violet"]{--gx:#6f52e6;--gx-ink:#b9a8ff;--gx-soft:#2a2257}
+html[data-game="violet"]{--gx:#8f55e0;--gx-ink:#cfa3ff;--gx-soft:#2a2050}
 html[data-game="amber"] {--gx:#c9800f;--gx-ink:#ffcd7a;--gx-soft:#3a2b10}
 html[data-game="teal"]  {--gx:#12968a;--gx-ink:#7fe6d8;--gx-soft:#0f3330}
-html[data-game="rose"]  {--gx:#d93a5c;--gx-ink:#ff9fb2;--gx-soft:#3d1621}
+html[data-game="rose"]  {--gx:#e0587a;--gx-ink:#ff9fb6;--gx-soft:#3a1a2e}
 html[data-game="green"] {--gx:#24a352;--gx-ink:#8ff0ad;--gx-soft:#123321}
-html[data-game="sky"]   {--gx:#1d8fd6;--gx-ink:#8fd3ff;--gx-soft:#0e2c44}
+html[data-game="sky"]   {--gx:#2a9fd8;--gx-ink:#8fdcff;--gx-soft:#12304a}
 html[data-game="coral"] {--gx:#e0662a;--gx-ink:#ffb48a;--gx-soft:#3d1f10}
-html[data-game="lime"]  {--gx:#6f9a17;--gx-ink:#c8ec7a;--gx-soft:#25300e}
+html[data-game="lime"]  {--gx:#7fa62a;--gx-ink:#cdea86;--gx-soft:#263418}
 html[data-game="pink"]  {--gx:#d43e9c;--gx-ink:#ffa6dc;--gx-soft:#3a1430}
 html[data-game="indigo"]{--gx:#5463e6;--gx-ink:#b3bcff;--gx-soft:#1c2150}
 html[data-game="red"]   {--gx:#e0384a;--gx-ink:#ffa3ac;--gx-soft:#3d1117}
@@ -440,3 +440,10 @@ a.hero-cta{text-decoration:none}
 @media (max-width:380px){.lounge-pill{padding:0 11px 0 9px;font-size:12px}.top-actions{gap:5px}}
 .brand-lockup{min-width:0}.brand-title{overflow:hidden;text-overflow:ellipsis}.top-left{flex:1 1 auto}.top-actions{flex:0 0 auto}
 @media (max-width:430px){.top-actions [data-action="toggle-theme"]{display:none}}
+
+/* ── 라운지와 같은 색 세계: 남색 벽 · 금색 칩 · 보라 포인트 · 따뜻한 나무 바닥 ── */
+:root,[data-theme="dark"]{--bg:#0b1020;--surface:#121a2f;--surface-2:#18223b;--surface-3:#212d4a;--line:#26324f;--accent:#5b63d6;--accent-hover:#6c74e6;--accent-ink:#aab4ff;--accent-soft:#1f2650;--nav:rgba(11,16,32,.94);--hero:#141c33;--gold:#f7ce55;--focus:#aab4ff}
+[data-theme="dark"] .page{background:radial-gradient(130% 60% at 50% 0%,rgba(124,140,255,.10),transparent 60%),linear-gradient(180deg,transparent 70%,rgba(122,90,67,.10))}
+.chip-icon,.reward-icon,.wallet-link .chip-icon{color:var(--gold)}
+.live-stage,.game-stage{background:linear-gradient(180deg,#141c33 0%,#1b2644 52%,#6b4f3b 52.5%,#7a5a43 70%,#5e4433 100%);border-color:rgba(247,206,85,.22)}
+[data-theme="light"] .live-stage,[data-theme="light"] .game-stage{background:linear-gradient(180deg,#e9e3d8 0%,#dcd5c8 52%,#b08b6b 52.5%,#c09a78 70%,#a07c5e 100%)}
