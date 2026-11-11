@@ -37,7 +37,8 @@
 
 <div class="hint" id="hint">바닥을 눌러 걸어가고, 테이블을 눌러 게임을 골라요</div>
 
-<section class="chat" aria-label="라운지 채팅">
+<section class="chat" aria-label="라운지 채팅" id="chatPanel">
+  <button type="button" class="chat-toggle" id="chatToggle" aria-label="채팅 닫기">✕</button>
   <div class="chat-log" id="chatLog"></div>
   <div class="emotes" id="emotes">
     <button data-emote="👋">👋</button><button data-emote="😂">😂</button><button data-emote="😮">😮</button><button data-emote="🤔">🤔</button>
@@ -48,6 +49,7 @@
     <button type="submit">전송</button>
   </form>
 </section>
+<button type="button" class="chat-reopen" id="chatReopen" aria-label="채팅 열기" hidden>💬</button>
 
 <div class="sheet-backdrop" id="backdrop" hidden></div>
 <section class="sheet" id="sheet" role="dialog" aria-modal="true" hidden>
