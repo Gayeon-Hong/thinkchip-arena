@@ -66,6 +66,15 @@
       if (!d.ok) return false; const fresh = !ls.get(SKEY); ls.set(SKEY, d.token); state.loggedIn = true; if (fresh) state.justLoggedIn = true; await refresh(); return true;
     } catch (e) { return false; }
   }
+  // 토스 앱: 로그인 화면 없이 이 기기 전용 계정으로 자동 로그인 (기기 키는 이 브라우저에만 저장돼요)
+  async function loginDevice(name) {
+    if (!API) return false; if (ls.get(SKEY)) return true;
+    let id = ls.get('thinkchip:deviceKey'); if (!/^[a-f0-9]{32}$/.test(id || '')) { const a = new Uint8Array(16); crypto.getRandomValues(a); id = [...a].map((x) => x.toString(16).padStart(2, '0')).join(''); ls.set('thinkchip:deviceKey', id); }
+    try {
+      const d = await fetch(`${API}/auth/device`, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({id, name: name || ''})}).then((r) => r.json());
+      if (!d.ok) return false; ls.set(SKEY, d.token); state.loggedIn = true; await refresh(); return true;
+    } catch (e) { return false; }
+  }
   function logout() { ls.set(SKEY, null); Object.assign(state, {loggedIn: false, pid: '', name: '', platform: '', wallet: null, social: null, data: {}}); emit(); }
   function init(liveUrl) {
     if (API) return; API = String(liveUrl || '').replace(/^ws/, 'http').replace(/\/live\/?$/, '');
@@ -73,5 +82,5 @@
     refresh();
   }
   addEventListener('storage', (e) => { if (e.key === SKEY && !e.newValue) logout(); else if (e.key === CKEY && e.newValue) { try { Object.assign(state, JSON.parse(e.newValue)); for (const f of subs) f(state); } catch (er) {} } });
-  global.ThinkChipAccount = {state, init, call, refresh, loginKakao, loginToss, logout, onChange(fn) { subs.push(fn); return () => { subs = subs.filter((x) => x !== fn); }; }, get api() { return API; }, clearWelcome() { state.welcomeBonus = 0; ls.set('thinkchip:welcome', null); }, hasSession: () => !!ls.get(SKEY)};
+  global.ThinkChipAccount = {state, init, call, refresh, loginKakao, loginToss, loginDevice, logout, onChange(fn) { subs.push(fn); return () => { subs = subs.filter((x) => x !== fn); }; }, get api() { return API; }, clearWelcome() { state.welcomeBonus = 0; ls.set('thinkchip:welcome', null); }, hasSession: () => !!ls.get(SKEY)};
 })(typeof window !== 'undefined' ? window : globalThis);

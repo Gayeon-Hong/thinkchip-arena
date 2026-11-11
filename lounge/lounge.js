@@ -553,7 +553,7 @@
   let hostDeco = null; // 친구 방 방장이 꾸민 방
   // ───────── UI ─────────
   function toast(msg) { const el = $('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('show'), 2600); }
-  function renderChips() { $('chips').textContent = acctOn() && !loggedIn() ? '로그인' : fmt(myChips()); }
+  function renderChips() { $('chips').textContent = acctOn() && !loggedIn() ? (IN_TOSS ? '…' : '로그인') : fmt(myChips()); }
   function hideHint() { $('hint').classList.add('hide'); }
   setTimeout(hideHint, 7000);
   function chatLine(name, text, sys) {
@@ -700,7 +700,7 @@
       <div class="card" style="margin-top:12px"><h3>내 기록</h3><div class="stats"><div><b>${acctOn() && !loggedIn() ? '-' : fmt(myChips())}</b><small>씽크칩</small></div><div><b>${plays}</b><small>최근 플레이</small></div><div><b>${wins}</b><small>최근 승리</small></div></div>
       ${bestList.length ? `<p style="margin-top:10px">${bestList.map(([id, s]) => `${esc(GAME[id]?.title || id)} <b style="color:var(--gold)">${fmt(s)}</b>`).join(' · ')}</p>` : '<p style="margin-top:10px">아직 기록이 없어요. 테이블에서 한 판 해볼까요?</p>'}</div>
       <a class="btn ghost full" style="display:grid;place-items:center;text-decoration:none;color:inherit;margin-top:8px" href="${new URL('?wallet=1&from=lounge', ARENA).href}">⬡ 씽크칩 충전 · 지갑</a>
-      ${acctOn() ? (loggedIn() ? `<p class="table-note" style="text-align:center">${ACC.state.platform === 'toss' ? '토스' : '카카오'} 계정으로 로그인됨 ${IN_TOSS ? '' : '· <a href="#" id="logoutBtn" style="color:var(--muted)">로그아웃</a>'}</p>` : '<button class="btn kakao full" id="deskLogin" style="margin-top:8px">🔑 로그인하고 칩 모으기</button>') : ''}
+      ${acctOn() && !IN_TOSS ? (loggedIn() ? `<p class="table-note" style="text-align:center">카카오 계정으로 로그인됨 · <a href="#" id="logoutBtn" style="color:var(--muted)">로그아웃</a></p>` : '<button class="btn kakao full" id="deskLogin" style="margin-top:8px">🔑 로그인하고 칩 모으기</button>') : ''}
       <div class="name-row" style="margin:12px 0"><div class="label-row">내 이름 <small style="color:var(--muted);font-weight:600">· 바꾸면 바로 머리 위 이름이 바뀌어요</small></div><input id="deskName" maxlength="12" value="${esc(p.nickname || '')}" placeholder="라운지에서 보일 이름"></div>
       <div class="card"><h3>비서의 팁</h3><p>${['심리전 테이블에선 채팅 이모티콘으로 표정을 바꿔 블러핑해 보세요 😏', '드레스룸에서 얼굴은 무료로 바꿀 수 있어요.', '친구 방을 만들면 라운지와 파티 게임을 같은 사람들과 할 수 있어요.', '메인 매치는 매일 자정에 바뀌어요.'][new Date().getDate() % 4]}</p></div>`});
     $('deskName').onchange = (e) => { const q = profile(); q.nickname = e.target.value.trim().slice(0, 12); saveProfile(q); me.tag.textContent = myName(); reconnect(); if (loggedIn()) ACC.call('hello', {name: myName()}).catch(() => {}); toast('이름을 바꿨어요'); };
@@ -834,6 +834,7 @@
   const st = () => (ACC && ACC.state) || {};
   const social = () => st().social || {friends: [], requests: [], pending: [], gifts: [], sentToday: 0, giftMax: 5000};
   function openLogin(why = '') {
+    if (IN_TOSS) { tossAuto(); toast('잠시만요, 연결하는 중이에요'); return; } // 토스 앱은 로그인 화면 없이 자동
     openSheet({kicker: 'LOGIN', title: '🔑 로그인', html: `
       <div class="card"><h3>${esc(why)}로그인이 필요해요</h3><p>로그인하면 씽크칩·산 옷과 가구·친구가 계정에 저장돼서 폰을 바꾸거나 앱을 지워도 그대로예요.</p></div>
       ${IN_TOSS ? '<button class="btn gold full" id="loginGo">토스 계정으로 계속하기</button>' : '<button class="btn kakao full" id="loginGo">카카오로 로그인</button>'}
@@ -843,6 +844,9 @@
       if (!ACC || !ACC.loginKakao()) toast('지금은 로그인할 수 없어요. 인터넷 연결을 확인해 주세요');
     };
   }
+  // 토스 앱: 로그인 없이 이 기기 계정으로 자동 연결 (메인 앱이 토스 계정으로 먼저 연결했으면 그대로 써요)
+  let tossTried = 0;
+  function tossAuto() { if (!IN_TOSS || !ACC || !acctOn() || ACC.hasSession() || Date.now() - tossTried < 5000) return; tossTried = Date.now(); ACC.loginDevice(myName()).then((ok) => { if (ok) afterSync(); }); }
   // 칩 쓰기: 로그인 상태면 서버 지갑에서, 오프라인 데모면 이 기기 지갑에서. 성공하면 true
   async function payChips(total, why) {
     if (!total) return true;
@@ -896,7 +900,7 @@
     if (document.activeElement && document.activeElement.id === 'nameInput') return; // 이름 입력 중엔 다시 그리지 않아요
     const nameRow = `<div class="name-row" style="margin:0 0 12px"><div class="label-row">내 이름 <small style="color:var(--muted);font-weight:600">· 바꾸면 머리 위 이름과 친구 목록 이름이 바뀌어요</small></div><input id="nameInput" maxlength="12" value="${esc(profile().nickname || '')}" placeholder="라운지에서 보일 이름"></div>`;
     if (!acctOn()) { box.innerHTML = nameRow + '<div class="card"><p>오프라인이라 친구 기능을 쓸 수 없어요.</p></div>'; return; }
-    if (!loggedIn()) { box.innerHTML = nameRow + `<div class="card"><h3>👥 친구</h3><p>로그인하면 친구를 맺고, 손인사하고, ${IN_TOSS ? '함께 놀 수 있어요' : '칩을 선물할 수 있어요'}.</p></div><button class="btn kakao full" id="socialLogin" style="margin-bottom:16px">🔑 로그인하기</button>`; return; }
+    if (!loggedIn()) { box.innerHTML = nameRow + (IN_TOSS ? '<div class="card"><p>연결하는 중이에요… 잠시 후 다시 열어 주세요.</p></div>' : '<div class="card"><h3>👥 친구</h3><p>로그인하면 친구를 맺고, 손인사하고, 칩을 선물할 수 있어요.</p></div><button class="btn kakao full" id="socialLogin" style="margin-bottom:16px">🔑 로그인하기</button>'); if (IN_TOSS) tossAuto(); return; }
     const so = social(), fr = so.friends || [], rq = so.requests || [], known = new Set([...fr.map((f) => f.pid), ...(so.pending || [])]);
     const here = [...online.entries()].filter(([pid]) => pid !== ME && !known.has(pid) && !rq.some((r) => r.pid === pid));
     const pending = (so.pending || []).length, paid = giftable();
@@ -1079,6 +1083,7 @@
       toast(r.ok ? (made ? `${pf.name || '친구'}님과 친구가 됐어요! 🎉` : `${pf.name || '친구'}님에게 친구 신청을 보냈어요`) : socialMsg(r.error)); if (made) celebrate(pf.to); } catch (e) {}
   }
   if (ACC) ACC.onChange(() => { afterSync(); pendingFriend(); });
+  if (IN_TOSS) setTimeout(tossAuto, 1500); // 토스 앱: 처음 열면 자동 연결
   if (ACC && ACC.state.loginError) setTimeout(() => toast(ACC.state.loginError === 'cancel' ? '로그인을 취소했어요' : '로그인하지 못했어요. 다시 시도해 주세요'), 800);
   if (ACC && ACC.state.justLoggedIn) setTimeout(() => toast('로그인했어요! 이제 칩과 친구가 계정에 저장돼요 🎉'), 1200);
   setInterval(() => { if (!document.hidden) syncSocial(); }, 45000);

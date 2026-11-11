@@ -131,6 +131,13 @@ async function authApi(req, env, url) {
     const n = String(url.searchParams.get('name') || 'dev').replace(/[^a-zA-Z0-9]/g, '').slice(0, 20);
     const {token} = await issue(env, `dev:${n}`, 'kakao', n); return json({ok: true, token});
   }
+  if (url.pathname === '/auth/device') { // 토스 앱: 로그인 화면 없이 이 기기(브라우저)마다 자동 계정 — 선물은 안 되는 계정이에요
+    if (req.method === 'OPTIONS') return new Response(null, {headers: CORS});
+    let b; try { b = await req.json(); } catch { return json({error: 'bad'}, 400); }
+    const id = String(b?.id || ''); if (!/^[a-f0-9]{32}$/.test(id)) return json({error: 'bad'}, 400);
+    const {token} = await issue(env, `device:${id}`, 'toss', String(b.name || ''));
+    return json({ok: true, token});
+  }
   if (url.pathname === '/auth/toss') { // 토스 앱: 토스가 주는 사용자 식별 해시 (앱별로 다르고 남이 알 수 없어요)
     if (req.method === 'OPTIONS') return new Response(null, {headers: CORS});
     let b; try { b = await req.json(); } catch { return json({error: 'bad'}, 400); }
