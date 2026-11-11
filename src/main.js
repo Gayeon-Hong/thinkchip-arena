@@ -53,7 +53,7 @@ const fromLounge=params.get('from')==='lounge';
 const directMode=openGame&&['solo','ai'].includes(params.get('mode'))?params.get('mode'):null;
 const directLevel=LEVELS.includes(params.get('level'))?params.get('level'):null;
 // 처음 들어오면 3D 라운지가 첫 화면. 라운지 로고(?home=1)나 게임/방 링크로 온 경우만 기존 홈을 보여줘요.
-const wantLounge=!['home','open','party','room','game','from','seed','wallet'].some(k=>params.has(k))&&!/\/lounge\//.test(location.pathname||'');
+const wantLounge=typeof location.replace==='function'&&!['home','open','party','room','game','from','seed','wallet'].some(k=>params.has(k))&&!/\/lounge\//.test(location.pathname||'');
 const goLounge=()=>{try{location.replace('./lounge/index.html');}catch{}};
 if(wantLounge&&TOSS_CONFIG.target!=='toss')goLounge(); // 토스 앱은 토스 계정 로그인을 마친 뒤 라운지로 (아래 initToss)
 const LOUNGE_URL='./lounge/index.html'+(invitedRoom?`?room=${invitedRoom}`:'');
@@ -807,12 +807,13 @@ root.addEventListener('focusout',e=>{if(e.target.tagName==='INPUT'&&live?.dirty&
 root.addEventListener('input',e=>{if(e.target.id==='roomCode'){const v=normalizeCode(e.target.value);roomDraft=v;if(e.target.value!==v)e.target.value=v;}});
 root.addEventListener('change',e=>{if(e.target.matches('[data-difficulty]')){difficulty=e.target.value;render();}if(e.target.id==='nickname'){profile.nickname=String(e.target.value||'').trim().slice(0,16);saveProfile();flash('별명이 저장됐어요.');}});
 // 친구 대결의 부정 점수는 현재 서버 검증이 없습니다. 출시 전 점수 리플레이 서버 필수.
-initTheme(render);
-render();
+initTheme(()=>{if(!wantLounge)render();});
+// 라운지로 넘어갈 때는 옛 홈 화면을 그리지 않고 '라운지 준비 중' 화면을 그대로 둬요 (8초 안에 못 넘어가면 홈을 보여줘요)
+if(!wantLounge)render();else setTimeout(()=>{if(document.getElementById('boot'))render();},8000);
 if(directMode){if(directLevel)difficulty=directLevel;start(directMode);}
 if(params.get('wallet')==='1'){screen='wallet';render();}
 // Toss: safe area, user key (per-account records), ad preload; Android back -> in-app back, exit confirm on home.
-if(ACC)ACC.onChange(()=>{if(ACC.state.welcomeBonus&&!wantLounge){flash(`🎉 가입 축하 보너스 +${ACC.state.welcomeBonus} 씽크칩!`);ACC.clearWelcome();}flushPurchases();if(['home','wallet','result','intro','records'].includes(screen))render();});
+if(ACC)ACC.onChange(()=>{if(ACC.state.welcomeBonus&&!wantLounge){flash(`🎉 가입 축하 보너스 +${ACC.state.welcomeBonus} 씽크칩!`);ACC.clearWelcome();}flushPurchases();if(!(wantLounge&&document.getElementById('boot'))&&['home','wallet','result','intro','records'].includes(screen))render();});
 initToss().then(async st=>{useUserKey(st.userKeyHash);
  if(TOSS_CONFIG.target==='toss'&&ACC&&!ACC.hasSession()){ // 토스 앱: 로그인 화면 없이 자동 (토스 사용자 키가 있으면 그걸로, 없으면 이 기기 계정)
   const ok=st.inToss&&st.userKeyHash?await ACC.loginToss(st.userKeyHash,profile.nickname):false;if(!ok)await ACC.loginDevice(profile.nickname);}

@@ -459,7 +459,7 @@ body.to-lounge #app{opacity:0;transform:scale(.98);transition:opacity .24s ease,
 [data-theme="dark"] .play-panel,[data-theme="dark"] .hand-panel,[data-theme="dark"] .score-panel,[data-theme="dark"] .result-box,[data-theme="dark"] .hint-row{background:rgba(14,20,38,.78);backdrop-filter:blur(10px)}
 [data-theme="light"]{--bg:#e9ecf5;--surface:#ffffff;--line:rgba(20,30,60,.12);--text:#1b2440;--muted:#5d6782}
 .chip-packs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px}.chip-pack{display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 6px;border-radius:16px;border:1px solid rgba(247,206,85,.35);background:rgba(247,206,85,.08);color:var(--text)}.chip-pack .cp-amt{font-size:16px;font-weight:900;color:var(--gold)}.chip-pack small{font-size:10px;color:var(--muted)}.chip-pack b{font-size:13px;padding:4px 10px;border-radius:999px;background:var(--gold);color:#141a2c}
-</style></head><body><div id="app"></div><script src="./account.js"></script><script type="module">
+</style></head><body><div id="app"><div id="boot" style="position:fixed;inset:0;display:grid;place-content:center;justify-items:center;gap:12px;background:#0b1020;color:#a3adc4;font:13px system-ui,sans-serif;z-index:99"><div style="width:34px;height:34px;border-radius:50%;border:3px solid rgba(255,255,255,.1);border-top-color:#f7ce55;animation:bootspin .9s linear infinite"></div><p style="margin:0">라운지 준비 중…</p><style>@keyframes bootspin{to{transform:rotate(360deg)}}</style></div></div><script src="./account.js"></script><script type="module">
 // ==== app.config.js ====
 // Public app configuration only. NEVER put API keys, mTLS keys or secrets here.
 // Values come from .env (VITE_*). 02_build_ait_windows.cmd asks for them and writes .env for you.
@@ -1875,7 +1875,7 @@ const fromLounge=params.get('from')==='lounge';
 const directMode=openGame&&['solo','ai'].includes(params.get('mode'))?params.get('mode'):null;
 const directLevel=LEVELS.includes(params.get('level'))?params.get('level'):null;
 // 처음 들어오면 3D 라운지가 첫 화면. 라운지 로고(?home=1)나 게임/방 링크로 온 경우만 기존 홈을 보여줘요.
-const wantLounge=!['home','open','party','room','game','from','seed','wallet'].some(k=>params.has(k))&&!/\/lounge\//.test(location.pathname||'');
+const wantLounge=typeof location.replace==='function'&&!['home','open','party','room','game','from','seed','wallet'].some(k=>params.has(k))&&!/\/lounge\//.test(location.pathname||'');
 const goLounge=()=>{try{location.replace('./lounge/index.html');}catch{}};
 if(wantLounge&&TOSS_CONFIG.target!=='toss')goLounge(); // 토스 앱은 토스 계정 로그인을 마친 뒤 라운지로 (아래 initToss)
 const LOUNGE_URL='./lounge/index.html'+(invitedRoom?`?room=${invitedRoom}`:'');
@@ -2629,12 +2629,13 @@ root.addEventListener('focusout',e=>{if(e.target.tagName==='INPUT'&&live?.dirty&
 root.addEventListener('input',e=>{if(e.target.id==='roomCode'){const v=normalizeCode(e.target.value);roomDraft=v;if(e.target.value!==v)e.target.value=v;}});
 root.addEventListener('change',e=>{if(e.target.matches('[data-difficulty]')){difficulty=e.target.value;render();}if(e.target.id==='nickname'){profile.nickname=String(e.target.value||'').trim().slice(0,16);saveProfile();flash('별명이 저장됐어요.');}});
 // 친구 대결의 부정 점수는 현재 서버 검증이 없습니다. 출시 전 점수 리플레이 서버 필수.
-initTheme(render);
-render();
+initTheme(()=>{if(!wantLounge)render();});
+// 라운지로 넘어갈 때는 옛 홈 화면을 그리지 않고 '라운지 준비 중' 화면을 그대로 둬요 (8초 안에 못 넘어가면 홈을 보여줘요)
+if(!wantLounge)render();else setTimeout(()=>{if(document.getElementById('boot'))render();},8000);
 if(directMode){if(directLevel)difficulty=directLevel;start(directMode);}
 if(params.get('wallet')==='1'){screen='wallet';render();}
 // Toss: safe area, user key (per-account records), ad preload; Android back -> in-app back, exit confirm on home.
-if(ACC)ACC.onChange(()=>{if(ACC.state.welcomeBonus&&!wantLounge){flash(`🎉 가입 축하 보너스 +${ACC.state.welcomeBonus} 씽크칩!`);ACC.clearWelcome();}flushPurchases();if(['home','wallet','result','intro','records'].includes(screen))render();});
+if(ACC)ACC.onChange(()=>{if(ACC.state.welcomeBonus&&!wantLounge){flash(`🎉 가입 축하 보너스 +${ACC.state.welcomeBonus} 씽크칩!`);ACC.clearWelcome();}flushPurchases();if(!(wantLounge&&document.getElementById('boot'))&&['home','wallet','result','intro','records'].includes(screen))render();});
 initToss().then(async st=>{useUserKey(st.userKeyHash);
  if(TOSS_CONFIG.target==='toss'&&ACC&&!ACC.hasSession()){ // 토스 앱: 로그인 화면 없이 자동 (토스 사용자 키가 있으면 그걸로, 없으면 이 기기 계정)
   const ok=st.inToss&&st.userKeyHash?await ACC.loginToss(st.userKeyHash,profile.nickname):false;if(!ok)await ACC.loginDevice(profile.nickname);}
