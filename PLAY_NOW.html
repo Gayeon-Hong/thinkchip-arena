@@ -1756,6 +1756,9 @@ const invitedFrom=(params.get('from')||'친구').slice(0,16);
 const invitedRoom=normalizeCode(params.get('room'));
 const wantInvite=params.get('invite')==='1'; // 라운지 '카톡으로 친구 부르기' → 방에 들어오자마자 초대 공유
 const fromLounge=params.get('from')==='lounge';
+// 라운지에서 '연습 / AI 대결'을 이미 골랐으면 모드 선택 화면 없이 바로 시작해요
+const directMode=openGame&&['solo','ai'].includes(params.get('mode'))?params.get('mode'):null;
+const directLevel=LEVELS.includes(params.get('level'))?params.get('level'):null;
 // 처음 들어오면 3D 라운지가 첫 화면. 라운지 로고(?home=1)나 게임/방 링크로 온 경우만 기존 홈을 보여줘요.
 if(!['home','open','party','room','game','from','seed'].some(k=>params.has(k))&&!/\/lounge\//.test(location.pathname||'')){try{location.replace('./lounge/index.html');}catch{}}
 const LOUNGE_URL='./lounge/index.html'+(invitedRoom?`?room=${invitedRoom}`:'');
@@ -1798,7 +1801,8 @@ function header({back=false,title='씽크칩 아레나'}={}){
  const dark=resolveTheme()==='dark';
  return `<header class="topbar"><div class="top-left">${back?`<button class="back icon-btn" data-action="back" aria-label="뒤로가기">${icon('back')}</button>`:`<div class="brand-avatar brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40" width="100%" height="100%"><defs><linearGradient id="bmk" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5f8bff"/><stop offset=".55" stop-color="#7660ff"/><stop offset="1" stop-color="#9b5cff"/></linearGradient></defs><polygon points="20,3 34.7,11.5 34.7,28.5 20,37 5.3,28.5 5.3,11.5" fill="url(#bmk)" stroke="url(#bmk)" stroke-width="3" stroke-linejoin="round"/><path d="M20 10.5Q21.6 18.4 29.5 20Q21.6 21.6 20 29.5Q18.4 21.6 10.5 20Q18.4 18.4 20 10.5Z" fill="#fff"/></svg></div>`}<div class="brand-lockup"><div class="brand-title">${esc(title)}</div><div class="brand-sub">THINKCHIP ARENA</div></div></div><div class="top-actions"><a class="lounge-pill lounge-link" href="./lounge/index.html" aria-label="3D 라운지로" title="3D 라운지로"><span aria-hidden="true">🏠</span>라운지</a><button class="theme-toggle icon-btn" data-action="toggle-theme" aria-label="${dark?'데이':'나이트'} 모드로 전환" title="${dark?'데이':'나이트'} 모드로 전환">${icon(dark?'sun':'moon')}</button><button class="wallet-link" data-action="wallet" aria-label="씽크칩 지갑 열기">${chips()}</button></div></header>`;
 }
-function bottomNav(active){
+function bottomNav(active){if(fromLounge)return ''; // 라운지에서 온 화면엔 2D 메뉴를 안 보여요 (라운지가 메뉴)
+
  const items=[['home','grid','게임'],['records','trophy','내 기록'],['wallet','chip','씽크칩'],['settings','settings','설정']];
  return `<nav class="bottom-nav" aria-label="하단 메뉴">${items.map(([id,symbol,label])=>`<button data-action="${id}" class="${active===id?'active':''}" ${active===id?'aria-current="page"':''}>${icon(symbol)}<small>${label}</small></button>`).join('')}</nav>`;
 }
@@ -2266,7 +2270,7 @@ function gameView(){const g=gameById(),s=session,round=s.game,enemy=opponentScor
  ${s.id==='flip'?flipUI(round):s.id==='blind'?blindUI(round):s.id==='triad'?triadUI(round):s.id==='baseball'?baseballUI(round):s.id==='nim'?nimUI(round):s.id==='auction'?auctionUI(round):s.id==='maze'?mazeUI(round):s.id==='draw'?drawUI(round):s.id==='marbles'?marblesUI(round):s.id==='redlight'?redLightUI(round):s.id==='bridge'?bridgeUI(round):s.id==='minority'?minorityUI(round):s.id==='sudoku'?sudokuUI(round):s.id==='merge'?mergeUI(round):s.id==='stroop'?stroopUI(round):s.id==='gomoku'?gomokuUI(round):s.id==='dots'?dotsUI(round):trustUI(round)}
  <div class="hint-row"><div><strong>💡 씽크칩 힌트</strong><small>${s.mode==='friend'||s.mode==='live'?'공정한 대결을 위해 사용할 수 없어요.':`한 번에 ${HINT_COST}칩 · 보유 ${fmt(profile.chips)}칩`}</small></div><button data-action="hint" ${s.mode==='friend'||s.mode==='live'?'disabled':''}>${s.hint&&s.hintKey===currentTurnKey()?'다시 보기':`${HINT_COST}칩 사용`}</button></div>
  ${s.hint&&s.hintKey===currentTurnKey()?`<div class="hint-result">${esc(showHint())}</div>`:''}
- <button class="leave-game" data-action="leave">← 게임 목록으로 돌아가기</button>
+ <button class="leave-game" data-action="leave">${fromLounge?'← 라운지로 돌아가기':'← 게임 목록으로 돌아가기'}</button>
  </main><div class="toast" id="toast" role="status"></div>${rulesOpen?rulesModal(s.id):''}</div>`;
 }
 function flipUI(g){const raw=g.deck[g.turn], val=session.flipped?flipValue(raw):raw,options=flipOptions(g);
@@ -2318,7 +2322,7 @@ function result(){const s=session,g=s.game,enemy=opponentScore(),victory=calcVic
  return `<div class="page"><main class="shell result-shell">${header({back:true,title:'대결 결과'})}${GAME_STAGE_SLOT}<section class="result-box"><div class="result-emblem">${victory===true?'♛':victory===false?'✧':'★'}</div><span class="mini-kicker">GAME COMPLETE</span><h1>${victory===true?'승리! 멋진 한 수였어요.':victory===false?'아쉬워요, 다음 판엔 이길 수 있어요!':'대결 완료!'}</h1><p>${esc(GAME_BY_ID[s.id].title)} · ${labelMode(s.mode)}</p>
  <div class="result-numbers"><div><span>내 점수</span><strong>${fmt(g.score)}</strong></div><div class="result-vs">VS</div><div><span>${s.challenger?'친구 기록':enemy!==null?'AI 점수':'내 최고 기록'}</span><strong>${fmt(enemy===null?profile.best[s.id]:enemy)}</strong></div></div>
  <div class="reward-box"><div><span class="reward-icon">⬡</span><div><strong>씽크칩 +${s.award}</strong><small>${s.award===0?'이미 보상을 받았거나 오늘의 획득 한도에 도달했어요.':'오늘의 도전 보상이 지갑에 지급됐어요.'}</small></div></div><span>보유 ${fmt(profile.chips)}칩</span></div>
- <button class="btn primary full" data-action="share">친구에게 이 기록으로 도전장 보내기 ↗</button><button class="btn secondary full" data-action="retry">${s.mode==='friend'?'같은 판 재도전':'한 판 더'}</button><button class="btn tertiary full" data-action="home">다른 게임 고르기</button>
+ <button class="btn primary full" data-action="share">친구에게 이 기록으로 도전장 보내기 ↗</button><button class="btn secondary full" data-action="retry">${s.mode==='friend'?'같은 판 재도전':'한 판 더'}</button><button class="btn tertiary full" data-action="home">${fromLounge?'🏠 라운지로 돌아가기':'다른 게임 고르기'}</button>
  <div class="ad-card"><span>ADVERTISEMENT · OPTIONAL</span><strong>보상형 광고로 씽크칩 받기</strong><p>광고를 끝까지 시청하고 보상을 받으면 +${AD_REWARD}칩. SDK 설정 전에는 지급되지 않습니다.</p><button data-action="watch-ad" ${loadingAd||!TOSS_CONFIG.enableRewardedAds?'disabled':''}>${loadingAd?'광고 여는 중…':'광고 보고 +20칩 받기'}</button></div>
  </section></main><div id="toast" class="toast" role="status"></div></div>`;
 }
@@ -2345,8 +2349,13 @@ function settings(){
 const ZONE_TINT={blind:'rose',trust:'rose',auction:'rose',marbles:'rose',minority:'rose',baseball:'sky',nim:'sky',redlight:'lime',bridge:'lime',gomoku:'violet',dots:'violet'};
 function render(){const gid=['intro','game','result'].includes(screen)?(session&&screen!=='intro'?session.id:selectedGame):null;const de=document.documentElement;if(de?.dataset){if(gid&&GAME_BY_ID[gid])de.dataset.game=ZONE_TINT[gid]||GAME_BY_ID[gid].color;else delete de.dataset.game;}
  root.innerHTML=screen==='live'?liveView():screen==='home'?home():screen==='intro'?intro():screen==='game'?gameView():screen==='result'?result():screen==='wallet'?wallet():screen==='settings'?settings():records();renderToast();if(screen==='game'){bindTracer();bindRedLight();bindBridge();bindGameExtras();if(session?.mode==='live'){sendLiveProgress();syncStage();}}syncGameStage();if(screen==='live'){liveTick();syncStage();}renderChatDock();}
+// 라운지가 허브: 라운지에서 들어온 게임은 어디서 나가든 그 테이블 앞으로 돌아가요 (번 칩도 같이 알려줌)
+function toLounge(){if(screen==='game'&&session&&!session.game.over){if(!confirm(session.mode==='live'?'이번 판을 포기할까요? 지금 점수로 기록돼요.':'진행 중인 게임을 그만두고 라운지로 돌아갈까요? 이 판의 보상은 지급되지 않아요.'))return true;
+  if(session.mode==='live')live?.conn?.send({t:'done',score:session.game.score,round:session.liveRound});}
+ const q=new URLSearchParams();if(invitedRoom)q.set('room',invitedRoom);const gid=live?.state?.game||session?.id||partyGame||openGame;if(gid)q.set('back',gid);if(session?.game?.over&&session.award)q.set('won',String(session.award));
+ leaveLive();location.href='./lounge/index.html'+(q.toString()?`?${q}`:'');return true;}
 function goBack(){if(rulesOpen){rulesOpen=false;render();return true;}if(screen==='home')return false;
- if(fromLounge&&(screen==='intro'||screen==='live')){leaveLive();location.href=LOUNGE_URL;return true;} // 라운지에서 온 사람은 라운지로 돌아가요
+ if(fromLounge&&['intro','live','game','result'].includes(screen))return toLounge(); // 라운지에서 온 사람은 라운지로 돌아가요
  if(screen==='game')setScreen(session?.mode==='live'?'live':'intro');
  else if(screen==='live'){leaveLive();setScreen('home');}else if(screen==='wallet')setScreen(previousPage==='game'?'home':previousPage);else setScreen('home');return true;}
 function setScreen(name){if(screen==='game'&&name!=='game'&&session&&!session.game.over){if(!confirm(session.mode==='live'?'이번 판을 포기할까요? 지금 점수로 기록돼요.':'진행 중인 게임을 종료하고 나갈까요? 이 판의 보상은 지급되지 않아요.'))return;
@@ -2419,7 +2428,7 @@ root.addEventListener('click',async e=>{
  if(action==='live-join'){const c=live?live.code:normalizeCode(document.getElementById('roomCode')?.value||roomDraft);if(c.length<4)return flash('방 코드 4자리를 입력해 주세요.');joinLive(c,null);return;}
  if(action==='live-ready'&&live){const me=liveMe();live.conn.send({t:'ready',v:!(me?.ready)});return;}
  if(action==='live-invite'&&live){await inviteToRoom();return;}
- if(action==='live-leave'){leaveLive();setScreen('home');return;}
+ if(action==='live-leave'){if(fromLounge){toLounge();return;}leaveLive();setScreen('home');return;}
  if(target.dataset.themeChoice){setTheme(target.dataset.themeChoice);render();return;}
  if(target.dataset.quick){selectedGame='flip';start(target.dataset.quick);return;}
  if(target.dataset.open){selectedGame=target.dataset.open;setScreen('intro');return;}
@@ -2447,12 +2456,12 @@ root.addEventListener('click',async e=>{
   if(target.dataset.bid){session.bid=Math.max(0,Math.min(session.game.coins,(session.bid||0)+Number(target.dataset.bid)));render();return;}
   if(target.dataset.trust){session.game=playTrust(session.game,target.dataset.trust);session.hint=null;session.hintKey=null;if(session.game.over)complete();else render();return;}
  }
- if(action==='home')setScreen('home');
+ if(action==='home'){if(fromLounge){toLounge();return;}setScreen('home');}
  else if(action==='settings')setScreen('settings');
  else if(action==='wallet'){previousPage=screen;setScreen('wallet');}
  else if(action==='records')setScreen('records');
  else if(action==='back')goBack();
- else if(action==='leave')setScreen('home');
+ else if(action==='leave'){if(fromLounge)toLounge();else setScreen('home');}
  else if(action==='rules'){rulesOpen=true;render();}
  else if(action==='close-rules'){rulesOpen=false;render();}
  else if(action==='flip'&&screen==='game'&&session.id==='flip'){session.flipped=!session.flipped;render();}
@@ -2476,6 +2485,7 @@ root.addEventListener('change',e=>{if(e.target.matches('[data-difficulty]')){dif
 // 친구 대결의 부정 점수는 현재 서버 검증이 없습니다. 출시 전 점수 리플레이 서버 필수.
 initTheme(render);
 render();
+if(directMode){if(directLevel)difficulty=directLevel;start(directMode);}
 // Toss: safe area, user key (per-account records), ad preload; Android back -> in-app back, exit confirm on home.
 initToss().then(st=>{useUserKey(st.userKeyHash);
  // Web / MS Store build only: offline support. Never inside the Toss app.

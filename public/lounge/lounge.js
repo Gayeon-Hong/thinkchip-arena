@@ -202,7 +202,13 @@
   }
   let firstName = false;
   const otherName = (p) => (p.pid === ME ? myName() : (!p.name || p.name === '나' || p.name === '플레이어') ? `손님${String(p.pid || '').replace(/[^0-9]/g, '').slice(-2) || ''}` : p.name);
-  let me = spawn(ME, myName(), mine.look, (Math.random() - 0.5) * 5, 6 + Math.random() * 2, true);
+  // 게임에서 돌아오면 그 게임 테이블 앞에 서요 (?back=게임&won=번 칩)
+  const backQ = new URLSearchParams(location.search), backGame = backQ.get('back'), backWon = Math.max(0, Math.min(999, Number(backQ.get('won')) || 0));
+  const backZone = backGame ? (ZONES.find((z) => z.games && z.games.includes(backGame)) || (CFG.PARTY.some((g) => g.id === backGame) ? ZONES.find((z) => z.party) : null)) : null;
+  if (backGame) { backQ.delete('back'); backQ.delete('won'); try { history.replaceState(null, '', location.pathname + (backQ.toString() ? `?${backQ}` : '')); } catch (e) {} }
+  const startAt = backZone ? [backZone.pos[0] * 0.72, backZone.pos[1] * 0.72 + 0.4] : [(Math.random() - 0.5) * 5, 6 + Math.random() * 2];
+  let me = spawn(ME, myName(), mine.look, startAt[0], startAt[1], true);
+  if (backZone) setTimeout(() => { const g = GAME[backGame]; toast(backWon ? `${g ? g.title : '게임'} 끝! +${backWon} 씽크칩 🎉` : `${backZone.title}에서 돌아왔어요`); setExpr(me, backWon ? 'laugh' : 'happy'); }, 1200);
   if (firstName) setTimeout(() => toast(`'${myName()}' 으로 입장했어요 · 비서 데스크에서 이름을 바꿀 수 있어요`), 2500);
   try { localStorage.setItem('thinkchip:look', A.encodeLook(mine.look)); } catch (e) {} // 메인 앱 실시간 방에서도 이 모습으로
   const npcTag = makeTag('비서 · 미소', 'npc');
@@ -406,6 +412,26 @@
   function gameButton(g, href) {
     return `<a class="game-btn" href="${href}" style="text-decoration:none;color:inherit"><i style="background:${COLOR[g.color] || '#7c8cff'}">${esc(g.symbol)}</i><span><b>${esc(g.title)}</b><small>${esc(g.short || g.genre || '')}</small></span></a>`;
   }
+  // 혼자 하기: 라운지에서 모드·난이도를 고르고 게임으로 바로 들어가요
+  const LEVELS = [['easy', '쉬움'], ['normal', '보통'], ['hard', '어려움'], ['expert', '고수'], ['master', '지옥']];
+  const getLevel = () => { const v = store.get('thinkchip:level', 'normal'); return LEVELS.some((l) => l[0] === v) ? v : 'normal'; };
+  const soloHref = (id, mode) => new URL(`?open=${encodeURIComponent(id)}&mode=${mode}&level=${getLevel()}&from=lounge`, ARENA).href;
+  const levelRow = () => `<div class="lv-row"><span>AI 난이도</span>${LEVELS.map(([k, n]) => `<button data-lv="${k}" class="${getLevel() === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
+  function bindSolo(rerender) {
+    $('sheetBody').querySelectorAll('[data-lv]').forEach((b) => { b.onclick = () => { store.set('thinkchip:level', b.dataset.lv); rerender(); }; });
+    $('sheetBody').querySelectorAll('[data-solo]').forEach((b) => { b.onclick = () => { const [id, mode] = b.dataset.solo.split(':'); location.href = soloHref(id, mode); }; });
+  }
+  const zoneOf = (id) => ZONES.find((z) => z.games && z.games.includes(id)) || ZONES.find((z) => z.main);
+  // 게임 하나를 골랐을 때 (전체 게임 목록·메인 매치): 같이 / AI / 연습을 여기서 정해요
+  function openGamePick(id, kicker) {
+    const g = GAME[id]; if (!g) return; const n = othersHere().length;
+    openSheet({kicker: kicker || g.genre || 'GAME', title: `${g.symbol} ${g.title}`, html: `<div class="card"><p>${esc(g.short || '')}</p></div>
+      <button class="btn gold full" id="pickTeam">👥 같이 하기${n ? ` · 라운지 ${n}명에게 초대` : ' · 친구 기다리기'}</button>
+      ${levelRow()}
+      <div style="display:flex;gap:8px"><button class="btn ghost full" data-solo="${g.id}:ai">🤖 AI 대결</button><button class="btn ghost full" data-solo="${g.id}:solo">🎯 혼자 연습</button></div>`});
+    $('pickTeam').onclick = () => startWaiting(zoneOf(id), id);
+    bindSolo(() => openGamePick(id, kicker));
+  }
   const openHref = (id) => new URL(`?open=${encodeURIComponent(id)}&from=lounge`, ARENA).href;
   const partyHref = (id) => new URL(`?party=${encodeURIComponent(id)}${room.code && !room.public ? `&room=${room.code}` : ''}&from=lounge`, ARENA).href;
   // 테이블에서 '같이' 하기: 실시간 방을 열고 라운지 채팅에 참가 버튼을 올려요 (방 코드는 친구 방이면 그 코드, 공개 라운지면 새 코드)
@@ -415,13 +441,14 @@
   function openTable(zone, mode) {
     const list = zone.games.map((id) => GAME[id]).filter(Boolean), others = othersHere();
     const tabs = `<div class="seg"><button class="${mode === 'team' ? 'on' : ''}" data-mode="team">👥 같이 하기${others.length ? ` · ${others.length}명` : ''}</button><button class="${mode === 'solo' ? 'on' : ''}" data-mode="solo">🤖 혼자 · AI</button></div>`;
-    const who = mode === 'team' ? `<p class="table-note">${others.length ? `라운지에 있는 <b>${others.slice(0, 6).map(esc).join(', ')}${others.length > 6 ? ` 외 ${others.length - 6}명` : ''}</b>에게 초대가 가요. 게임을 고르면 파티원이 올 때까지 여기서 기다려요.` : '지금은 라운지에 다른 사람이 없어요. 게임을 고르면 초대를 걸어 두고 누가 들어올 때까지 기다려요. 친구 방 코드로 친구를 불러도 좋아요.'}</p>` : '<p class="table-note">혼자 연습하거나 AI 와 바로 붙어요.</p>';
+    const who = mode === 'team' ? `<p class="table-note">${others.length ? `라운지에 있는 <b>${others.slice(0, 6).map(esc).join(', ')}${others.length > 6 ? ` 외 ${others.length - 6}명` : ''}</b>에게 초대가 가요. 게임을 고르면 파티원이 올 때까지 여기서 기다려요.` : '지금은 라운지에 다른 사람이 없어요. 게임을 고르면 초대를 걸어 두고 누가 들어올 때까지 기다려요. 친구 방 코드로 친구를 불러도 좋아요.'}</p>` : `<p class="table-note">버튼을 누르면 바로 시작해요. 끝나면 이 테이블로 돌아와요.</p>${levelRow()}`;
     const items = list.map((g) => mode === 'team'
       ? `<button class="game-btn" data-team="${g.id}"><i style="background:${COLOR[g.color] || '#7c8cff'}">${esc(g.symbol)}</i><span><b>${esc(g.title)}</b><small>${esc(g.short || '')}</small></span></button>`
-      : gameButton(g, openHref(g.id))).join('');
+      : `<div class="tg-row"><div class="game-btn"><i style="background:${COLOR[g.color] || '#7c8cff'}">${esc(g.symbol)}</i><span><b>${esc(g.title)}</b><small>${esc(g.short || '')}</small></span></div><button class="tg-b" data-solo="${g.id}:solo">연습</button><button class="tg-b ai" data-solo="${g.id}:ai">AI 대결</button></div>`).join('');
     openSheet({kicker: zone.sub, title: `${zone.icon} ${zone.title}`, html: `${tabs}${who}<div class="game-list table-games">${items}</div>`});
     $('sheetBody').querySelectorAll('[data-mode]').forEach((b) => { b.onclick = () => openTable(zone, b.dataset.mode); });
     $('sheetBody').querySelectorAll('[data-team]').forEach((b) => { b.onclick = () => startWaiting(zone, b.dataset.team); });
+    bindSolo(() => openTable(zone, 'solo'));
   }
   function startWaiting(zone, id) {
     const g = GAME[id]; if (!g) return;
@@ -441,7 +468,7 @@
     $('waitCancel').onclick = () => { cancelWaiting(); closeSheet(); };
     $('waitGo').onclick = goTable;
     $('waitShare').onclick = shareTable;
-    $('waitAi').onclick = () => { const id = pending.id; cancelWaiting(); location.href = openHref(id); };
+    $('waitAi').onclick = () => { const id = pending.id; cancelWaiting(); location.href = soloHref(id, 'ai'); };
   }
   function cancelWaiting(silent) { if (!pending) return; clearTimeout(pending.timer); if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'chat', text: `[[cancel:${pending.code}]]`})); pending = null; if (!silent) toast('초대를 취소했어요'); }
   // 카톡 등으로 '같이 하자' 링크 보내기. 브라우저 공유창이 없으면(토스 앱 안) 게임 방으로 먼저 들어가 토스 공유로 보내요
@@ -477,13 +504,14 @@
   function openZone(zone) {
     if (zone.closet) return openCloset();
     if (zone.desk) return openDesk();
-    if (zone.main) { const g = dailyGame(); return openSheet({kicker: "TODAY'S MAIN MATCH", title: g ? `${g.symbol} ${g.title}` : '메인 매치', html: g ? `<div class="card"><p>${esc(g.short)}</p></div><a class="btn gold full" style="display:grid;place-items:center;text-decoration:none" href="${openHref(g.id)}">메인 매치 입장</a>` : ''}); }
+    if (zone.main) { const g = dailyGame(); return g ? openGamePick(g.id, "TODAY'S MAIN MATCH") : null; }
     if (zone.party) return openSheet({kicker: 'PARTY · LIVE', title: '🎉 파티 라운지', html: `<p style="font-size:12.5px;color:var(--muted);margin:0 0 10px">친구들과 같은 방에서 실시간으로 해요. ${room.public ? '누르면 방이 만들어지고 초대 링크를 보낼 수 있어요.' : `지금 친구 방(${room.code}) 사람들과 바로 시작해요.`}</p><div class="game-list">${CFG.PARTY.map((g) => gameButton(g, partyHref(g.id))).join('')}</div>`});
     return openTable(zone, players.size > 1 ? 'team' : 'solo');
   }
   function openGames() {
-    const html = ZONES.filter((z) => z.games || z.party).map((z) => `<div class="zone"><h3>${z.icon} ${esc(z.title)} <small>${esc(z.sub)}</small></h3><div class="game-list">${(z.party ? CFG.PARTY : z.games.map((id) => GAME[id]).filter(Boolean)).map((g) => gameButton(g, z.party ? partyHref(g.id) : openHref(g.id))).join('')}</div></div>`).join('');
+    const html = ZONES.filter((z) => z.games || z.party).map((z) => `<div class="zone"><h3>${z.icon} ${esc(z.title)} <small>${esc(z.sub)}</small></h3><div class="game-list">${(z.party ? CFG.PARTY : z.games.map((id) => GAME[id]).filter(Boolean)).map((g) => z.party ? gameButton(g, partyHref(g.id)) : `<button class="game-btn" data-pick="${g.id}"><i style="background:${COLOR[g.color] || '#7c8cff'}">${esc(g.symbol)}</i><span><b>${esc(g.title)}</b><small>${esc(g.short || g.genre || '')}</small></span></button>`).join('')}</div></div>`).join('');
     openSheet({kicker: 'ALL GAMES', title: '어떤 승부를 할까요?', html});
+    $('sheetBody').querySelectorAll('[data-pick]').forEach((b) => { b.onclick = () => openGamePick(b.dataset.pick); });
   }
 
   // 비서 데스크: 출석 보너스(진짜 칩 지급) + 내 기록
