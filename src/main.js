@@ -52,7 +52,7 @@ const LIVE_EXTRA=PARTY_GAMES;
 const PARTY_IDS=Object.keys(LIVE_EXTRA);
 const liveGameInfo=id=>GAME_BY_ID[id]||LIVE_EXTRA[id]||GAME_BY_ID.flip;
 const CHAT_QUICK=['ㅋㅋㅋ','진짜야?','블러핑 아님','믿어봐','⭕ 맞아','❌ 아니야','🤔 애매해','다음엔 이긴다'];
-let selectedGame=invitedGame||'flip';
+let selectedGame=invitedGame||'blind';
 let difficulty='normal';
 let session=null;
 let rulesOpen=false;
@@ -79,7 +79,7 @@ function aiTarget(id,seed,level){return id==='flip'?simulateFlipBot(seed,level):
 function createRound(id,seed,level){return ({flip:()=>createFlip(seed),blind:()=>createBlind(seed,level),triad:()=>createTriad(seed),trust:()=>createTrust(seed,level),baseball:()=>createBaseball(seed,level),nim:()=>createNim(seed,level),auction:()=>createAuction(seed,level),maze:()=>createMaze(seed,level),draw:()=>createDraw(seed,level),marbles:()=>createMarbles(seed,level),redlight:()=>createRedLight(seed,level),bridge:()=>createBridge(seed,level),minority:()=>createMinority(seed,level),sudoku:()=>createSudoku(seed,level),merge:()=>createMerge(seed,level),stroop:()=>createStroop(seed,level),gomoku:()=>createGomoku(seed,level,true),dots:()=>createDots(seed,level,true)})[id]();}
 function header({back=false,title='씽크칩 아레나'}={}){
  const dark=resolveTheme()==='dark';
- return `<header class="topbar"><div class="top-left">${back?`<button class="back icon-btn" data-action="back" aria-label="뒤로가기">${icon('back')}</button>`:`<div class="brand-avatar brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40" width="100%" height="100%"><defs><linearGradient id="bmk" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5f8bff"/><stop offset=".55" stop-color="#7660ff"/><stop offset="1" stop-color="#9b5cff"/></linearGradient></defs><polygon points="20,3 34.7,11.5 34.7,28.5 20,37 5.3,28.5 5.3,11.5" fill="url(#bmk)" stroke="url(#bmk)" stroke-width="3" stroke-linejoin="round"/><path d="M20 10.5Q21.6 18.4 29.5 20Q21.6 21.6 20 29.5Q18.4 21.6 10.5 20Q18.4 18.4 20 10.5Z" fill="#fff"/></svg></div>`}<div class="brand-lockup"><div class="brand-title">${esc(title)}</div><div class="brand-sub">THINKCHIP ARENA</div></div></div><div class="top-actions"><a class="theme-toggle icon-btn lounge-link" href="./lounge/index.html" aria-label="3D 라운지로" title="3D 라운지로">🏠</a><button class="theme-toggle icon-btn" data-action="toggle-theme" aria-label="${dark?'데이':'나이트'} 모드로 전환" title="${dark?'데이':'나이트'} 모드로 전환">${icon(dark?'sun':'moon')}</button><button class="wallet-link" data-action="wallet" aria-label="씽크칩 지갑 열기">${chips()}</button></div></header>`;
+ return `<header class="topbar"><div class="top-left">${back?`<button class="back icon-btn" data-action="back" aria-label="뒤로가기">${icon('back')}</button>`:`<div class="brand-avatar brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40" width="100%" height="100%"><defs><linearGradient id="bmk" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5f8bff"/><stop offset=".55" stop-color="#7660ff"/><stop offset="1" stop-color="#9b5cff"/></linearGradient></defs><polygon points="20,3 34.7,11.5 34.7,28.5 20,37 5.3,28.5 5.3,11.5" fill="url(#bmk)" stroke="url(#bmk)" stroke-width="3" stroke-linejoin="round"/><path d="M20 10.5Q21.6 18.4 29.5 20Q21.6 21.6 20 29.5Q18.4 21.6 10.5 20Q18.4 18.4 20 10.5Z" fill="#fff"/></svg></div>`}<div class="brand-lockup"><div class="brand-title">${esc(title)}</div><div class="brand-sub">THINKCHIP ARENA</div></div></div><div class="top-actions"><a class="lounge-pill lounge-link" href="./lounge/index.html" aria-label="3D 라운지로" title="3D 라운지로"><span aria-hidden="true">🏠</span>라운지</a><button class="theme-toggle icon-btn" data-action="toggle-theme" aria-label="${dark?'데이':'나이트'} 모드로 전환" title="${dark?'데이':'나이트'} 모드로 전환">${icon(dark?'sun':'moon')}</button><button class="wallet-link" data-action="wallet" aria-label="씽크칩 지갑 열기">${chips()}</button></div></header>`;
 }
 function bottomNav(active){
  const items=[['home','grid','게임'],['records','trophy','내 기록'],['wallet','chip','씽크칩'],['settings','settings','설정']];
@@ -99,13 +99,13 @@ function home(){
  <div class="section-title"><div><span class="mini-kicker">PARTY · LIVE</span><h2>친구들과 파티 · 협동</h2></div><span class="section-count">${String(PARTY_IDS.length).padStart(2,'0')}</span></div>
  <div class="party-row">${Object.values(LIVE_EXTRA).map(g=>`<button class="party-card ${g.color}" data-action="party:${g.id}"><span class="party-ico">${g.symbol}</span><strong>${esc(g.title)}</strong><small>${esc(g.short)}</small><em>${g.coop?'🤝 협동 · ':''}${g.min}명+ · 실시간</em></button>`).join('')}</div>
  <div class="section-title"><div><span class="mini-kicker">PICK YOUR BATTLE</span><h2>승부를 고르세요</h2></div><span class="section-count">${String(GAMES.length).padStart(2,'0')}</span></div>
- <div class="filters" role="group" aria-label="게임 분류"><button data-filter="all" class="${viewTab==='all'?'active':''}" aria-pressed="${viewTab==='all'}">전체</button><button data-filter="number" class="${viewTab==='number'?'active':''}" aria-pressed="${viewTab==='number'}">숫자·추리</button><button data-filter="mind" class="${viewTab==='mind'?'active':''}" aria-pressed="${viewTab==='mind'}">심리전</button><button data-filter="hand" class="${viewTab==='hand'?'active':''}" aria-pressed="${viewTab==='hand'}">손 감각·순발력</button><button data-filter="survival" class="${viewTab==='survival'?'active':''}" aria-pressed="${viewTab==='survival'}">서바이벌</button><button data-filter="duel" class="${viewTab==='duel'?'active':''}" aria-pressed="${viewTab==='duel'}">1:1 전략</button></div>
- <section class="game-grid" aria-label="게임 목록">${GAMES.filter(g=>viewTab==='all'||(viewTab==='number'?['flip','triad','baseball','nim','sudoku','merge'].includes(g.id):viewTab==='hand'?['maze','draw','stroop'].includes(g.id):viewTab==='survival'?['marbles','redlight','bridge','minority'].includes(g.id):viewTab==='duel'?['gomoku','dots'].includes(g.id):['blind','trust','auction'].includes(g.id))).map(gameCard).join('')}</section>
+ <div class="filters" role="group" aria-label="게임 분류"><button data-filter="all" class="${viewTab==='all'?'active':''}" aria-pressed="${viewTab==='all'}">전체</button><button data-filter="number" class="${viewTab==='number'?'active':''}" aria-pressed="${viewTab==='number'}">숫자·추리</button><button data-filter="mind" class="${viewTab==='mind'?'active':''}" aria-pressed="${viewTab==='mind'}">심리전</button><button data-filter="survival" class="${viewTab==='survival'?'active':''}" aria-pressed="${viewTab==='survival'}">서바이벌</button><button data-filter="duel" class="${viewTab==='duel'?'active':''}" aria-pressed="${viewTab==='duel'}">1:1 전략</button></div>
+ <section class="game-grid" aria-label="게임 목록">${GAMES.filter(g=>viewTab==='all'||(viewTab==='number'?['baseball','nim'].includes(g.id):viewTab==='survival'?['marbles','redlight','bridge','minority'].includes(g.id):viewTab==='duel'?['gomoku','dots'].includes(g.id):['blind','trust','auction'].includes(g.id))).map(gameCard).join('')}</section>
  <section class="info-banner"><div class="banner-icon">${icon('chip')}</div><div><strong>좋은 한 수는, 씽크칩이 된다.</strong><p>대결로 모으고 힌트로 한 발 더.</p></div><button data-action="wallet" aria-label="씽크칩 지갑 열기">${icon('arrow')}</button></section>
  <div class="lobby-foot"><span>${count} / ${GAMES.length} 게임 도전 중</span><span>PLAY SMART. HAVE FUN.</span></div><p class="legal-note">씽크칩 아레나 · 두뇌게임 모음</p></main>${bottomNav('home')}<div class="toast" id="toast" role="status"></div></div>`;
 }
 function dailyGame(){const d=new Date(),k=d.getFullYear()*372+d.getMonth()*31+d.getDate();return GAMES[(k*7+3)%GAMES.length];}
-function mosaicTiles(){const pick=['flip','marbles','maze','minority','redlight','auction','draw','bridge','baseball'].map(id=>GAME_BY_ID[id]).filter(Boolean);
+function mosaicTiles(){const pick=['blind','marbles','trust','minority','redlight','auction','nim','bridge','baseball'].map(id=>GAME_BY_ID[id]).filter(Boolean);
  return pick.map((g,i)=>`<span class="mt ${g.color}" style="--i:${i}">${esc(g.symbol)}</span>`).join('');}
 function todayCard(){const g=dailyGame();return `<button class="today-card ${g.color}" data-open="${g.id}"><span class="today-art">${esc(g.symbol)}</span><span class="today-copy"><small>TODAY'S MATCH</small><strong>${esc(g.title)}</strong><em>${esc(g.short)}</em></span><span class="today-go">${icon('arrow')}</span></button>`;}
 function gameCard(g){
@@ -412,6 +412,38 @@ function syncStage(){const host=document.getElementById('liveStage');if(!host||!
  if(stage.el.parentNode!==host)host.appendChild(stage.el);
  stage.setPlayers(live.state.players.filter(p=>p.online).map(p=>({pid:p.pid,name:p.name,look:p.look||'',me:p.pid===livePid(),status:p.ready?'ready':'',online:true})));}
 const STAGE_SLOT='<div id="liveStage" class="live-stage" aria-hidden="true"></div>';
+// ── 게임 안 캐릭터 무대: 라운지에서 꾸민 내 캐릭터가 AI·친구 캐릭터와 마주 앉아 같이 플레이해요 ──
+const NPCS=[{name:'지우',look:{hair:'pony',hairColor:0x2b211d,top:'knit',topColor:0xff7a8a,bottom:'skirt',bottomColor:0x2c3550,eyes:'sparkle',acc:'ribbon'}},
+ {name:'민수',look:{hair:'spiky',hairColor:0x1d1f2b,top:'jacket',topColor:0x3fcf9a,bottom:'jeans',eyes:'cat',acc:'headset'}},
+ {name:'하린',look:{hair:'curly',hairColor:0x8a5a3c,top:'hoodie',topColor:0xffb34d,bottom:'shorts',eyes:'round',acc:'beanie'}},
+ {name:'도윤',look:{hair:'buzz',hairColor:0x4a2f26,top:'suit',topColor:0x1b2742,bottom:'jogger',eyes:'sleepy',acc:'sunglass'}}];
+const GLINES={me:{up:['좋아 👍','계획대로 😏','나이스 ㅋㅋ','이거지!'],down:['헐 😮','음… 🤔','아직 몰라'],win:['이겼다 ㅋㅋㅋ','역시 나 😎'],lose:['ㅠㅠ 한 판 더!','다음엔 이긴다 😡']},
+ foe:{up:['훗 😏','이번엔 내가 ㅋㅋ','읽혔지?'],down:['헐 😮','뭐야 ㅠㅠ','흠… 🤔'],win:['내가 이겼지 😎','ㅋㅋㅋ 아깝다'],lose:['인정… 👍','다음 판 각오해 😡']}};
+let gstage=null,gstageHost=null;
+const pickLine=a=>a[Math.floor(Math.random()*a.length)];
+function myAvatarLook(){try{const v=JSON.parse(localStorage.getItem('thinkchip:avatar:v1'));if(v&&v.look)return v.look;}catch(e){}return {};}
+function foeFor(s){if(!s||s.mode==='solo')return null;if(s.mode==='friend'){return s.challenger?{name:s.challenger.name||'친구',look:{hair:'part',top:'tee',topColor:0x5aa9ff,eyes:'dot'}}:null;}
+ let h=0;for(const c of String(s.id))h=(h*31+c.charCodeAt(0))>>>0;const n=NPCS[h%NPCS.length];return {name:n.name+' (AI)',look:n.look};}
+function stageCast(){const s=session;if(!s)return [];const foe=foeFor(s);
+ return [{pid:'me',name:profile.nickname||'나',look:myAvatarLook(),me:true},...(foe?[{pid:'foe',...foe}]:[])];}
+function syncGameStage(){const host=document.getElementById('gameStage');
+ if(!host){if(gstage&&!['game','result'].includes(screen)){gstage.destroy();gstage=null;gstageHost=null;}return;}
+ if(gstage===false)return;
+ if(!gstage){loadStage().then(ok=>{if(gstage||!ok){if(!ok)gstage=false;return;}const h=document.getElementById('gameStage');if(!h)return;gstage=window.ThinkChipStage.mount(h,{height:150})||false;if(gstage){gstage.setPlayers(stageCast());gstageHost=session;syncGameStage();}});return;}
+ if(gstage.el.parentNode!==host)host.appendChild(gstage.el);
+ const s=session;if(!s)return;if(gstageHost!==s){gstage.setPlayers(stageCast());gstageHost=s;s._st=null;}
+ const my=s.game.score,foe=s.mode==='ai'&&s.botTarget===null?s.game.cpuScore:null;
+ if(!s._st){s._st={my,foe,end:false};if(screen==='game')gstage.say('foe',pickLine(['한 판 붙자 😏','봐주는 거 없다 ㅋㅋ','긴장되네 🤔']));return;}
+ const st=s._st;
+ if(screen==='result'&&!st.end){st.end=true;const v=calcVictory();
+  if(v===true){gstage.say('me',pickLine(GLINES.me.win));setTimeout(()=>gstage&&gstage.say('foe',pickLine(GLINES.foe.lose)),700);}
+  else if(v===false){gstage.say('foe',pickLine(GLINES.foe.win));setTimeout(()=>gstage&&gstage.say('me',pickLine(GLINES.me.lose)),700);}
+  else gstage.say('me',pickLine(['끝! 😊','기록 세웠다 👍']));return;}
+ if(my>st.my){gstage.say('me',pickLine(GLINES.me.up));gstage.react('foe','wow');}
+ else if(my<st.my){gstage.say('me',pickLine(GLINES.me.down));gstage.react('foe','smug');}
+ if(foe!=null&&st.foe!=null&&foe>st.foe){gstage.say('foe',pickLine(GLINES.foe.up));gstage.react('me','hmm');}
+ st.my=my;st.foe=foe;}
+const GAME_STAGE_SLOT='<div id="gameStage" class="live-stage game-stage" aria-hidden="true"></div>';
 // ── 채팅 (실시간 방 안에서만) ──
 function onChat(m){if(!live)return;if(stage&&!m.sys)stage.say(m.pid,m.text);live.chat=[...(live.chat||[]),m].slice(-60);const mine=m.pid===livePid();
  if(!chatOpen&&!mine&&!chatMuted.has(m.pid)){live.unread=(live.unread||0)+1;const pk=document.getElementById('chatPeek');if(pk){pk.textContent=m.sys?m.text:`${m.name}: ${m.text}`;pk.classList.add('show');clearTimeout(chatPeekTimer);chatPeekTimer=setTimeout(()=>pk.classList.remove('show'),3200);}}
@@ -510,6 +542,7 @@ function statusText(){
 function gameView(){const g=gameById(),s=session,round=s.game,enemy=opponentScore();
  return `<div class="page"><main class="shell compact">${header({back:true,title:g.title})}
  <div class="game-caption"><span class="kicker"><i></i>${labelMode(s.mode)}</span><button class="help-btn" data-action="rules">? 게임 방법</button></div>
+ ${s.mode==='live'?STAGE_SLOT:GAME_STAGE_SLOT}
  <section class="score-panel"><div><span>내 점수</span><strong>${fmt(round.score)}</strong></div><div class="score-divider"></div><div><span>${s.mode==='live'?'상대 최고':enemy===null?'최고 기록':s.challenger?'친구 기록':'AI 점수'}</span><strong id="enemyScore">${fmt(enemy===null?(s.mode==='live'?0:profile.best[s.id]||0):enemy)}</strong></div></section>
  <p class="match-status">${statusText()}</p>${s.mode==='live'?`<div class="live-bar" id="liveBar">${liveBarHTML()}</div>`:''}
  ${s.id==='flip'?flipUI(round):s.id==='blind'?blindUI(round):s.id==='triad'?triadUI(round):s.id==='baseball'?baseballUI(round):s.id==='nim'?nimUI(round):s.id==='auction'?auctionUI(round):s.id==='maze'?mazeUI(round):s.id==='draw'?drawUI(round):s.id==='marbles'?marblesUI(round):s.id==='redlight'?redLightUI(round):s.id==='bridge'?bridgeUI(round):s.id==='minority'?minorityUI(round):s.id==='sudoku'?sudokuUI(round):s.id==='merge'?mergeUI(round):s.id==='stroop'?stroopUI(round):s.id==='gomoku'?gomokuUI(round):s.id==='dots'?dotsUI(round):trustUI(round)}
@@ -564,7 +597,7 @@ function complete(){if(!session||!session.game.over)return;
  screen='result';render();window.scrollTo?.(0,0);
 }
 function result(){const s=session,g=s.game,enemy=opponentScore(),victory=calcVictory();
- return `<div class="page"><main class="shell result-shell">${header({back:true,title:'대결 결과'})}<section class="result-box"><div class="result-emblem">${victory===true?'♛':victory===false?'✧':'★'}</div><span class="mini-kicker">GAME COMPLETE</span><h1>${victory===true?'승리! 멋진 한 수였어요.':victory===false?'아쉬워요, 다음 판엔 이길 수 있어요!':'대결 완료!'}</h1><p>${esc(GAME_BY_ID[s.id].title)} · ${labelMode(s.mode)}</p>
+ return `<div class="page"><main class="shell result-shell">${header({back:true,title:'대결 결과'})}${GAME_STAGE_SLOT}<section class="result-box"><div class="result-emblem">${victory===true?'♛':victory===false?'✧':'★'}</div><span class="mini-kicker">GAME COMPLETE</span><h1>${victory===true?'승리! 멋진 한 수였어요.':victory===false?'아쉬워요, 다음 판엔 이길 수 있어요!':'대결 완료!'}</h1><p>${esc(GAME_BY_ID[s.id].title)} · ${labelMode(s.mode)}</p>
  <div class="result-numbers"><div><span>내 점수</span><strong>${fmt(g.score)}</strong></div><div class="result-vs">VS</div><div><span>${s.challenger?'친구 기록':enemy!==null?'AI 점수':'내 최고 기록'}</span><strong>${fmt(enemy===null?profile.best[s.id]:enemy)}</strong></div></div>
  <div class="reward-box"><div><span class="reward-icon">⬡</span><div><strong>씽크칩 +${s.award}</strong><small>${s.award===0?'이미 보상을 받았거나 오늘의 획득 한도에 도달했어요.':'오늘의 도전 보상이 지갑에 지급됐어요.'}</small></div></div><span>보유 ${fmt(profile.chips)}칩</span></div>
  <button class="btn primary full" data-action="share">친구에게 이 기록으로 도전장 보내기 ↗</button><button class="btn secondary full" data-action="retry">${s.mode==='friend'?'같은 판 재도전':'한 판 더'}</button><button class="btn tertiary full" data-action="home">다른 게임 고르기</button>
@@ -591,7 +624,7 @@ function settings(){
 }
 
 function render(){const gid=['intro','game','result'].includes(screen)?(session&&screen!=='intro'?session.id:selectedGame):null;const de=document.documentElement;if(de?.dataset){if(gid&&GAME_BY_ID[gid])de.dataset.game=GAME_BY_ID[gid].color;else delete de.dataset.game;}
- root.innerHTML=screen==='live'?liveView():screen==='home'?home():screen==='intro'?intro():screen==='game'?gameView():screen==='result'?result():screen==='wallet'?wallet():screen==='settings'?settings():records();renderToast();if(screen==='game'){bindTracer();bindRedLight();bindBridge();bindGameExtras();if(session?.mode==='live')sendLiveProgress();}if(screen==='live'){liveTick();syncStage();}renderChatDock();}
+ root.innerHTML=screen==='live'?liveView():screen==='home'?home():screen==='intro'?intro():screen==='game'?gameView():screen==='result'?result():screen==='wallet'?wallet():screen==='settings'?settings():records();renderToast();if(screen==='game'){bindTracer();bindRedLight();bindBridge();bindGameExtras();if(session?.mode==='live'){sendLiveProgress();syncStage();}}syncGameStage();if(screen==='live'){liveTick();syncStage();}renderChatDock();}
 function goBack(){if(rulesOpen){rulesOpen=false;render();return true;}if(screen==='home')return false;
  if(fromLounge&&(screen==='intro'||screen==='live')){leaveLive();location.href=LOUNGE_URL;return true;} // 라운지에서 온 사람은 라운지로 돌아가요
  if(screen==='game')setScreen(session?.mode==='live'?'live':'intro');

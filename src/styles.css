@@ -435,3 +435,8 @@ a.hero-cta{text-decoration:none}
 .tc-stage .tc-name{position:absolute;transform:translate(-50%,0);font:700 10.5px/1 system-ui,sans-serif;color:var(--text);background:var(--surface);border:1px solid var(--line);padding:3px 7px;border-radius:999px;white-space:nowrap}
 
 .lounge-link{display:grid;place-items:center;text-decoration:none;font-size:16px}
+.lounge-pill{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 14px 0 11px;border-radius:999px;background:linear-gradient(135deg,#5f8bff,#8b5cff);color:#fff;font-weight:800;font-size:13px;line-height:1;letter-spacing:-.02em;text-decoration:none;white-space:nowrap;box-shadow:0 6px 18px #5f6bff40}.lounge-pill span{font-size:17px}.lounge-pill:active{transform:scale(.96)}
+.game-stage{margin:0 0 12px}
+@media (max-width:380px){.lounge-pill{padding:0 11px 0 9px;font-size:12px}.top-actions{gap:5px}}
+.brand-lockup{min-width:0}.brand-title{overflow:hidden;text-overflow:ellipsis}.top-left{flex:1 1 auto}.top-actions{flex:0 0 auto}
+@media (max-width:430px){.top-actions [data-action="toggle-theme"]{display:none}}

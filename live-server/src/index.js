@@ -7,6 +7,8 @@ const MAX_PLAYERS = 8, LOUNGE_MAX = 20; // LNG* = 3D 라운지 공개방 (게임
 const cleanDeco = (v) => String(v || '').replace(/[^a-z0-9._]/g, '').slice(0, 120); // lounge 방 꾸미기 encodeDeco
 const cleanLook = (v) => String(v || '').replace(/[^a-z0-9.]/g, '').slice(0, 300); // lounge/avatar.js encodeLook
 const GAMES = ['flip', 'blind', 'triad', 'trust', 'baseball', 'nim', 'auction', 'maze', 'draw', 'marbles', 'redlight', 'bridge', 'minority', 'forehead', 'liar', 'nunchi', 'vote', 'sudoku', 'merge', 'stroop', 'gomoku', 'dots', 'tele', 'mind'];
+// 목록에서 내린 게임: 예전 방은 계속 열리지만 탈락전 랜덤 뽑기에는 나오지 않아요
+const RETIRED = ['flip', 'triad', 'maze', 'draw', 'sudoku', 'merge', 'stroop'];
 const TURN = ['gomoku', 'dots']; // 1:1 turn games: the server relays moves between the two players of each board
 const PARTY = ['forehead', 'liar', 'nunchi', 'vote', 'tele', 'mind'];
 const MIN_PLAYERS = {liar: 3, vote: 3};
@@ -307,7 +309,7 @@ export class Room extends DurableObject {
       }
     }
     // Next round of a series gets a fresh random game (host can still change it).
-    if (!sr.done) { const pool = GAMES.filter((g) => !PARTY.includes(g) && !TURN.includes(g) && g !== s.game); s.game = pool[Math.floor(Math.random() * pool.length)]; }
+    if (!sr.done) { const pool = GAMES.filter((g) => !PARTY.includes(g) && !TURN.includes(g) && !RETIRED.includes(g) && g !== s.game); s.game = pool[Math.floor(Math.random() * pool.length)]; }
   }
   async fetch(req) {
     const url = new URL(req.url);

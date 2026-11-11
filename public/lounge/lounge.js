@@ -29,8 +29,8 @@
   const COLOR = {violet: '#8b7bff', amber: '#ffb020', teal: '#21c7b0', rose: '#ff6f91', green: '#3fcf8e', sky: '#38bdf8', coral: '#ff8a4c', lime: '#a3d13a', pink: '#ff6fc8', indigo: '#6c7bff', red: '#ff4d5e', cyan: '#22cfe6', plum: '#b569ff'};
   const ZONES = [
     {id: 'psych', title: '심리전 테이블', sub: '블러핑 · 배신 · 눈치', icon: '🃏', games: ['blind', 'trust', 'auction', 'marbles', 'minority'], pos: [-6.2, -3.6], color: 0xff6f91},
-    {id: 'brain', title: '두뇌 퍼즐 테이블', sub: '숫자 · 논리 · 추리', icon: '🧩', games: ['flip', 'triad', 'baseball', 'nim', 'sudoku', 'merge'], pos: [6.2, -3.6], color: 0x38bdf8},
-    {id: 'reflex', title: '순발력 존', sub: '손 감각 · 반응 속도', icon: '⚡', games: ['maze', 'draw', 'stroop', 'redlight', 'bridge'], pos: [-6.2, 4.2], color: 0xa3d13a},
+    {id: 'brain', title: '추리 테이블', sub: '숫자 · 논리 · 수 싸움', icon: '🧩', games: ['baseball', 'nim'], pos: [6.2, -3.6], color: 0x38bdf8},
+    {id: 'reflex', title: '서바이벌 존', sub: '술래 · 징검다리', icon: '⚡', games: ['redlight', 'bridge'], pos: [-6.2, 4.2], color: 0xa3d13a},
     {id: 'duel', title: '1:1 전략석', sub: 'AI 또는 친구와 맞대결', icon: '⚔️', games: ['gomoku', 'dots'], pos: [6.2, 4.2], color: 0xb569ff},
     {id: 'party', title: '파티 라운지', sub: '친구들과 실시간 파티·협동', icon: '🎉', party: true, pos: [0, -6.4], color: 0xf7ce55},
     {id: 'main', title: '오늘의 메인 매치', sub: '매일 바뀌는 게임', icon: '🏆', main: true, pos: [0, 0], color: 0xf7ce55},
