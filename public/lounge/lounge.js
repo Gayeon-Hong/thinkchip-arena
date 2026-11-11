@@ -478,6 +478,16 @@
   switchRoom(startCode.length >= 4 ? startCode : null);
   if (!localStorage.getItem('thinkchip:avatar:v1')) setTimeout(() => { toast('처음 오셨네요! 드레스룸에서 내 캐릭터를 꾸며 보세요'); }, 1200);
   addEventListener('storage', (e) => { if (e.key === PROFILE_KEY) { renderChips(); drawBoard(); } });
+  // 자동 테스트·영상 녹화용 (읽기 + 이동만). 게임 데이터나 칩은 바꾸지 않아요.
+  window.__lounge = {
+    me: () => ({x: me.av.position.x, z: me.av.position.z, expr: me.av.userData.face.expr, walking: !!me.target}),
+    players: () => [...players.values()].map((p) => ({id: p.id, name: p.name, x: p.av.position.x, z: p.av.position.z, expr: p.av.userData.face.expr})),
+    screenOf: (x, z, y = 0.9) => { const v = new THREE.Vector3(x, y, z).project(camera); return {x: (v.x + 1) / 2 * innerWidth, y: (1 - v.y) / 2 * innerHeight}; },
+    zones: () => ZONES.map((z) => ({id: z.id, x: z.pos[0], z: z.pos[1]})),
+    walkTo: (x, z) => { walkTo(me, x, z); sendPose(); },
+    goZone: (id) => goToZone(ZONES.find((z) => z.id === id)),
+    room: () => ({...room}),
+  };
   tick();
   setTimeout(() => $('loading').classList.add('done'), 300);
 })();
