@@ -28,5 +28,12 @@ for (const dir of ['lounge', 'vendor', 'icons', 'screenshots']) {
   await mkdir(resolve(base, dir), {recursive: true});
   await cp(resolve(base, 'public', dir), resolve(base, dir), {recursive: true});
 }
-for (const f of ['manifest.webmanifest', 'privacy.html', 'sw.js']) await cp(resolve(base, 'public', f), resolve(base, f));
+for (const f of ['privacy.html', 'sw.js']) await cp(resolve(base, 'public', f), resolve(base, f));
+// public/manifest 는 Cloudflare(사이트 루트) 기준 절대경로. vite 가 manifest 를 assets/ 로 옮겨도 아이콘이 깨지지 않게.
+// GitHub Pages 는 /thinkchip-arena/ 아래라서 루트 사본은 상대경로로 바꿔 둔다.
+const man = JSON.parse(await readFile(resolve(base, 'public/manifest.webmanifest'), 'utf8'));
+const rel = (p) => './' + String(p).replace(/^\/+/, '');
+Object.assign(man, {id: './', start_url: './', scope: './'});
+for (const k of ['icons', 'screenshots']) for (const it of man[k] || []) it.src = rel(it.src);
+await writeFile(resolve(base, 'manifest.webmanifest'), JSON.stringify(man, null, 2));
 console.log('lounge/config.js + GitHub Pages 루트 미러 (index.html, lounge/, vendor/, icons/) 갱신');

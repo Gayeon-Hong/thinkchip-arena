@@ -1,5 +1,5 @@
 {
-  "id": "/",
+  "id": "./",
   "name": "씽크칩 아레나",
   "short_name": "씽크칩 아레나",
   "description": "3D 라운지에 모여 친구·AI와 겨루는 두뇌 게임 아레나. 심리전, 퍼즐, 순발력, 1:1 전략, 실시간 파티 게임까지 24종.",
@@ -21,19 +21,19 @@
   ],
   "icons": [
     {
-      "src": "icons/icon-192.png",
+      "src": "./icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icons/icon-512.png",
+      "src": "./icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icons/maskable-512.png",
+      "src": "./icons/maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -41,28 +41,28 @@
   ],
   "screenshots": [
     {
-      "src": "screenshots/ss1.png",
+      "src": "./screenshots/ss1.png",
       "sizes": "636x1048",
       "type": "image/png",
       "form_factor": "narrow",
       "label": "홈 화면"
     },
     {
-      "src": "screenshots/ss2.png",
+      "src": "./screenshots/ss2.png",
       "sizes": "636x1048",
       "type": "image/png",
       "form_factor": "narrow",
       "label": "뒤집어 3!"
     },
     {
-      "src": "screenshots/ss3.png",
+      "src": "./screenshots/ss3.png",
       "sizes": "636x1048",
       "type": "image/png",
       "form_factor": "narrow",
       "label": "블라인드 숫자전"
     },
     {
-      "src": "screenshots/wide.png",
+      "src": "./screenshots/wide.png",
       "sizes": "1504x741",
       "type": "image/png",
       "form_factor": "wide",
