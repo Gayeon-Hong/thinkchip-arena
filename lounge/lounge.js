@@ -216,9 +216,12 @@
   function placeCamera(snap) {
     const want = camState.closeUp ? new THREE.Vector3(me.av.position.x, 1.35, me.av.position.z) : new THREE.Vector3(me.av.position.x * 0.6, 1, me.av.position.z * 0.6 + 1);
     camState.focus.lerp(want, snap ? 1 : 0.08);
-    const d = camState.closeUp ? 8.8 : camState.dist, pitch = camState.closeUp ? 0.28 : camState.pitch, yaw = camState.closeUp ? me.av.rotation.y : camState.yaw;
+    const sheetCover = camState.closeUp && !$('sheet').hidden ? Math.min($('sheet').getBoundingClientRect().height, innerHeight * 0.6) : 0, d = camState.closeUp ? 7.2 * Math.max(1, Math.min(2.4, innerHeight / Math.max(1, innerHeight - sheetCover))) * 0.82 : camState.dist, pitch = camState.closeUp ? 0.22 : camState.pitch, yaw = camState.closeUp ? (camState.closeBase || 0) + (camState.closeYaw || 0) : camState.yaw;
     camera.position.set(camState.focus.x + Math.sin(yaw) * Math.cos(pitch) * d, camState.focus.y + Math.sin(pitch) * d, camState.focus.z + Math.cos(yaw) * Math.cos(pitch) * d);
-    camera.lookAt(camState.focus.x, camState.focus.y + (camState.closeUp ? -1.25 : 0), camState.focus.z);
+    camera.lookAt(camState.focus.x, camState.focus.y + (camState.closeUp ? -0.15 : 0), camState.focus.z);
+    // 드레스룸·방 꾸미기 창이 아래를 가리면, 그만큼 화면을 위로 밀어서 캐릭터가 창 위 빈 곳 가운데 오게
+    const sheetEl = $('sheet'), cover = !sheetEl.hidden ? sheetEl.getBoundingClientRect().height : 0, offY = (camState.closeUp || sheetEl.classList.contains('closet')) ? Math.min(cover, innerHeight * 0.6) / 2 : 0;
+    if (offY !== camState.offY) { camState.offY = offY; if (offY) camera.setViewOffset(innerWidth, innerHeight, 0, offY, innerWidth, innerHeight); else camera.clearViewOffset(); }
   }
   function resize() {
     const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h;
@@ -229,10 +232,11 @@
   // 입력: 탭 = 이동/선택, 드래그 = 회전, 핀치/휠 = 확대
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), pointers = new Map();
   let drag = null, pinch0 = 0, dist0 = 0;
-  canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture?.(e.pointerId); pointers.set(e.pointerId, {x: e.clientX, y: e.clientY}); if (pointers.size === 1) drag = {x: e.clientX, y: e.clientY, yaw: camState.yaw, pitch: camState.pitch, moved: false}; if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); dist0 = camState.dist; drag = null; } });
+  canvas.addEventListener('pointerdown', (e) => { canvas.setPointerCapture?.(e.pointerId); pointers.set(e.pointerId, {x: e.clientX, y: e.clientY}); if (pointers.size === 1) drag = {x: e.clientX, y: e.clientY, yaw: camState.yaw, pitch: camState.pitch, cy: camState.closeYaw || 0, moved: false}; if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); dist0 = camState.dist; drag = null; } });
   canvas.addEventListener('pointermove', (e) => { if (!pointers.has(e.pointerId)) return; pointers.set(e.pointerId, {x: e.clientX, y: e.clientY});
     if (pointers.size === 2) { const [a, b] = [...pointers.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y); camState.dist = Math.max(9, Math.min(34, dist0 * (pinch0 / Math.max(1, d)))); return; }
-    if (drag) { const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.hypot(dx, dy) > 6) drag.moved = true; if (drag.moved && !camState.closeUp) { camState.yaw = drag.yaw - dx * 0.006; camState.pitch = Math.max(0.12, Math.min(1.35, drag.pitch + dy * 0.004)); } } }); // 좌우로 밀면 회전, 위아래로 밀면 눕혀 보기·내려다보기
+    if (drag) { const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.hypot(dx, dy) > 6) drag.moved = true; if (drag.moved && camState.closeUp) camState.closeYaw = drag.cy - dx * 0.01; // 꾸미는 중엔 캐릭터 둘레를 돌며 보기
+      if (drag.moved && !camState.closeUp) { camState.yaw = drag.yaw - dx * 0.006; camState.pitch = Math.max(0.12, Math.min(1.35, drag.pitch + dy * 0.004)); } } }); // 좌우로 밀면 회전, 위아래로 밀면 눕혀 보기·내려다보기
   const up = (e) => { const wasTap = drag && !drag.moved && pointers.size === 1; pointers.delete(e.pointerId); if (wasTap) onTap(e.clientX, e.clientY); if (pointers.size === 0) drag = null; };
   canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', (e) => { pointers.delete(e.pointerId); drag = null; });
   canvas.addEventListener('wheel', (e) => { e.preventDefault(); camState.dist = Math.max(9, Math.min(34, camState.dist + e.deltaY * 0.01)); }, {passive: false});
@@ -275,7 +279,7 @@
         else { const step = Math.min(d, dt * 3.4); pos.x += (dx / d) * step; pos.z += (dz / d) * step; p.state = 'walk';
           const want = Math.atan2(dx, dz); let diff = want - p.av.rotation.y; diff = Math.atan2(Math.sin(diff), Math.cos(diff)); p.av.rotation.y += diff * Math.min(1, dt * 10); }
       }
-      if (!p.target) { // 서 있을 땐 카메라(또는 방금 말한 사람) 쪽으로 천천히 몸을 돌려요 — 말풍선과 표정이 잘 보이게
+      if (!p.target && !(p === me && camState.closeUp)) { // 서 있을 땐 카메라(또는 방금 말한 사람) 쪽으로 천천히 몸을 돌려요 — 말풍선과 표정이 잘 보이게
         const f = lookAtSpeaker && lookAtSpeaker.id !== p.id && t - lookAtSpeaker.at < 4 ? lookAtSpeaker.av.position : camera.position;
         let diff = Math.atan2(f.x - pos.x, f.z - pos.z) - p.av.rotation.y; diff = Math.atan2(Math.sin(diff), Math.cos(diff));
         p.av.rotation.y += diff * Math.min(1, dt * 2.5);
@@ -436,7 +440,7 @@
     me.av = A.buildAvatar(draft || mine.look); me.av.position.copy(pos); me.av.rotation.y = ry; me.av.traverse((o) => { if (o.isMesh) o.castShadow = true; }); scene.add(me.av);
   }
   function openCloset() {
-    draft = draft || Object.assign({}, mine.look); camState.closeUp = true; me.av.rotation.y = camState.yaw * 0 + Math.PI / 4;
+    draft = draft || Object.assign({}, mine.look); if (!camState.closeUp) { camState.closeBase = camState.yaw; camState.closeYaw = 0; me.av.rotation.y = camState.yaw; } camState.closeUp = true;
     renderCloset();
   }
   function itemBtn(cat, it, on) { const p = it.price, own = owned(cat, it.id); return `<button class="item ${on ? 'on' : ''}" data-cat="${cat}" data-id="${it.id}">${esc(it.name)}<span class="price ${p === 0 ? 'free' : own ? 'owned' : ''}">${p === 0 ? '기본' : own ? '보유' : `⬡${p}`}</span></button>`; }
