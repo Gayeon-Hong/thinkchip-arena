@@ -2047,7 +2047,10 @@ const directMode=openGame&&['solo','ai'].includes(params.get('mode'))?params.get
 const directLevel=LEVELS.includes(params.get('level'))?params.get('level'):null;
 // 처음 들어오면 3D 라운지가 첫 화면. 라운지 로고(?home=1)나 게임/방 링크로 온 경우만 기존 홈을 보여줘요.
 const wantLounge=typeof location.replace==='function'&&!['home','open','party','room','game','from','seed','wallet'].some(k=>params.has(k))&&!/\/lounge\//.test(location.pathname||'');
-const goLounge=()=>{try{location.replace('./lounge/index.html');}catch{}};
+let leavingForLounge=false; // 라운지로 넘어가는 중엔 예전 홈 화면을 절대 그리지 않아요 (토스 앱에서 로딩이 길어도)
+const goLounge=()=>{leavingForLounge=true;try{location.replace('./lounge/index.html');}catch{leavingForLounge=false;}};
+window.addEventListener?.('pageshow',e=>{if(e.persisted){leavingForLounge=false;}});
+const bootHold=()=>wantLounge&&!!document.getElementById('boot')&&!bootGaveUp;let bootGaveUp=false;
 if(wantLounge&&TOSS_CONFIG.target!=='toss')goLounge(); // 토스 앱은 토스 계정 로그인을 마친 뒤 라운지로 (아래 initToss)
 const LOUNGE_URL='./lounge/index.html'+(invitedRoom?`?room=${invitedRoom}`:'');
 let storageKey=KEY; // must exist before the first readProfile() call
@@ -2783,7 +2786,7 @@ function settings(){
 
 // 게임 색은 라운지에서 그 게임이 놓인 테이블 네온 색을 따라가요 (라운지 ↔ 게임 화면 색이 이어지게)
 const ZONE_TINT={blind:'rose',trust:'rose',auction:'rose',marbles:'rose',minority:'rose',baseball:'sky',nim:'sky',redlight:'lime',bridge:'lime',gomoku:'violet',dots:'violet'};
-function render(){const gid=['intro','game','result','aiturn'].includes(screen)?(session&&screen!=='intro'?session.id:selectedGame):null;const de=document.documentElement;if(de?.dataset){if(gid&&GAME_BY_ID[gid])de.dataset.game=ZONE_TINT[gid]||GAME_BY_ID[gid].color;else delete de.dataset.game;}
+function render(){if(bootHold()||leavingForLounge)return;const gid=['intro','game','result','aiturn'].includes(screen)?(session&&screen!=='intro'?session.id:selectedGame):null;const de=document.documentElement;if(de?.dataset){if(gid&&GAME_BY_ID[gid])de.dataset.game=ZONE_TINT[gid]||GAME_BY_ID[gid].color;else delete de.dataset.game;}
  root.innerHTML=screen==='spectate'?spectateView():screen==='aiturn'?aiTurnView():screen==='live'?liveView():screen==='home'?home():screen==='intro'?intro():screen==='game'?gameView():screen==='result'?result():screen==='wallet'?wallet():screen==='settings'?settings():records();renderToast();if(screen==='game'){bindTracer();bindRedLight();bindBridge();bindGameExtras();if(session?.mode==='live'){sendLiveProgress();syncStage();}}syncGameStage();if(screen==='live'){liveTick();syncStage();}renderChatDock();}
 // 라운지가 허브: 라운지에서 들어온 게임은 어디서 나가든 그 테이블 앞으로 돌아가요 (번 칩도 같이 알려줌)
 function toLounge(){if(screen==='game'&&session&&!session.game.over){if(!confirm(session.mode==='live'?'이번 판을 포기할까요? 지금 점수로 기록돼요.':'진행 중인 게임을 그만두고 라운지로 돌아갈까요? 이 판의 보상은 지급되지 않아요.'))return true;
@@ -2936,7 +2939,7 @@ root.addEventListener('change',e=>{if(e.target.matches('[data-difficulty]')){dif
 // 친구 대결의 부정 점수는 현재 서버 검증이 없습니다. 출시 전 점수 리플레이 서버 필수.
 initTheme(()=>{if(!wantLounge)render();});
 // 라운지로 넘어갈 때는 옛 홈 화면을 그리지 않고 '라운지 준비 중' 화면을 그대로 둬요 (8초 안에 못 넘어가면 홈을 보여줘요)
-if(!wantLounge)render();else setTimeout(()=>{if(document.getElementById('boot'))render();},8000);
+if(!wantLounge)render();else setTimeout(()=>{if(document.getElementById('boot')&&!leavingForLounge){bootGaveUp=true;render();}},20000); // 20초 안에 라운지로 못 넘어가면 그때만 홈 화면
 if(directMode){if(directLevel)difficulty=directLevel;start(directMode);}
 if(params.get('wallet')==='1'){screen='wallet';render();}
 // Toss: safe area, user key (per-account records), ad preload; Android back -> in-app back, exit confirm on home.

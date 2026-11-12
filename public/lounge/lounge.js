@@ -567,9 +567,9 @@
   // ───────── 방 꾸미기 (씽크칩으로 벽지·바닥·러그·가구 구매) ─────────
   // 내가 꾸민 방은 내 화면에 늘 보이고, 내가 만든 친구 방에선 들어온 친구들에게도 그대로 보여요 (미니홈피처럼).
   const DECOR = {
-    wall: [{id: 'navy', name: '네이비', price: 0, c: 0x141c33}, {id: 'cream', name: '크림', price: 60, c: 0xe9dfc9}, {id: 'mint', name: '민트', price: 60, c: 0x9fd8c8}, {id: 'pink', name: '체리 핑크', price: 60, c: 0xf2b6c6}, {id: 'black', name: '블랙', price: 80, c: 0x0b0b10}, {id: 'sky', name: '하늘', price: 60, c: 0xa9c8f0}],
+    wall: [{id: 'navy', name: '네이비', price: 0, c: 0x1e2a4a}, {id: 'cream', name: '크림', price: 60, c: 0xe9dfc9}, {id: 'mint', name: '민트', price: 60, c: 0x9fd8c8}, {id: 'pink', name: '체리 핑크', price: 60, c: 0xf2b6c6}, {id: 'black', name: '블랙', price: 80, c: 0x0b0b10}, {id: 'sky', name: '하늘', price: 60, c: 0xa9c8f0}],
     floor: [{id: 'oak', name: '원목', price: 0, c: 0x7a5a43}, {id: 'white', name: '화이트 우드', price: 80, c: 0xd9cdbd}, {id: 'marble', name: '대리석', price: 100, c: 0xcfd2d8}, {id: 'walnut', name: '월넛', price: 70, c: 0x4a3326}, {id: 'pinktile', name: '핑크 타일', price: 80, c: 0xe9b7c4}],
-    rug: [{id: 'navy', name: '네이비', price: 0, c: 0x1c2747}, {id: 'red', name: '레드', price: 40, c: 0x7a1f2b}, {id: 'green', name: '포레스트', price: 40, c: 0x1f5a3e}, {id: 'purple', name: '퍼플', price: 40, c: 0x4a2f7a}, {id: 'beige', name: '베이지', price: 40, c: 0xcdb99a}],
+    rug: [{id: 'navy', name: '네이비', price: 0, c: 0x26345e}, {id: 'red', name: '레드', price: 40, c: 0x7a1f2b}, {id: 'green', name: '포레스트', price: 40, c: 0x1f5a3e}, {id: 'purple', name: '퍼플', price: 40, c: 0x4a2f7a}, {id: 'beige', name: '베이지', price: 40, c: 0xcdb99a}],
     items: [{id: 'arcade', name: '아케이드 기계', price: 150}, {id: 'trophy', name: '트로피 장식장', price: 120}, {id: 'tank', name: '어항', price: 130}, {id: 'piano', name: '피아노', price: 200}, {id: 'tree', name: '반짝이 트리', price: 90}, {id: 'bean', name: '빈백 소파', price: 70}, {id: 'neon', name: '네온 하트', price: 60}, {id: 'plants', name: '화분 세트', price: 50}],
   };
   const ROOM_KEY = 'thinkchip:room:v1';
@@ -659,8 +659,9 @@
   function goRoom(code) { if (!code || /^LNG\d$/.test(code)) { if (isHome() || !room.public) switchRoom(null); return; } if (code !== room.code) { switchRoom(code); me.av.position.set(0, 0, 4); } }
   function renderDock() {
     const home = isHome(), items = home
-      ? [...(myHome() ? [['deco', '🛋️', '꾸미기'], ['closet', '👕', '드레스룸']] : [['home', '🏠', '내 방']]), ['lounge', '🏛️', '라운지'], ['games', '🎮', '게임'], ['friends', '👥', '친구']]
-      : [['games', '🎮', '게임'], ['home', '🏠', '내 방'], ['desk', '💁', '비서'], ['friends', '👥', '친구']];
+      ? [...(myHome() ? [['deco', '🛋️', '꾸미기'], ['closet', '👕', '드레스룸']] : []), ['games', '🎮', '게임'], ['friends', '👥', '친구']]
+      : [['games', '🎮', '게임'], ['desk', '💁', '비서'], ['friends', '👥', '친구']];
+    const wt = $('whereToggle'); if (wt) { wt.querySelector('[data-w="lounge"]').classList.toggle('on', !home); wt.querySelector('[data-w="home"]').classList.toggle('on', myHome()); wt.querySelector('[data-w="lounge"] span').textContent = isVip() ? 'VIP' : '라운지'; }
     document.querySelector('.dock-right').innerHTML = items.map(([k, e, n]) => `<button data-open="${k}"><span>${e}</span>${n}</button>`).join('');
     renderSocialBadge();
   }
@@ -1199,6 +1200,7 @@
 
   $('nameBtn').onclick = editName; showName();
   $('online').onclick = () => togglePeople();
+  $('whereToggle').onclick = (e) => { const b = e.target.closest('[data-w]'); if (!b) return; if (b.dataset.w === 'home') goHome(); else if (isHome()) goLounge(); else if (isVip()) { switchRoom(null); toast('🏛 라운지로 나왔어요'); } };
   $('people').addEventListener('pointerdown', (e) => e.stopPropagation());
   $('people').onclick = async (e) => { const b = e.target.closest('button,[data-pme]'); if (!b) return;
     if (b.dataset.pp === 'close') return togglePeople(false);
@@ -1229,8 +1231,8 @@
     try { localStorage.setItem('brain-arena:theme:v1', t === 'day' ? 'light' : 'dark'); } catch (e) {} // 라운지가 기준: 게임 화면도 같은 낮/밤 모드로
     document.body.dataset.theme = t; const day = t === 'day'; $('themeBtn').textContent = day ? '☀' : '☾';
     scene.background = new THREE.Color(day ? 0xdfe5f2 : 0x070b16); scene.fog = new THREE.Fog(day ? 0xdfe5f2 : 0x070b16, 26, 60);
-    mats.wall.color.setHex(day ? mats.wallDay : 0x141c33); mats.floor.color.setHex(day ? mats.floorDay : 0x7a5a43);
-    hemi.intensity = day ? 0.85 : 0.5; sun.intensity = day ? 1.0 : 0.75; renderer.toneMappingExposure = day ? 0.9 : 1.0;
+    mats.wall.color.setHex(day ? mats.wallDay : 0x1e2a4a); mats.floor.color.setHex(day ? mats.floorDay : 0x7a5a43);
+    hemi.intensity = day ? 1.0 : 0.78; sun.intensity = day ? 1.1 : 0.95; fill.intensity = day ? 0.35 : 0.42; renderer.toneMappingExposure = day ? 1.05 : 1.22; // 폰 화면에서 어둡지 않게 조금 밝게
     if (typeof applyDecor === 'function' && shownDeco) applyDecor(shownDeco);
   }
 
