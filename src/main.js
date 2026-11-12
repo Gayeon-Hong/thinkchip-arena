@@ -770,7 +770,7 @@ function result(){const s=session,g=s.game,enemy=opponentScore(),victory=calcVic
 let chipPacks=null,buying=false; // 콘솔에 등록된 충전 상품 (토스 앱 안에서만)
 async function loadChipPacks(){if(chipPacks!==null)return;chipPacks=[];chipPacks=await listChipPacks();if(screen==='wallet')render();}
 function grantChips(n,orderId){if(!acctOn()){profile=grantPaid(profile,n);saveProfile();return true;}
- try{localStorage.setItem(PQ,JSON.stringify([...readPQ(),{sku:skuForChips(n),orderId:String(orderId||`local-${Date.now()}`)}]));}catch{return false;}
+ try{localStorage.setItem(PQ,JSON.stringify([...readPQ(),{sku:skuForChips(n),orderId:String(orderId||`local-${Date.now()}`),store:TOSS_CONFIG.target==='toss'?'toss':'ms'}]));}catch{return false;}
  flushPurchases();return true;}
 function wallet(){loadChipPacks();const count=adsToday();return `<div class="page"><main class="shell">${header({back:true,title:'씽크칩 지갑'})}
  <section class="wallet-hero"><span class="mini-kicker">THINK CHIP WALLET</span><div class="wallet-balance"><span class="wallet-big-icon">⬡</span><strong>${guest()?'-':fmt(bal())}</strong><span>CHIP</span></div>${guest()&&TOSS_CONFIG.target==='toss'?`<p style="font-size:11px;opacity:.7;margin-top:6px">연결하는 중이에요… 인터넷 연결을 확인해 주세요.</p>`:guest()?`<button class="btn primary full" data-action="login" style="margin-top:12px">🔑 로그인하고 씽크칩 모으기</button><p style="font-size:11px;opacity:.7;margin-top:6px">로그인 없이 둘러보는 중이에요. 칩·옷·친구는 계정에 저장돼서 기기를 바꿔도 그대로예요.</p>`:acctOn()&&TOSS_CONFIG.target!=='toss'?`<p style="font-size:11px;opacity:.7;margin-top:6px">카카오 계정 지갑 · 선물할 수 있는 칩 ⬡${fmt(ACC.state.wallet?.paid||0)}</p>`:''}<p>도전해서 모으고, 생각이 막힐 때 힌트로 사용하세요.</p></section>

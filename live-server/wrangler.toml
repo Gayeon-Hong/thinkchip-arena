@@ -24,3 +24,9 @@ new_sqlite_classes = ["User"]
 # 관리자 계정 공개 ID (라운지 비서 데스크의 "내 ID"). 쉼표로 여러 개. 옷·가구가 전부 열려요
 [vars]
 ADMIN_PIDS = "6ed1070a82ab8dfec6e8bad6"
+
+# 토스 인앱결제 주문 확인용 mTLS 인증서 (05_toss_mtls_upload_windows.cmd 로 올린 뒤 ID 를 넣고 주석을 풀어요)
+# 이 바인딩이 없으면 지금처럼 주문번호 중복만 막고 지급해요
+# [[mtls_certificates]]
+# binding = "TOSS_MTLS"
+# certificate_id = ""

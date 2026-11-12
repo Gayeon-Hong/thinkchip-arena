@@ -99,7 +99,22 @@ const GIFT_AMOUNTS = [100, 300, 1000, 3000];
 const GIFT_DAILY_MAX = 5000; // 한 사람이 하루에 보낼 수 있는 칩
 const INITIAL_CHIPS = 100, WELCOME_BONUS = 300, ATTEND_REWARD = 30, PLAY_DAILY_CAP = 200, RUN_MAX = 150, AD_REWARD = 20, AD_DAILY_LIMIT = 5, IMPORT_MAX = 3000;
 const CHIP_PACKS = {chips_300: 300, chips_1000: 1100, chips_3000: 3500, vip_30: 500}; // app.config.js chipPacks 와 같게
-const VIP_PACKS = {vip_30: 30}; // 현금 패키지: VIP 30일 + 500칩 (스토어에 상품을 등록하면 앱에 자동으로 보여요)
+const VIP_PACKS = {vip_30: 30};
+// 토스 콘솔 상품 ID → 서버 상품 (app.config.js chipPacks.tossSku 와 같게). 주문 확인은 mTLS 인증서로 토스 서버에 물어봐요
+const TOSS_SKUS = {'ait.0000098395.082c18cf.2be99887a0.4467161148': 'chips_300', 'ait.0000098395.8b7347b8.b664cd8029.4467283967': 'chips_1000',
+  'ait.0000098395.34707b2f.0a2e449a2b.4467393007': 'chips_3000', 'ait.0000098395.4d757553.5327de2082.4468048393': 'vip_30'};
+const TOSS_ORDER_API = 'https://apps-in-toss-api.toss.im/api-partner/v1/apps-in-toss/order/get-order-status';
+async function tossOrder(env, orderId) { // {ok, sku} | {wait} | {bad} | {retry}
+  try {
+    const r = await env.TOSS_MTLS.fetch(TOSS_ORDER_API, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({orderId})});
+    const j = await r.json().catch(() => null), o = j && j.resultType === 'SUCCESS' && j.success;
+    if (!o) return {retry: true};
+    if (o.status === 'PURCHASED' || o.status === 'PAYMENT_COMPLETED') return {ok: true, sku: TOSS_SKUS[o.sku] || o.sku};
+    if (o.status === 'ORDER_IN_PROGRESS') return {wait: true};
+    if (o.status === 'ERROR') return {retry: true};
+    return {bad: o.status}; // FAILED · REFUNDED · NOT_FOUND · MINIAPP_MISMATCH
+  } catch { return {retry: true}; }
+} // 현금 패키지: VIP 30일 + 500칩 (스토어에 상품을 등록하면 앱에 자동으로 보여요)
 // ── VIP 라운지 · 뱃지 · 전광판 슈퍼챗 · 한정판 비서 스킨 ──
 const VIP_PLANS = {d7: {price: 500, days: 7}, d30: {price: 1500, days: 30}, one: {price: 100, tickets: 1}, ten: {price: 800, tickets: 10}};
 const SC_TIERS = {normal: {price: 50, ms: 8000}, mega: {price: 200, ms: 20000}};
@@ -224,6 +239,7 @@ export class User extends DurableObject {
     ctx.blockConcurrencyWhile(async () => { this.u = Object.assign(freshUser(), (await ctx.storage.get('u')) || {}); if (!this.u.w) this.u.w = freshUser().w; });
   }
   async save() { await this.ctx.storage.put('u', this.u); }
+  async claimOrder(id, pid) { const k = 'o:' + id, cur = await this.ctx.storage.get(k); if (cur) return cur; await this.ctx.storage.put(k, pid); return pid; } // '__orders__' 객체에서만 써요
   async secret() { let s = await this.ctx.storage.get('secret'); if (!s) { const a = new Uint8Array(32); crypto.getRandomValues(a); s = hex(a); await this.ctx.storage.put('secret', s); } return s; }
   async init(pid, acct, platform, name) { const u = this.u; u.pid = pid; u.acct = acct; u.platform = platform; u.toss = platform === 'toss'; if (!u.name && name) u.name = cleanName(name); await this.save(); return 'ok'; }
   other(pid) { return this.env.USER.get(this.env.USER.idFromName(pid)); }
@@ -295,10 +311,17 @@ export class User extends DurableObject {
           u.skins = (u.skins || []).filter((x) => x !== r.item); if (u.skin === r.item) u.skin = 'classic'; }
         this.addChips(r.amount); w.paid = Math.min(w.paid, w.chips); r.refunded = true; extra.refunded = r; break;
       }
-      case 'purchase': { // 결제 완료된 주문 지급 (같은 주문은 한 번만). 영수증 서버 검증은 다음 단계
+      case 'purchase': { // 결제 완료된 주문 지급 (같은 주문은 한 번만, 계정 전체에서도 한 번만). 토스 주문은 토스 서버에 확인 후 지급
         const chips = CHIP_PACKS[b.sku], id = String(b.orderId || '').slice(0, 200);
         if (!chips || !id) return {error: 'bad', status: 400};
         if (w.orders.includes(id)) { extra.granted = 0; break; }
+        if ((u.platform === 'toss' || b.store === 'toss') && this.env.TOSS_MTLS) {
+          const t = await tossOrder(this.env, id);
+          if (t.wait || t.retry) return {...this.view(), error: 'pending', status: 503}; // 기기 줄에 남겨 두고 다음에 다시 확인
+          if (t.bad || t.sku !== b.sku) return {...this.view(), error: 'bad', status: 400};
+        }
+        const owner = await this.env.USER.get(this.env.USER.idFromName('__orders__')).claimOrder(id, u.pid).catch(() => u.pid);
+        if (owner !== u.pid) return {...this.view(), error: 'bad', status: 400}; // 다른 계정이 이미 받은 주문
         w.orders = [...w.orders, id].slice(-500); this.addChips(chips, true); extra.granted = chips;
         if (VIP_PACKS[b.sku]) { const v = u.vip = u.vip || {}; v.bought = true; v.until = Math.max(Date.now(), v.until || 0) + VIP_PACKS[b.sku] * 864e5; extra.vipDays = VIP_PACKS[b.sku]; } break;
       }
