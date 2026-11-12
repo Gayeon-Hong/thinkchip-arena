@@ -8,8 +8,13 @@ export const APP_CONFIG = Object.freeze({
   rewardedAdGroupId: env.VITE_REWARDED_AD_GROUP_ID || (isDev ? 'ait-ad-test-rewarded-id' : ''),
   enableRewardedAds: true,
   demoFeatures: false,
-  // 씽크칩 유료 충전 (토스 인앱결제). 콘솔 > 인앱결제에 같은 SKU 로 상품을 등록하면 지갑에 보여요. 가격은 콘솔에서 정해요.
-  chipPacks: [{sku: 'chips_300', chips: 300}, {sku: 'chips_1000', chips: 1100}, {sku: 'chips_3000', chips: 3500}, {sku: 'vip_30', chips: 500}],
+  // 씽크칩 유료 충전. sku = MS 스토어 상품 ID(서버 지급표와 같음), tossSku = 토스 콘솔이 붙여준 상품 ID. 가격은 각 콘솔에서 정해요.
+  chipPacks: [
+    {sku: 'chips_300', chips: 300, tossSku: 'ait.0000098395.082c18cf.2be99887a0.4467161148'},
+    {sku: 'chips_1000', chips: 1100, tossSku: 'ait.0000098395.8b7347b8.b664cd8029.4467283967'},
+    {sku: 'chips_3000', chips: 3500, tossSku: 'ait.0000098395.34707b2f.0a2e449a2b.4467393007'},
+    {sku: 'vip_30', chips: 500, tossSku: 'ait.0000098395.4d757553.5327de2082.4468048393'},
+  ],
   // 'web' = Microsoft Store / public website build: never touches the Toss SDK.
   target: env.VITE_TARGET === 'web' ? 'web' : 'toss', // the +50 "trial bonus" button stays off in release builds
 });

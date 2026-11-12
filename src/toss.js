@@ -151,7 +151,7 @@ export async function shareInvite(search, text) {
 const GRANTED_KEY = 'thinkchip:iap:granted';
 const grantedIds = () => { try { return JSON.parse(localStorage.getItem(GRANTED_KEY)) || []; } catch { return []; } };
 const markGranted = (id) => { try { localStorage.setItem(GRANTED_KEY, JSON.stringify([...grantedIds(), id].slice(-200))); } catch {} };
-export const chipsForSku = (sku) => (TOSS_CONFIG.chipPacks || []).find((p) => p.sku === sku)?.chips || 0;
+export const chipsForSku = (sku) => (TOSS_CONFIG.chipPacks || []).find((p) => p.sku === sku || p.tossSku === sku)?.chips || 0; // 토스는 콘솔이 붙인 상품 ID(tossSku)로 와요
 /* Microsoft Store 에 설치된 PWA: Digital Goods API + Payment Request (파트너센터 추가 기능 = 같은 SKU, '개발자 관리 소모품') */
 const MS_BILLING = 'https://store.microsoft.com/billing';
 let msSvc;
