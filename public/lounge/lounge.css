@@ -160,3 +160,6 @@ body[data-theme="day"] .veil{background:#e9ecf5;color:#1b2440}
 .rx-bar button small{font-size:9.5px;color:var(--muted);font-weight:700}
 .rx-bar button:active{transform:scale(.9);background:rgba(247,206,85,.25)}
 .pill.chips b{white-space:nowrap}
+
+.name-pill{gap:4px;padding:0 10px;font-size:12px}.name-pill span{font-size:11px}.name-pill b{max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:380px){.name-pill b{max-width:48px}.online{display:none}}
+@media(max-width:420px){#brandBtn>span:last-child{display:none}#brandBtn{padding:6px}}

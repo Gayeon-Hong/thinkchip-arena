@@ -572,6 +572,8 @@
 
   // 시트 (바텀 시트 하나를 재사용)
   let sheetOnClose = null;
+  function showName() { const l = document.getElementById('nameLabel'); if (l && typeof myName === 'function') l.textContent = myName(); }
+  function editName() { openFriends(); setTimeout(() => { const i = document.getElementById('nameInput'); if (i) { i.focus(); i.select(); } }, 80); }
   function openSheet({kicker = '', title = '', html = '', cls = '', onClose = null}) {
     $('sheetKicker').textContent = kicker; $('sheetTitle').textContent = title; $('sheetBody').innerHTML = html;
     $('sheet').className = 'sheet ' + cls; $('sheet').hidden = false; $('backdrop').hidden = cls === 'closet'; sheetOnClose = onClose;
@@ -705,7 +707,7 @@
       ${acctOn() && !IN_TOSS ? (loggedIn() ? `<p class="table-note" style="text-align:center">카카오 계정으로 로그인됨 · <a href="#" id="logoutBtn" style="color:var(--muted)">로그아웃</a></p>` : '<button class="btn kakao full" id="deskLogin" style="margin-top:8px">🔑 로그인하고 칩 모으기</button>') : ''}
       <div class="name-row" style="margin:12px 0"><div class="label-row">내 이름 <small style="color:var(--muted);font-weight:600">· 바꾸면 바로 머리 위 이름이 바뀌어요</small></div><input id="deskName" maxlength="12" value="${esc(p.nickname || '')}" placeholder="라운지에서 보일 이름"></div>
       <div class="card"><h3>비서의 팁</h3><p>${['심리전 테이블에선 채팅 이모티콘으로 표정을 바꿔 블러핑해 보세요 😏', '드레스룸에서 얼굴은 무료로 바꿀 수 있어요.', '친구 방을 만들면 라운지와 파티 게임을 같은 사람들과 할 수 있어요.', '메인 매치는 매일 자정에 바뀌어요.'][new Date().getDate() % 4]}</p></div>`});
-    $('deskName').onchange = (e) => { const q = profile(); q.nickname = e.target.value.trim().slice(0, 12); saveProfile(q); me.tag.textContent = myName(); reconnect(); if (loggedIn()) ACC.call('hello', {name: myName()}).catch(() => {}); toast('이름을 바꿨어요'); };
+    $('deskName').onchange = (e) => { const q = profile(); q.nickname = e.target.value.trim().slice(0, 12); saveProfile(q); me.tag.textContent = myName(); showName(); reconnect(); if (loggedIn()) ACC.call('hello', {name: myName()}).catch(() => {}); toast('이름을 바꿨어요'); };
     if ($('deskLogin')) $('deskLogin').onclick = () => openLogin();
     if ($('logoutBtn')) $('logoutBtn').onclick = (e) => { e.preventDefault(); if (confirm('로그아웃할까요? 칩과 친구는 계정에 그대로 남아 있어요.')) { ACC.logout(); location.reload(); } };
     const b = $('attendBtn'); if (b) b.onclick = async () => {
@@ -812,7 +814,7 @@
     if ($('shareBtn')) $('shareBtn').onclick = shareRoom;
     if ($('gbBtn')) $('gbBtn').onclick = openGuestbook;
     const box = $('socialBox');
-    box.onchange = (e) => { if (e.target.id !== 'nameInput') return; const p = profile(); p.nickname = e.target.value.trim().slice(0, 12); saveProfile(p); me.tag.textContent = myName(); reconnect(); if (loggedIn()) ACC.call('hello', {name: myName()}).catch(() => {}); toast('이름을 바꿨어요'); };
+    box.onchange = (e) => { if (e.target.id !== 'nameInput') return; const p = profile(); p.nickname = e.target.value.trim().slice(0, 12); saveProfile(p); me.tag.textContent = myName(); showName(); reconnect(); if (loggedIn()) ACC.call('hello', {name: myName()}).catch(() => {}); toast('이름을 바꿨어요'); };
     box.onclick = async (e) => {
       const b = e.target.closest('button'); if (!b) return; const d = b.dataset;
       if (b.id === 'friendLinkBtn') return shareFriendLink();
@@ -897,7 +899,7 @@
   let nameSynced = false;
   function syncName() { // 새 기기에서 처음이면 계정 이름을 쓰고, 아니면 이 기기에서 정한 이름을 계정에 올려요
     if (nameSynced || !st().wallet) return; nameSynced = true; const server = st().name || '';
-    if (firstName && server) { const p = profile(); p.nickname = server; saveProfile(p); me.tag.textContent = myName(); reconnect(); }
+    if (firstName && server) { const p = profile(); p.nickname = server; saveProfile(p); me.tag.textContent = myName(); showName(); reconnect(); }
     else if (server !== myName()) ACC.call('hello', {name: myName()}).catch(() => {});
   }
   function syncSocial() { if (loggedIn()) ACC.refresh(); }
@@ -966,6 +968,7 @@
   const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const newCode = () => Array.from({length: 4}, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
 
+  $('nameBtn').onclick = editName; showName();
   document.querySelector('.dock-right').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; ({games: openGames, closet: () => goToZone(ZONES.find((z) => z.closet)), desk: () => goToZone(ZONES.find((z) => z.desk)), friends: openFriends, room: openRoomDeco})[b.dataset.open]?.(); };
   $('chipsBtn').onclick = () => (acctOn() && !loggedIn() ? openLogin() : openDesk());
   // 왼쪽 위 로고: 라운지를 떠나지 않고 방 정보·이동 메뉴를 열어요 (예전엔 옛 홈으로 나가서 돌아올 길이 없었어요)
