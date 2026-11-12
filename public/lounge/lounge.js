@@ -317,7 +317,7 @@
   }
   function walkTo(p, x, z, then) {
     for (const o of OBST) { const ox = x - o.x, oz = z - o.z, od = Math.hypot(ox, oz); if (od < o.r + 0.1) { const k = (o.r + 0.1) / (od || 1); x = o.x + (od ? ox : 1) * k; z = o.z + (od ? oz : 0) * k; } } // 테이블 한가운데를 찍으면 가장자리까지만
-    const lim = ROOM - 1.2; p.target = {x: Math.max(-lim, Math.min(lim, x)), z: Math.max(-lim, Math.min(lim, z)), then};
+    const lim = ROOM - 1.2; p.target = {x: Math.max(-lim, Math.min(lim, x)), z: Math.max(-lim, Math.min(lim, z)), then}; if (!p.keepAct) p.act = null;
   }
 
   // ───────── 친구 손인사 (영화 속 비밀 악수처럼: 하이파이브 → 손바닥 → 손등 → 로우파이브 → 주먹 → 펑!) ─────────
@@ -506,7 +506,7 @@
     if (ph) { let o = ph.object; while (o && !others.some((p) => p.av === o)) o = o.parent; const who = others.find((p) => p.av === o); if (who) { approachFor(who); return; } }
     hideRx(); camState.pan.set(0, 0, 0); // 걸어가면 다시 내 캐릭터 중심으로 (손인사 중에 바닥을 누르면 멈추고 걸어가요)
     const hit = ray.intersectObjects(clickables.filter((o) => o.userData.zone.group?.visible !== false), false)[0];
-    if (hit) { const zz = hit.object.userData.zone; if (!zz.furn) { goToZone(zz); return; } if (myHome() && !placingSc) return openFurniture(zz.furn); }
+    if (hit) { const zz = hit.object.userData.zone; if (!zz.furn) { goToZone(zz); return; } if (!placingSc) return openFurniture(zz.furn); }
     const fh = ray.intersectObject(floor, false)[0];
     if (placingSc && fh) { const what = placingSc; placingSc = false; const x = Math.round(Math.max(-9.9, Math.min(9.9, fh.point.x)) * 10) / 10, z = Math.round(Math.max(-10.3, Math.min(9.9, fh.point.z)) * 10) / 10;
       if (what === true) { const cur = myRoom.deco.sc || SC_HOME; myRoom.deco.sc = [x, z, cur[2] || 0]; placeShowcase(myRoom.deco.sc); }
@@ -551,7 +551,10 @@
           avoid(p, pos, dx, dz, step);
           const want = Math.atan2(dx, dz); let diff = want - p.av.rotation.y; diff = Math.atan2(Math.sin(diff), Math.cos(diff)); p.av.rotation.y += diff * Math.min(1, dt * 10); }
       }
-      if (!p.target && !p.hs && !p.av.userData.kneel && !(p === me && camState.closeUp)) { // 서 있을 땐 카메라(또는 방금 말한 사람) 쪽으로 천천히 몸을 돌려요 — 말풍선과 표정이 잘 보이게
+      if (p.act && !p.target) { pos.y = p.act.y; p.av.rotation.y = p.act.ry; p.av.userData.pose = p.act.kind; if (p.act.arms) p.av.userData.armPose = p.act.arms === 'play' ? {r: [-1.15 + Math.sin(t * 9) * 0.12, 0.1], l: [-1.15 + Math.cos(t * 8) * 0.12, -0.1]} : p.act.arms; }
+      else if (pos.y || p.av.userData.pose) { pos.y = 0; p.av.userData.pose = null; if (p.actArms) { p.av.userData.armPose = null; p.actArms = false; } }
+      if (p.act && p.act.arms) p.actArms = true;
+      if (!p.target && !p.hs && !p.act && !p.av.userData.kneel && !(p === me && camState.closeUp)) { // 서 있을 땐 카메라(또는 방금 말한 사람) 쪽으로 천천히 몸을 돌려요 — 말풍선과 표정이 잘 보이게
         const f = lookAtSpeaker && lookAtSpeaker.id !== p.id && t - lookAtSpeaker.at < 4 ? lookAtSpeaker.av.position : camera.position;
         let diff = Math.atan2(f.x - pos.x, f.z - pos.z) - p.av.rotation.y; diff = Math.atan2(Math.sin(diff), Math.cos(diff));
         p.av.rotation.y += diff * Math.min(1, dt * 2.5);
@@ -564,7 +567,9 @@
     if (secretary && !secretary.parent.visible) { npcTag.style.display = 'none'; deskBubble.style.display = 'none'; }
     else if (secretary) { A.animateAvatar(secretary, t, 'idle', 1.3); const wp = new THREE.Vector3(); secretary.getWorldPosition(wp); project({x: wp.x, z: wp.z}, 2.75, npcTag); project({x: wp.x, z: wp.z}, 3.15, deskBubble); }
     const mz = ZONES.find((z) => z.main); if (mz.spin) mz.spin.rotation.y += dt * 0.6;
-    if (furniture.tank && furniture.tank.visible) furniture.tank.children.forEach((c) => { if (c.userData.swim != null) c.position.x = Math.sin(t * 0.8 + c.userData.swim * 2) * 0.7; });
+    if (furniture.tank && furniture.tank.visible) { const sp = furniture.tank.userData.fed > simT ? 2.6 : 0.8; furniture.tank.children.forEach((c) => { if (c.userData.swim != null) c.position.x = Math.sin(t * sp + c.userData.swim * 2) * 0.7; }); }
+    if (furniture.tv && furniture.tv.visible && !furniture.tv.userData.off) furniture.tv.traverse((o) => { if (o.material && o.material.emissive && o.material.emissive.getHex() !== 0) o.material.emissive.setHSL((t * 0.15) % 1, 0.6, 0.45); });
+    for (const k of ['plants', 'tree']) { const g = furniture[k]; if (g && g.userData.grow) { g.userData.grow = Math.max(0, g.userData.grow - dt * 1.2); g.scale.setScalar(1 + Math.sin(g.userData.grow * Math.PI) * 0.12); } }
     for (const z of ZONES) if (z.sign) z.sign.visible = !camState.closeUp && (camState.pitch > 0.5 || z.sign.getWorldPosition(v3).distanceTo(camera.position) > 7); // 클로즈업·눈높이 보기에선 가까운 간판이 화면을 가리지 않게
     for (const z of ZONES) if (z.sign) z.sign.lookAt(camera.position.x, z.sign.getWorldPosition(v3).y, camera.position.z);
     placeCamera(false);
@@ -1162,11 +1167,52 @@
         if (!(await confirmBuy({title: '📢 전광판에 띄울까요?', desc: `“${text}”`, price, note: '전광판에 뜬 슈퍼챗은 취소할 수 없어요', cta: '띄우기'}))) return;
         b.disabled = true; try { const r = await ACC.call('superchat', {text, tier, room: room.code}); if (r.ok) { closeSheet(); toast(`📢 전광판에 띄웠어요! -${price} 씽크칩`); } else { b.disabled = false; toast(r.error === 'slow' ? '10초에 한 번 보낼 수 있어요' : r.error === 'chips' ? '씽크칩이 부족해요' : '보내지 못했어요'); } } catch (er) { b.disabled = false; toast('인터넷 연결을 확인해 주세요'); } } };
   }
+  // ───────── 가구 쓰기: 앉기·눕기·연주·켜고 끄기 (친구 방·VIP 라운지 가구도 쓸 수 있어요) ─────────
+  // spot: 가구 기준 자리 [x, z], ry: 가구 기준 바라보는 방향, y: 몸 높이
+  const FURN_USE = {
+    sofa: {label: '🛋️ 앉기', act: 'sit', seats: [[-0.6, 0.15], [0.6, 0.15]], ry: 0, y: 0.32, say: '아~ 편하다 😌'},
+    bean: {label: '🫘 앉기', act: 'sit', seats: [[-0.9, 0], [0.9, 0]], ry: 0, y: 0.18, say: '푹신푹신~'},
+    bed: {label: '😴 눕기', act: 'lie', seats: [[0, 0.25]], ry: 0, y: 0.72, say: 'Zzz… 💤', expr: 'sleep'},
+    desk: {label: '📚 공부하기', act: 'sit', seats: [[0, 0.95]], ry: Math.PI, y: 0.18, arms: 'play', say: '집중… ✏️', expr: 'hmm'},
+    piano: {label: '🎹 연주하기', act: 'stand', seats: [[0, 0.75]], ry: Math.PI, y: 0, arms: 'play', music: true},
+    arcade: {label: '🕹️ 게임하기', act: 'stand', seats: [[0, 0.95]], ry: Math.PI, y: 0, arms: 'play', games: true},
+    tv: {label: '📺 켜기/끄기', toggle: true}, lamp: {label: '💡 켜기/끄기', toggle: true}, neon: {label: '💡 켜기/끄기', toggle: true},
+    tank: {label: '🐟 먹이 주기', feed: true}, plants: {label: '💧 물 주기', water: true}, tree: {label: '💧 물 주기', water: true},
+    trophy: {label: '🏆 뱃지 보기', showcase: true}, shelf: {label: '📖 책 읽기', act: 'stand', seats: [[0, 0.9]], ry: Math.PI, y: 0, arms: {r: [-1.2, 0.3], l: [-1.2, -0.3]}, say: '이 책 재밌네 📖', expr: 'hmm'},
+  };
+  const fv = new THREE.Vector3();
+  function useFurniture(id) {
+    const u = FURN_USE[id], g = furniture[id]; if (!u || !g) return;
+    if (u.toggle) { g.userData.off = !g.userData.off; g.traverse((o) => { if (o.isLight) { if (o.userData.i0 == null) o.userData.i0 = o.intensity; o.intensity = g.userData.off ? 0 : o.userData.i0; }
+        if (o.material && o.material.emissive) { if (o.material.userData.e0 == null) o.material.userData.e0 = o.material.emissiveIntensity; o.material.emissiveIntensity = g.userData.off ? 0.02 : o.material.userData.e0; } });
+      toast(g.userData.off ? '꺼졌어요' : '켜졌어요 ✨'); return; }
+    if (u.showcase) return openShowcase();
+    if (u.feed || u.water) { g.getWorldPosition(fv); fv.y = u.feed ? 1.4 : 1.8; walkTo(me, fv.x + 0.9, fv.z + 0.9, () => { setExpr(me, 'happy', 2500); say(me, u.feed ? '냠냠 먹어~ 🐟' : '쑥쑥 자라라 🌱'); spark(fv.clone(), true); setTimeout(() => spark(fv.clone(), false), 400);
+        if (u.water) { g.userData.grow = 1; } if (u.feed) g.userData.fed = simT + 6; }); sendPose(); return; }
+    // 빈 자리 찾기 (다른 사람이 앉아 있으면 옆자리)
+    const seat = u.seats.map(([x, z]) => g.localToWorld(new THREE.Vector3(x, 0, z))).find((w) => ![...players.values()].some((p) => p !== me && p.act && Math.hypot(p.av.position.x - w.x, p.av.position.z - w.z) < 0.5));
+    if (!seat) return toast('다른 사람이 쓰고 있어요');
+    const ry = g.rotation.y + u.ry;
+    walkTo(me, seat.x, seat.z, () => { me.act = {kind: u.act, ry, y: u.y, arms: u.arms || null}; sendPose();
+      if (u.say) say(me, u.say); if (u.expr) setExpr(me, u.expr, 6000);
+      if (u.music) playTune(); if (u.games) setTimeout(openGames, 900); });
+    sendPose(); closeSheet();
+  }
+  // 피아노: 짧은 즉흥 멜로디 (오음계라 아무렇게나 쳐도 듣기 좋아요)
+  let audioCtx = null;
+  function playTune() {
+    try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+    const scale = [261.6, 293.7, 329.6, 392.0, 440.0, 523.3, 587.3, 659.3], t0 = audioCtx.currentTime + 0.05; let k = 3;
+    for (let i = 0; i < 12; i++) { k = Math.max(0, Math.min(scale.length - 1, k + [-2, -1, 1, 2, 0][Math.floor(Math.random() * 5)])); const f = i === 11 ? scale[5] : scale[k], o = audioCtx.createOscillator(), gn = audioCtx.createGain(), at = t0 + i * 0.28;
+      o.type = 'triangle'; o.frequency.value = f; gn.gain.setValueAtTime(0.0001, at); gn.gain.exponentialRampToValueAtTime(0.18, at + 0.02); gn.gain.exponentialRampToValueAtTime(0.0001, at + (i === 11 ? 1.2 : 0.42)); o.connect(gn).connect(audioCtx.destination); o.start(at); o.stop(at + 1.3);
+      setTimeout(() => { if (!me.act) return; const h = me.av.position.clone(); h.y = 2.4; h.x += (Math.random() - 0.5) * 0.8; spark(h, i % 3 === 0); }, i * 280); }
+    say(me, '🎵 ♪ ♫'); setExpr(me, 'happy', 4000);
+  }
   function openFurniture(id) {
-    const it = DECOR.items.find((x) => x.id === id); if (!it) return;
-    if (!myHome()) return toast(`${homeOwner || '친구'}님 방의 ${it.name}이에요`);
-    openSheet({kicker: 'FURNITURE', title: `🛋️ ${it.name}`, html: `<div class="vip-plans"><button class="vip-plan" data-fa="move"><b>📍 옮기기</b><small>바닥을 눌러 놓을 곳 고르기</small></button><button class="vip-plan" data-fa="rot"><b>↻ 돌리기</b><small>45°씩</small></button><button class="vip-plan" data-fa="reset"><b>↩ 원래 자리</b><small>처음 놓인 곳으로</small></button><button class="vip-plan" data-fa="hide"><b>📦 치우기</b><small>보관함으로 (꾸미기에서 다시 놓기)</small></button></div>`});
-    $('sheetBody').onclick = (e) => { const b = e.target.closest('[data-fa]'); if (!b) return; const a = b.dataset.fa, lay = myRoom.deco.lay = myRoom.deco.lay || {}, g = furniture[id], cur = lay[id] || g.userData.home;
+    const it = DECOR.items.find((x) => x.id === id); if (!it) return; const u = FURN_USE[id], own = myHome();
+    if (!own) { if (u) return useFurniture(id); return; } // 친구 방·VIP 라운지: 누르면 바로 쓰기
+    openSheet({kicker: 'FURNITURE', title: `🛋️ ${it.name}`, html: `${u ? `<button class="btn gold full" data-fa="use" style="margin-bottom:10px">${u.label}</button>` : ''}<div class="vip-plans"><button class="vip-plan" data-fa="move"><b>📍 옮기기</b><small>바닥을 눌러 놓을 곳 고르기</small></button><button class="vip-plan" data-fa="rot"><b>↻ 돌리기</b><small>45°씩</small></button><button class="vip-plan" data-fa="reset"><b>↩ 원래 자리</b><small>처음 놓인 곳으로</small></button><button class="vip-plan" data-fa="hide"><b>📦 치우기</b><small>보관함으로 (꾸미기에서 다시 놓기)</small></button></div>`});
+    $('sheetBody').onclick = (e) => { const b = e.target.closest('[data-fa]'); if (!b) return; if (b.dataset.fa === 'use') return useFurniture(id); const a = b.dataset.fa, lay = myRoom.deco.lay = myRoom.deco.lay || {}, g = furniture[id], cur = lay[id] || g.userData.home;
       if (a === 'move') { closeSheet(); placingSc = id; toast(`바닥을 눌러 ${it.name}을(를) 놓을 곳을 고르세요`); return; }
       if (a === 'rot') lay[id] = [cur[0], cur[1], Math.round((cur[2] + Math.PI / 4) * 10) / 10 % 6.3];
       if (a === 'reset') delete lay[id];
@@ -1411,7 +1457,7 @@
     ws.onclose = () => { if (conn !== ws) return; setOnline(false); if (isVip() && !ws.opened) { vipFail = (vipFail || 0) + 1; if (vipFail >= 2) { vipFail = 0; toast('VIP 라운지 입장권이 필요해요'); switchRoom(null); return; } } retryTimer = setTimeout(connect, Math.min(10000, 700 * 2 ** Math.min(retry++, 4))); }; // 끊기면 계속 다시 붙어요
   }
   function setOnline(on) { const fo = friendsOnline(); $('online').classList.toggle('off', !on); $('online').innerHTML = (on ? `<i></i><b>${online.size + 1}</b>명` : '<i></i><b>오프라인</b>') + (fo ? `<em>친구 ${fo}</em>` : '') + '<s>▾</s>'; renderPeople(); }
-  function sendPose() { const t = me.target || me.av.position; if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'pose', x: Math.round(t.x * 100) / 100, z: Math.round(t.z * 100) / 100})); }
+  function sendPose() { const t = me.target || me.av.position; if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'pose', x: Math.round(t.x * 100) / 100, z: Math.round(t.z * 100) / 100, ...(me.act && !me.target ? {act: me.act.kind, ry: Math.round(me.act.ry * 100) / 100, y: me.act.y, arms: me.act.arms === 'play' ? 1 : 0} : {})})); }
   function sendLook() { if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'look', look: A.encodeLook(mine.look)})); }
   function handle(m) {
     if (m.t === 'state') {
@@ -1428,7 +1474,7 @@
       hostDeco = owner && owner.deco ? decodeDeco(owner.deco) : null; homeOwner = owner ? otherName(owner) : homeOwner; // 친구 방에 놀러 가면 그 친구가 꾸민 방이 보여요
       if (!decoDraft) applyDecor(currentDeco()); if (isHome() && !myHome()) { setHomeSecretary((hostDeco && hostDeco.skin) || ''); drawShowcase((hostDeco && hostDeco.badges) || []); placeShowcase(hostDeco && hostDeco.sc); } renderRoomLabel(); renderPeople();
       gotFirstState = true; setOnline(true); drawBoard(); setTicker();
-    } else if (m.t === 'pose') { const p = players.get(m.pid); if (p && m.pid !== ME) walkTo(p, m.x, m.z); }
+    } else if (m.t === 'pose') { const p = players.get(m.pid); if (p && m.pid !== ME) { walkTo(p, m.x, m.z, m.act ? () => { p.act = {kind: m.act, ry: m.ry || 0, y: m.y || 0, arms: m.arms ? 'play' : null}; } : null); } }
     else if (m.t === 'chat') { const p = players.get(m.pid); if (m.sys) chatLine('', m.text, true); else if (handleSignal(m)) { chatLine(otherName(m), m.text); say(p, m.text); } }
     else if (m.t === 'sc') showSuperchat(m);
     else if (m.t === 'hp') { hp = m; renderRoomLabel(); if ($('gbList')) renderGuestbook(); }

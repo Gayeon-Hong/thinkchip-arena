@@ -1037,6 +1037,7 @@ export class Room extends DurableObject {
       case 'pose': { // 라운지에서 걷는 위치. 저장하지 않고 메모리에만 두고 바로 중계해요.
         const x = Math.max(-12, Math.min(12, Number(m.x) || 0)), z = Math.max(-12, Math.min(12, Number(m.z) || 0));
         this.pos = this.pos || {}; this.pos[pid] = {x: Math.round(x * 100) / 100, z: Math.round(z * 100) / 100};
+        if (['sit', 'lie', 'stand'].includes(m.act)) Object.assign(this.pos[pid], {act: m.act, ry: Math.round((Number(m.ry) || 0) * 100) / 100, y: Math.max(0, Math.min(1.2, Number(m.y) || 0)), arms: m.arms ? 1 : 0}); // 가구 쓰는 자세
         this.broadcast({t: 'pose', pid, ...this.pos[pid]});
         return;
       }

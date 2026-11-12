@@ -283,6 +283,11 @@
     // 무릎 꿇기 (장미 줄 때): 몸을 낮추고 살짝 앞으로 숙여요
     const kn = av.userData.kneelK = (av.userData.kneelK || 0) + ((av.userData.kneel ? 1 : 0) - (av.userData.kneelK || 0)) * 0.18;
     body.position.y -= 0.34 * kn; body.rotation.x = 0.16 * kn;
+    // 가구 쓰기 자세: 앉기(sit) · 눕기(lie)
+    const bodyPose = av.userData.pose;
+    if (bodyPose === 'sit') { body.position.y -= 0.22; body.rotation.x = -0.08; }
+    else if (bodyPose === 'lie') { body.rotation.x = -Math.PI / 2 + 0.1; body.position.y = 0.12; body.position.z = 1.0; }
+    else if (!kn || kn < 0.001) { body.position.z = 0; }
     // 팔: armPose = {r: [x, z], l: [x, z]} (어깨 회전, 라디안). 없으면 천천히 차렷 자세로 돌아와요.
     const arms = av.userData.arms; if (!arms) return; const pose = av.userData.armPose || {};
     for (const side of ['r', 'l']) { const want = pose[side] || [0, 0], a = arms[side];
