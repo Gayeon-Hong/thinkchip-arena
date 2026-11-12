@@ -883,13 +883,19 @@
       ${bestList.length ? `<p style="margin-top:10px">${bestList.map(([id, s]) => `${esc(GAME[id]?.title || id)} <b style="color:var(--gold)">${fmt(s)}</b>`).join(' · ')}</p>` : '<p style="margin-top:10px">아직 기록이 없어요. 테이블에서 한 판 해볼까요?</p>'}</div>
       <a class="btn ghost full" style="display:grid;place-items:center;text-decoration:none;color:inherit;margin-top:8px" href="${new URL('?wallet=1&from=lounge', ARENA).href}">⬡ 씽크칩 충전 · 지갑</a>
       ${loggedIn() ? `<p class="table-note" style="text-align:center;user-select:all;-webkit-user-select:all">내 ID ${esc(st().pid)}${isAdmin() ? ' · 👑 관리자' : ''}</p>` : ''}
-      ${acctOn() && !IN_TOSS ? (loggedIn() ? `<p class="table-note" style="text-align:center">카카오 계정으로 로그인됨 · <a href="#" id="logoutBtn" style="color:var(--muted)">로그아웃</a></p>` : '<button class="btn kakao full" id="deskLogin" style="margin-top:8px">🔑 로그인하고 칩 모으기</button>') : ''}
+      ${acctOn() && !IN_TOSS ? (loggedIn() ? `<p class="table-note" style="text-align:center">카카오 계정으로 로그인됨 · <a href="#" id="logoutBtn" style="color:var(--muted)">로그아웃</a> · <a href="#" id="deleteAcct" style="color:var(--muted)">계정 삭제</a></p>` : '<button class="btn kakao full" id="deskLogin" style="margin-top:8px">🔑 로그인하고 칩 모으기</button>') : IN_TOSS && loggedIn() ? '<p class="table-note" style="text-align:center"><a href="#" id="deleteAcct" style="color:var(--muted)">내 데이터 삭제</a></p>' : ''}
       <div class="name-row" style="margin:12px 0"><div class="label-row">내 이름 <small style="color:var(--muted);font-weight:600">· 바꾸면 바로 머리 위 이름이 바뀌어요</small></div><input id="deskName" maxlength="12" value="${esc(p.nickname || '')}" placeholder="라운지에서 보일 이름"></div>
       <div class="card"><h3>비서의 팁</h3><p>${['심리전 테이블에선 채팅 이모티콘으로 표정을 바꿔 블러핑해 보세요 😏', '드레스룸에서 얼굴은 무료로 바꿀 수 있어요.', '친구 방을 만들면 라운지와 파티 게임을 같은 사람들과 할 수 있어요.', '메인 매치는 매일 자정에 바뀌어요.'][new Date().getDate() % 4]}</p></div>`});
     $('deskName').onchange = (e) => { const q = profile(); q.nickname = e.target.value.trim().slice(0, 12); saveProfile(q); me.tag.textContent = myName(); showName(); reconnect(); if (loggedIn()) ACC.call('hello', {name: myName()}).catch(() => {}); toast('이름을 바꿨어요'); };
     $('sheetBody').querySelectorAll('[data-skin]').forEach((x) => { x.onclick = () => buySkin(x.dataset.skin); });
     $('sheetBody').querySelectorAll('[data-refund]').forEach((x) => { x.onclick = async () => { await refundBuy(x.dataset.refund); openDesk(); }; });
     if ($('deskLogin')) $('deskLogin').onclick = () => openLogin();
+    if ($('deleteAcct')) $('deleteAcct').onclick = async (e) => { e.preventDefault();
+      if (!confirm('계정을 삭제할까요?\n\n칩(산 칩 포함)·옷·가구·뱃지·친구가 모두 지워지고 되돌릴 수 없어요. 남은 유료 칩 환불은 삭제 전에 문의해 주세요.')) return;
+      if (prompt('정말 삭제하려면 "삭제"라고 입력해 주세요') !== '삭제') return toast('삭제를 취소했어요');
+      try { const r = await ACC.call('deleteAccount', {confirm: 'DELETE'}); if (!r.ok) return toast('삭제하지 못했어요');
+        try { for (const k of [ROOM_KEY, 'thinkchip:avatar:v1', 'thinkchip:skin']) localStorage.removeItem(k); } catch (er) {}
+        ACC.logout(); alert('계정을 삭제했어요. 이용해 주셔서 고마워요.'); location.reload(); } catch (er) { toast('인터넷 연결을 확인해 주세요'); } };
     if ($('logoutBtn')) $('logoutBtn').onclick = (e) => { e.preventDefault(); if (confirm('로그아웃할까요? 칩과 친구는 계정에 그대로 남아 있어요.')) { ACC.logout(); location.reload(); } };
     const b = $('attendBtn'); if (b) b.onclick = async () => {
       if (acctOn()) { if (!loggedIn()) return openLogin('출석 보너스를 받으려면 '); b.disabled = true;

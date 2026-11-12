@@ -399,6 +399,13 @@ export class User extends DurableObject {
         u.invSent[to] = Date.now(); const r = await this.other(to).invited({id: `${u.pid}:${Date.now()}`, from: u.pid, name: u.name || '친구', room: where, at: Date.now()});
         if (r !== 'ok') return {error: r, status: 400}; break;
       }
+      case 'deleteAccount': { // 계정 삭제: 친구 관계를 끊고 저장된 정보를 모두 지워요. 다시 가입 보상을 받는 것만 막으려고 '삭제됨' 표시만 남겨요
+        if (b.confirm !== 'DELETE') return {error: 'bad', status: 400};
+        await Promise.all([...Object.keys(u.friends), ...Object.keys(u.outReq), ...Object.keys(u.inReq)].map((f) => this.other(f).unlink(u.pid).catch(() => {})));
+        const keep = {pid: u.pid, acct: u.acct, platform: u.platform, toss: u.toss};
+        this.u = Object.assign(freshUser(), keep, {deletedAt: Date.now()}); this.u.w.chips = 0; this.u.w.welcomed = true; this.u.w.orders = u.w.orders || []; this.u.paidLog = (u.w.orders || []).length; await this.save(); // 결제 주문번호는 법정 보관 + 같은 주문 재지급 방지용으로 남겨요
+        return {ok: true, deleted: true};
+      }
       case 'seen': { const ids = new Set((Array.isArray(b.ids) ? b.ids : []).map(String)); u.gifts = u.gifts.filter((g) => !ids.has(g.id)); u.invites = (u.invites || []).filter((i) => !ids.has(i.id)); break; } // 받은 선물 알림 확인
       default: return {error: 'op', status: 400};
     }
@@ -423,7 +430,7 @@ export class User extends DurableObject {
   async invited(i) { const u = this.u; if (!u.friends[i.from]) return 'notfriend';
     u.invites = [...(u.invites || []).filter((x) => x.from !== i.from && Date.now() - x.at < INVITE_TTL), {...i, name: cleanName(i.name)}].slice(-20); await this.save(); return 'ok'; }
   async rename(pid, name) { const f = this.u.friends[pid]; if (f) { f.name = cleanName(name); await this.save(); } return 'ok'; }
-  async unlink(pid) { delete this.u.friends[pid]; await this.save(); return 'ok'; }
+  async unlink(pid) { delete this.u.friends[pid]; delete this.u.inReq[pid]; delete this.u.outReq[pid]; await this.save(); return 'ok'; }
   async receiveItem(g) { // 받은 옷·가구는 바로 내 옷장/방 보관함에
     const u = this.u; if (!u.friends[g.from]) return 'notfriend';
     if (u.toss) return 'nogift';
