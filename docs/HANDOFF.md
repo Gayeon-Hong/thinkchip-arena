@@ -63,10 +63,21 @@ store-assets/iap/     인앱 상품 이미지 (1024px)
 ### 계정·지갑 (서버)
 - 웹·MS: 카카오 로그인(`/auth/kakao/start` → 콜백이 `#session=` 으로 돌려줌). 토스: `/auth/toss` 자동(로그인 UI 없음). 로그인 전엔 둘러보기만.
 - 계정 pid = HMAC(secret, 'pid:'+acct) 24자. 세션 토큰 = base64url({a,p,e}) + HMAC.
-- `/api/user` op: hello, earn(하루 200, 판당 150), ad, attend(+30, 출석 횟수 기록), spend(what 기록→10분 취소), refund, purchase(주문번호 중복 방지), import, save, request/accept/decline/remove(친구), gift(유료 칩만), giftItem(번 칩 OK), invite, seen, vip, vipEnter, superchat, skin, deleteAccount.
+- `/api/user` op: hello, earn(하루 200, 판당 150), ad(보상형 광고 시청 보상), attend(+30, 출석 횟수 기록), spend(what 기록→10분 취소), refund, purchase(아래 '결제 검증'), import, save, request/accept/decline/remove(친구), gift(유료 칩만), giftItem(번 칩 OK), invite, seen, vip, vipEnter, superchat, skin, deleteAccount.
 - 첫 로그인 +300칩. ADMIN_PIDS(wrangler.toml)는 옷·가구 전부 보유.
 - **구매 취소:** 구매 기록(u.buys)을 남기고 10분(REFUND_MS) 안에만 refund. 슈퍼챗·선물은 취소 불가. 모든 구매는 클라이언트 확인 창(confirmBuy).
 - **계정 삭제:** 친구 관계 해제 후 데이터 초기화. 재가입 보상 악용 방지용으로 식별값·삭제일·결제 주문번호만 남김.
+
+### 결제 검증 (서버 `purchase` op)
+- 클라이언트는 결제 완료 후 `{sku, orderId, store}` 를 기기 큐(`thinkchip:purchaseq`)에 넣고 서버에 올린다. 실패·대기면 큐에 남아 다음에 재시도.
+- **토스**(u.platform==='toss' 또는 store==='toss'): `env.TOSS_MTLS.fetch(POST https://apps-in-toss-api.toss.im/api-partner/v1/apps-in-toss/order/get-order-status, {orderId})`. PURCHASED/PAYMENT_COMPLETED + sku 일치일 때만 지급, ORDER_IN_PROGRESS/ERROR 는 503 'pending'(재시도), FAILED/REFUNDED/NOT_FOUND/MINIAPP_MISMATCH 는 'bad'. 토스 sku → 서버 sku 표는 `TOSS_SKUS`.
+- mTLS 인증서: wrangler.toml `[[mtls_certificates]] binding="TOSS_MTLS" certificate_id="485e0541-1f6c-49cf-8f2f-7fe487315290"`. **2027-12-07 만료** → 콘솔(개발 > mTLS 인증서)에서 재발급 → `toss-mtls/` 폴더에 crt·key → `05_toss_mtls_upload_windows.cmd` → 새 ID 로 교체. 개인 키는 커밋 금지(.gitignore 처리됨).
+- **MS**: PWA(Digital Goods API)는 서버 검증 공식 경로가 없어서, 확인 안 된 지급을 계정당 24시간 5건으로 제한(초과분은 429 'pending' → 다음 날 지급).
+- 공통: 주문번호는 `__orders__` User DO 의 `claimOrder` 로 전체 계정에서 한 번만 지급.
+
+### 광고
+- 토스 보상형 광고(통합 인앱 광고 loadFullScreenAd → showFullScreenAd), `src/toss.js`. 광고 그룹 "씽크칩 보상형" `ait.v2.live.110bd1db3cac4da0` (app.config.js `rewardedAdGroupId`, 개발 빌드는 테스트 ID). 보상은 서버 `ad` op 가 지급(하루 한도).
+- 웹·MS 에는 광고 없음.
 
 ### 라운지
 - 공개 라운지(LNG1~9, 꽉 차면 다음 방), 친구 라운지(코드), **내 방**(코드 = 'H'+pid 앞 5자), **VIP 라운지**(VIP1: 워커가 세션·입장권·뱃지 확인).
@@ -81,17 +92,21 @@ store-assets/iap/     인앱 상품 이미지 (1024px)
 
 ## 5. 현재 상태 (2026-11-12)
 
-- MS: 칩 상품 3개 판매 중, 세금·지급 Complete. vip_30 제출됨(심사 중).
-- 토스: 버전 20261112-7 검토 중. 인앱 상품 4개 등록(300칩만 노출 켬). 통과 후 **출시하기** + 나머지 상품 노출 켜기.
-- 웹: 최신 반영.
+- MS: 칩 상품 3개 판매 중, 세금·지급 Complete. vip_30(Store ID 9PP9CVHTZW2N, 4,900원) 심사 중 → 통과 시 자동 공개.
+- 토스: 인앱 상품 4개 등록·노출 ON. 버전 20261112-7 검토 중(이 빌드엔 광고 그룹 ID 없음). 광고가 들어간 새 AIT 빌드를 올려야 함 → 통과 후 **출시하기**.
+- 결제 검증(토스 mTLS) · MS 제한 · 광고 그룹 ID 모두 main 에 반영, 서버 배포 완료.
+- 사업·할 일 메모(사용자용 문서): https://claude.ai/artifact/VMD58T32vjQNGkRVdUrVvY
 
 ## 6. 남은 일 / 알려진 한계
 
-- **결제 영수증 서버 검증 없음.** 지금은 앱이 결제 완료를 알리면 서버가 주문번호 중복만 막고 지급한다. 토스 주문 상태 조회 API(mTLS 인증서 필요), MS 수집 API 로 검증 추가 필요.
+- 광고 들어간 AIT 재빌드·업로드 → 출시 → 첫 실결제 지급 확인.
+- MS 결제는 서버 검증 없음(하루 5건 제한으로 완화). 네이티브 앱으로 바꾸면 Collections API(Entra ID) 검증 가능.
+- 토스 로그인이 실패해 기기 계정으로 들어간 경우, 옛 빌드(20261112-7)는 store 값을 안 보내 검증을 건너뜀 → 새 빌드부터 해결.
 - 슈퍼챗·채팅 욕설 필터는 단어 목록 방식(오탐 가능: "새끼 고양이").
 - 앉기 자세는 몸을 낮추는 방식(다리 관절 없음). TV·조명 켜기는 내 화면에만 적용.
-- 뱃지 기록은 2026-11-12 부터 쌓임. 위조 방지는 있지만 Room 의 pid 는 클라이언트가 보내는 값이라 승리 기록 자체는 완전 신뢰는 아님.
-- 웹에서는 칩을 팔지 않음(필요하면 토스페이먼츠 연동).
+- 뱃지 기록은 2026-11-12 부터 쌓임. Room 의 pid 는 클라이언트가 보내는 값이라 승리 기록 자체는 완전 신뢰는 아님.
+- 웹에서는 칩을 팔지 않음(필요하면 토스페이먼츠 연동). 웹·MS 광고(애드센스)는 보류.
+- 광고 수익 정산: 매달 초 정산 메일 → 팝빌 세금계산서 승인(사업자 인증서 필요).
 
 ## 7. 테스트 방법
 
