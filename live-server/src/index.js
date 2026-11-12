@@ -106,7 +106,18 @@ const SC_TIERS = {normal: {price: 50, ms: 8000}, mega: {price: 200, ms: 20000}};
 // 한정판 비서 스킨 (until 이 지나면 더 살 수 없어요. 산 사람은 계속 써요)
 const SKINS = {classic: {price: 0}, idol: {price: 300}, gold: {price: 600}, winter: {price: 400, until: '2027-01-01'}, hanbok: {price: 400, until: '2027-02-28'}};
 const VIP_RE = /^VIP\d$/;
-function badgesOf(st = {}) { const b = []; if ((st.champs || 0) >= 1) b.push('champ'); if ((st.wins || 0) >= 50) b.push('win50'); if ((st.champs || 0) >= 5 || (st.wins || 0) >= 200) b.push('mvp'); return b; }
+// 뱃지 (주니어 네이버 동물농장처럼 모아서 내 방 진열장에 전시). VIP 라운지 무료 입장은 VIP_FREE 뱃지만.
+const BADGE_IDS = ['first', 'win10', 'win50', 'win100', 'champ', 'champ3', 'mvp', 'friend5', 'attend7', 'vip', 'patron'];
+const VIP_FREE = ['champ', 'win50', 'mvp'];
+function badgesOf(u = {}) { const st = u.stats || {}, w = st.wins || 0, c = st.champs || 0, b = [];
+  if (w >= 1) b.push('first'); if (w >= 10) b.push('win10'); if (w >= 50) b.push('win50'); if (w >= 100) b.push('win100');
+  if (c >= 1) b.push('champ'); if (c >= 3) b.push('champ3'); if (c >= 5 || w >= 200) b.push('mvp');
+  if (Object.keys(u.friends || {}).length >= 5) b.push('friend5'); if ((st.attend || 0) >= 7) b.push('attend7'); if (u.vip?.bought) b.push('vip'); if ((u.skins || []).length > 1) b.push('patron'); return b; }
+// 욕설 거르기 (띄어쓰기·특수문자·숫자를 끼워 넣어도 잡게). 도발·응원은 OK, 욕·비하는 안 돼요.
+const BAD_WORDS = ['씨발', '시발', '씨바', '시바', 'ㅅㅂ', 'ㅆㅂ', '병신', 'ㅂㅅ', '븅신', '좆', '존나', 'ㅈㄴ', '개새', '새끼', 'ㅅㄲ', '지랄', 'ㅈㄹ', '미친놈', '미친년', '닥쳐', '꺼져', '엠창', '느금', '니애미', '느그', '애미', '애비', '썅', '쌍놈', '창녀', '걸레', 'fuck', 'shit', 'bitch', 'fxck'];
+const badNorm = (t) => String(t || '').toLowerCase().replace(/[\s0-9._\-~!@#$%^&*()+=|\\/?,'"`:;<>[\]{}]/g, '');
+const hasBad = (t) => { const n = badNorm(t); return BAD_WORDS.some((w) => n.includes(w)); };
+const maskBad = (t) => hasBad(t) ? String(t).replace(new RegExp(BAD_WORDS.map((w) => w.split('').join('[\\s0-9._~!*-]*')).join('|'), 'gi'), (m) => '♡'.repeat(Math.min(4, m.length))) : t;
 const SESSION_DAYS = 180;
 const ITEM_PRICES = {"hair:pony":[40,"포니테일"],"hair:curly":[60,"뽀글 펌"],"hair:long":[60,"긴 생머리"],"hair:spiky":[40,"삐죽 머리"],"hair:wolf":[60,"울프컷"],"hair:hime":[70,"히메컷"],"hair:dandy":[50,"댄디 투블럭"],"hair:wave":[80,"S컬 웨이브"],"top:knit":[50,"꽈배기 니트"],"top:shirt":[80,"셔츠 + 조끼"],"top:jacket":[90,"봄버 재킷"],"top:suit":[120,"블레이저"],"top:tank":[40,"나시"],"top:vneck":[70,"딥브이넥 니트"],"top:layered":[60,"레이어드 티"],"top:crop":[60,"크롭티"],"top:cardigan":[90,"오버핏 가디건"],"top:puffer":[130,"숏패딩"],"bottom:skirt":[40,"플리츠 스커트"],"bottom:jogger":[30,"트레이닝 팬츠"],"bottom:wide":[50,"와이드 슬랙스"],"bottom:cargo":[60,"카고 팬츠"],"bottom:mini":[50,"미니스커트"],"bottom:longskirt":[60,"롱스커트"],"shoes:boots":[40,"부츠"],"shoes:loafer":[40,"로퍼"],"shoes:chunky":[60,"어글리 슈즈"],"acc:glasses":[30,"동그란 안경"],"acc:sunglass":[50,"선글라스"],"acc:beanie":[40,"비니"],"acc:cap":[40,"볼캡"],"acc:headset":[70,"헤드셋"],"acc:ribbon":[30,"리본"],"acc:crown":[300,"왕관 (우승자)"],"acc:bucket":[50,"버킷햇"],"acc:earring":[40,"진주 귀걸이"],"acc:necklace":[40,"실버 목걸이"],"acc:hairpin":[30,"헤어핀"],"wall:cream":[60,"크림"],"wall:mint":[60,"민트"],"wall:pink":[60,"체리 핑크"],"wall:black":[80,"블랙"],"wall:sky":[60,"하늘"],"floor:white":[80,"화이트 우드"],"floor:marble":[100,"대리석"],"floor:walnut":[70,"월넛"],"floor:pinktile":[80,"핑크 타일"],"rug:red":[40,"레드"],"rug:green":[40,"포레스트"],"rug:purple":[40,"퍼플"],"rug:beige":[40,"베이지"],"items:arcade":[150,"아케이드 기계"],"items:trophy":[120,"트로피 장식장"],"items:tank":[130,"어항"],"items:piano":[200,"피아노"],"items:tree":[90,"반짝이 트리"],"items:bean":[70,"빈백 소파"],"items:neon":[60,"네온 하트"],"items:plants":[50,"화분 세트"]}; // 옷·가구 선물 가격표 (public/lounge 의 WARDROBE·DECOR 와 같게. 바뀌면 같이 고쳐요)
 const AVATAR_CATS = ['hair', 'top', 'bottom', 'shoes', 'acc'];
@@ -220,10 +231,10 @@ export class User extends DurableObject {
   isAdmin() { return String(this.env.ADMIN_PIDS || '').split(/[\s,]+/).filter(Boolean).includes(this.u.pid); }
   view(extra = {}) { const u = this.u; return {ok: true, pid: u.pid, name: u.name, platform: u.platform, admin: this.isAdmin(), wallet: this.wallet(), data: u.data,
     friends: Object.entries(u.friends).map(([pid, f]) => ({pid, name: f.name, nogift: !!f.toss, seen: f.seen || 0, where: f.where || ''})), invites: (u.invites || []).filter((i) => Date.now() - i.at < INVITE_TTL), requests: Object.entries(u.inReq).map(([pid, r]) => ({pid, name: r.name, at: r.at})),
-    pending: Object.keys(u.outReq), gifts: u.gifts, stats: u.stats || {wins: 0, champs: 0}, badges: badgesOf(u.stats), vip: this.vipView(), skins: u.skins || ['classic'], skin: u.skin || 'classic', sentToday: u.sent.day === dayKey() ? u.sent.total : 0, giftMax: GIFT_DAILY_MAX, ...extra}; }
-  vipView() { const v = this.u.vip || {}, now = Date.now(), badge = badgesOf(this.u.stats).length > 0 || this.isAdmin();
+    pending: Object.keys(u.outReq), gifts: u.gifts, stats: u.stats || {wins: 0, champs: 0}, badges: badgesOf(u), vip: this.vipView(), skins: u.skins || ['classic'], skin: u.skin || 'classic', sentToday: u.sent.day === dayKey() ? u.sent.total : 0, giftMax: GIFT_DAILY_MAX, ...extra}; }
+  vipView() { const v = this.u.vip || {}, now = Date.now(), badge = badgesOf(this.u).some((b) => VIP_FREE.includes(b)) || this.isAdmin();
     return {until: v.until || 0, tickets: v.tickets || 0, day: v.day || 0, badge, ok: badge || (v.until || 0) > now || (v.day || 0) > now}; }
-  async vipCheck() { const v = this.vipView(); return {ok: v.ok, badges: badgesOf(this.u.stats), name: this.u.name || ''}; } // 워커가 VIP 라운지 입장 때 불러요
+  async vipCheck() { const v = this.vipView(); return {ok: v.ok, badges: badgesOf(this.u), name: this.u.name || ''}; } // 워커가 VIP 라운지 입장 때 불러요
   async award(kind) { const u = this.u; if (!u.pid) return 'nouser'; u.stats = u.stats || {wins: 0, champs: 0};
     if (kind === 'win') u.stats.wins = (u.stats.wins || 0) + 1; else if (kind === 'champ') u.stats.champs = (u.stats.champs || 0) + 1; await this.save(); return 'ok'; }
   addChips(n, paid = false) { const w = this.u.w; w.chips = Math.min(9999999, w.chips + n); if (paid) w.paid += n; }
@@ -259,7 +270,7 @@ export class User extends DurableObject {
       }
       case 'attend': { // 라운지 비서 데스크 출석 보너스 (하루 한 번)
         if (w.attend === today) { extra.earned = 0; break; }
-        w.attend = today; this.addChips(ATTEND_REWARD); extra.earned = ATTEND_REWARD; break;
+        w.attend = today; u.stats = u.stats || {wins: 0, champs: 0}; u.stats.attend = (u.stats.attend || 0) + 1; this.addChips(ATTEND_REWARD); extra.earned = ATTEND_REWARD; break;
       }
       case 'spend': { // 힌트·옷·가구 구매 — 무료 칩부터 써요
         const amount = Math.trunc(Number(b.amount));
@@ -272,7 +283,7 @@ export class User extends DurableObject {
         if (!chips || !id) return {error: 'bad', status: 400};
         if (w.orders.includes(id)) { extra.granted = 0; break; }
         w.orders = [...w.orders, id].slice(-500); this.addChips(chips, true); extra.granted = chips;
-        if (VIP_PACKS[b.sku]) { const v = u.vip = u.vip || {}; v.until = Math.max(Date.now(), v.until || 0) + VIP_PACKS[b.sku] * 864e5; extra.vipDays = VIP_PACKS[b.sku]; } break;
+        if (VIP_PACKS[b.sku]) { const v = u.vip = u.vip || {}; v.bought = true; v.until = Math.max(Date.now(), v.until || 0) + VIP_PACKS[b.sku] * 864e5; extra.vipDays = VIP_PACKS[b.sku]; } break;
       }
       case 'import': { // 로그인 전 이 기기에 모은 칩을 처음 한 번 계정으로 옮겨요 (최대 3,000, 선물은 안 되는 칩으로)
         if (w.imported) { extra.imported = 0; break; }
@@ -332,7 +343,7 @@ export class User extends DurableObject {
         const plan = VIP_PLANS[b.plan]; if (!plan) return {error: 'bad', status: 400};
         if (w.chips < plan.price) return {...this.view(), error: 'chips', status: 400};
         w.chips -= plan.price; w.paid = Math.min(w.paid, w.chips); const v = u.vip = u.vip || {};
-        if (plan.days) v.until = Math.max(Date.now(), v.until || 0) + plan.days * 864e5; else v.tickets = (v.tickets || 0) + plan.tickets; break;
+        v.bought = true; if (plan.days) v.until = Math.max(Date.now(), v.until || 0) + plan.days * 864e5; else v.tickets = (v.tickets || 0) + plan.tickets; break;
       }
       case 'vipEnter': { // 뱃지·기간권이 있으면 그냥, 없으면 횟수권 1장 → 오늘 하루 자유 입장
         const v = this.vipView(); if (v.ok) break;
@@ -342,10 +353,11 @@ export class User extends DurableObject {
       case 'superchat': { // 전광판 슈퍼챗: 라운지 모두에게 크게 떠요
         const tier = SC_TIERS[b.tier] ? b.tier : 'normal', price = SC_TIERS[tier].price, text = String(b.text || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 40), room = String(b.room || '');
         if (!text || !CODE_RE.test(room)) return {error: 'bad', status: 400};
+        if (hasBad(text)) return {...this.view(), error: 'words', status: 400};
         if (Date.now() - (u.scAt || 0) < 10e3) return {...this.view(), error: 'slow', status: 429};
         if (w.chips < price) return {...this.view(), error: 'chips', status: 400};
         w.chips -= price; w.paid = Math.min(w.paid, w.chips); u.scAt = Date.now();
-        await this.env.ROOM.get(this.env.ROOM.idFromName(room)).superchat({pid: u.pid, name: u.name || '플레이어', text, tier, ms: SC_TIERS[tier].ms, badges: badgesOf(u.stats)}); break;
+        await this.env.ROOM.get(this.env.ROOM.idFromName(room)).superchat({pid: u.pid, name: u.name || '플레이어', text, tier, ms: SC_TIERS[tier].ms, badges: badgesOf(u)}); break;
       }
       case 'skin': { // 한정판 비서 스킨: 사기 + 쓰기
         const id = String(b.id || ''), sk = SKINS[id]; if (!sk) return {error: 'bad', status: 400};
@@ -353,7 +365,12 @@ export class User extends DurableObject {
         if (!owned.includes(id) && !this.isAdmin()) {
           if (sk.until && Date.now() > Date.parse(sk.until + 'T00:00:00+09:00')) return {error: 'soldout', status: 400};
           if (w.chips < sk.price) return {...this.view(), error: 'chips', status: 400};
-          w.chips -= sk.price; w.paid = Math.min(w.paid, w.chips); u.skins = [...owned, id]; }
+          w.chips -= sk.price; w.paid = Math.min(w.paid, w.chips); u.skins = [...owned, id];
+          // 새 옷을 받은 비서가 기분이 좋아서 답례 선물: 칩 일부 돌려주기 · VIP 1회권 · 깜짝 보너스 중 하나
+          const roll = Math.random(), v = u.vip = u.vip || {};
+          if (roll < 0.25) { v.tickets = (v.tickets || 0) + 1; extra.thanks = {kind: 'ticket', amount: 1}; }
+          else if (roll < 0.35) { const n = Math.round(sk.price * 0.5); this.addChips(n); extra.thanks = {kind: 'jackpot', amount: n}; }
+          else { const n = Math.round(sk.price * (0.1 + Math.random() * 0.15)); this.addChips(n); extra.thanks = {kind: 'chips', amount: n}; } }
         u.skin = id; break;
       }
       case 'invite': { // 친구 부르기 (롤처럼): 오프라인이어도 다음에 들어오면 보여요
@@ -824,7 +841,7 @@ export class Room extends DurableObject {
     if (!this.humans().size && this.s.phase !== 'lobby') { const hp = this.s.hp; this.s = this.fresh(); if (hp) this.s.hp = hp; } // everyone had left: start over (방명록·방문자 수는 남겨요)
     this.s.code = code;
     const p = this.s.players[pid] || {pid, joinedAt: Date.now(), ready: false, score: 0, done: false, inRound: false};
-    const badges = (req.headers.get('x-tc-badges') || '').split(',').filter((b) => ['champ', 'win50', 'mvp'].includes(b));
+    const badges = (req.headers.get('x-tc-badges') || '').split(',').filter((b) => BADGE_IDS.includes(b));
     this.s.players[pid] = {...p, name, badges, look: cleanLook(url.searchParams.get('look')), deco: cleanDeco(url.searchParams.get('deco'))};
     // Forget players who left long ago so the room does not fill with ghosts.
     for (const [id, q] of Object.entries(this.s.players)) if (id !== pid && !on.has(id) && !q.inRound && !isBot(id)) delete this.s.players[id];
@@ -987,7 +1004,7 @@ export class Room extends DurableObject {
         break;
       }
       case 'chat': {
-        let text = cleanChat(m.text); const now = Date.now();
+        let text = maskBad(cleanChat(m.text)); const now = Date.now();
         if (s.phase === 'playing' && s.party?.kind === 'mind' && !s.party.over) text = text.replace(/[0-9０-９]/g, '＊'); // 숫자 말하면 반칙!
         this.lastChat = this.lastChat || {};
         if (!text || now - (this.lastChat[pid] || 0) < 600) return; // light flood guard

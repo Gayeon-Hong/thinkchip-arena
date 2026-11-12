@@ -45,6 +45,7 @@
     {id: 'main', title: '오늘의 메인 매치', sub: '매일 바뀌는 게임', icon: '🏆', main: true, pos: [0, 0], color: 0xf7ce55},
     {id: 'closet', title: '드레스룸', sub: '옷·소품 꾸미기', icon: '👕', closet: true, pos: [-8.6, 0.4], color: 0xffffff},
     {id: 'desk', title: '비서 데스크', sub: '출석 보너스 · 내 기록', icon: '💁', desk: true, pos: [8.6, 0.4], color: 0x7c8cff},
+    {id: 'showcase', title: '뱃지 진열장', sub: '모은 뱃지 전시', icon: '🏅', showcase: true, pos: [0, -10.3], color: 0xf7ce55},
     {id: 'vip', title: 'VIP 라운지', sub: '뱃지·입장권이 있어야 들어가요', icon: '👑', vip: true, pos: [-8.4, -6.6], color: 0xb569ff},
   ];
   const GAME = Object.fromEntries([...CFG.GAMES, ...CFG.PARTY].map((g) => [g.id, g]));
@@ -211,6 +212,42 @@
     const sign = neon('👑 VIP 라운지', '#d9a6ff', 2.8); sign.position.set(0, 3.7, 0); g.add(sign); z.sign = sign;
     registerClick(g, z);
   })();
+  // 뱃지: 모아서 내 방 진열장에 전시 (주니어 네이버 동물농장처럼). 🎟 표시는 VIP 라운지 무료 입장
+  const BADGES = {
+    first: {e: '🥉', name: '첫 승리', how: '친구와 함께한 판에서 처음 1등', need: (s) => [s.wins || 0, 1]},
+    win10: {e: '🥈', name: '10승', how: '1등 10번', need: (s) => [s.wins || 0, 10]},
+    win50: {e: '🏅', name: '50승', how: '1등 50번', vip: true, need: (s) => [s.wins || 0, 50]},
+    win100: {e: '🎖️', name: '100승', how: '1등 100번', need: (s) => [s.wins || 0, 100]},
+    champ: {e: '🏆', name: '우승자', how: '3명 이상 토너먼트·서바이벌·리그 우승', vip: true, need: (s) => [s.champs || 0, 1]},
+    champ3: {e: '💎', name: '3회 우승', how: '우승 3번', need: (s) => [s.champs || 0, 3]},
+    mvp: {e: '👑', name: 'MVP', how: '우승 5번 또는 1등 200번', vip: true, need: (s) => [Math.max((s.champs || 0) * 40, s.wins || 0), 200]},
+    friend5: {e: '🤝', name: '인싸', how: '친구 5명 사귀기', need: () => [(social().friends || []).length, 5]},
+    attend7: {e: '📅', name: '개근상', how: '비서 데스크 출석 7번', need: (s) => [s.attend || 0, 7]},
+    vip: {e: '💜', name: 'VIP 회원', how: 'VIP 입장권 구매', need: () => [0, 1]},
+    patron: {e: '💐', name: '비서의 단골', how: '비서에게 스킨 선물하기', need: () => [0, 1]},
+  };
+  const BADGE_ORDER = ['mvp', 'champ3', 'champ', 'win100', 'win50', 'win10', 'first'];
+  const badgeIcons = (list) => { const top = BADGE_ORDER.filter((b) => (list || []).includes(b)).slice(0, 2).map((b) => BADGES[b].e).join(''); return top ? top + ' ' : ''; }; // 이름 앞엔 대표 뱃지 2개만
+  // 내 방 뱃지 진열장: 벽에 건 유리 장식장, 칸마다 메달 (없는 뱃지는 흐린 물음표)
+  const showcaseSlots = [];
+  (function showcase() {
+    const z = ZONES.find((x) => x.showcase), g = new THREE.Group(); g.position.set(z.pos[0], 0, z.pos[1]); scene.add(g);
+    box(4.2, 2.6, 0.35, mats.wood, 0, 1.75, 0, g); box(4.0, 2.4, 0.05, M(0x241a12, {roughness: 0.8}), 0, 1.75, 0.16, g);
+    for (let r = 0; r < 2; r++) box(4.0, 0.06, 0.3, mats.gold, 0, 0.98 + r * 1.15, 0.05, g);
+    const gl = box(4.0, 2.4, 0.03, new THREE.MeshPhysicalMaterial({color: 0xcfe3ff, transparent: true, opacity: 0.12, roughness: 0.05}), 0, 1.75, 0.34, g); gl.castShadow = false;
+    const ids = Object.keys(BADGES);
+    ids.forEach((id, i) => { const row = i < 6 ? 0 : 1, col = row ? i - 6 : i, n = row ? ids.length - 6 : 6;
+      const cv = document.createElement('canvas'); cv.width = cv.height = 128; const tex = new THREE.CanvasTexture(cv); tex.encoding = THREE.sRGBEncoding;
+      const m = new THREE.Mesh(new THREE.CircleGeometry(0.26, 32), new THREE.MeshBasicMaterial({map: tex, transparent: true, toneMapped: false}));
+      m.position.set((col - (n - 1) / 2) * 0.62, 2.62 - row * 1.15 - 0.3, 0.2); g.add(m); showcaseSlots.push({id, cv, tex, m}); });
+    const sign = neon('🏅 뱃지 진열장', '#f7ce55', 2.6); sign.position.set(0, 3.5, 0.2); g.add(sign); z.sign = sign;
+    registerClick(g, z);
+  })();
+  function drawShowcase(have) {
+    for (const sl of showcaseSlots) { const x = sl.cv.getContext('2d'), on = (have || []).includes(sl.id); x.clearRect(0, 0, 128, 128);
+      x.beginPath(); x.arc(64, 64, 58, 0, Math.PI * 2); x.fillStyle = on ? '#f7ce55' : '#3a3f52'; x.fill(); x.beginPath(); x.arc(64, 64, 48, 0, Math.PI * 2); x.fillStyle = on ? '#fff6d8' : '#262a38'; x.fill();
+      x.font = `${on ? 58 : 48}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.globalAlpha = on ? 1 : 0.35; x.fillStyle = '#8a90a6'; x.fillText(on ? BADGES[sl.id].e : '?', 64, 70); x.globalAlpha = 1; sl.tex.needsUpdate = true; }
+  }
   // 화분 · 스탠드 조명 장식
   function plant(x, z, s = 1) { cyl(0.32 * s, 0.25 * s, 0.6 * s, mats.pot, x, 0.3 * s, z, 20); for (let i = 0; i < 5; i++) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.38 * s, 16, 12), mats.plant); l.position.set(x + Math.cos(i * 1.3) * 0.22 * s, (0.95 + (i % 3) * 0.22) * s, z + Math.sin(i * 1.3) * 0.22 * s); l.scale.y = 1.3; l.castShadow = true; scene.add(l); } }
   plant(-9.8, -9.8, 1.4); plant(9.6, -9.6, 1.2); plant(-9.8, 9.2, 1.1); plant(3.6, -9.6, 0.9); plant(-3.6, -9.6, 0.9);
@@ -537,9 +574,9 @@
   };
   const ROOM_KEY = 'thinkchip:room:v1';
   const DEFAULT_DECO = {wall: 'navy', floor: 'oak', rug: 'navy', items: []};
-  const encodeDeco = (d) => [d.wall, d.floor, d.rug, (d.items || []).join('_'), mySkin()].join('.');
+  const encodeDeco = (d) => [d.wall, d.floor, d.rug, (d.items || []).join('_'), mySkin(), (loggedIn() ? st().badges || [] : []).join('_')].join('.');
   const decodeDeco = (str) => { const [w, f, r, it] = String(str || '').split('.'); const ok = (cat, v) => DECOR[cat].some((x) => x.id === v);
-    return {wall: ok('wall', w) ? w : 'navy', floor: ok('floor', f) ? f : 'oak', rug: ok('rug', r) ? r : 'navy', items: String(it || '').split(/[_+]/).filter((x) => DECOR.items.some((y) => y.id === x)), skin: skinOn(String(str || '').split('.')[4])}; };
+    return {wall: ok('wall', w) ? w : 'navy', floor: ok('floor', f) ? f : 'oak', rug: ok('rug', r) ? r : 'navy', items: String(it || '').split(/[_+]/).filter((x) => DECOR.items.some((y) => y.id === x)), skin: skinOn(String(str || '').split('.')[4]), badges: String(String(str || '').split('.')[5] || '').split('_').filter((b) => BADGES[b])}; };
   let myRoom = (() => { const v = store.get(ROOM_KEY, null); return v && v.deco ? {deco: Object.assign({}, DEFAULT_DECO, v.deco), owned: Array.isArray(v.owned) ? v.owned : []} : {deco: {...DEFAULT_DECO}, owned: []}; })();
   let shownDeco = myRoom.deco; // 지금 화면에 보이는 방 (친구 방이면 방장 방)
   const furniture = {};
@@ -608,7 +645,8 @@
   function currentDeco() { if (decoDraft) return decoDraft; if (isVip()) return VIP_DECO; if (!isHome()) return DEFAULT_DECO; return myHome() ? myRoom.deco : (hostDeco || DEFAULT_DECO); }
   function applyMode() {
     const home = isHome();
-    for (const z of ZONES) if (z.group) z.group.visible = z.closet ? home : !home;
+    for (const z of ZONES) if (z.group) z.group.visible = z.closet || z.showcase ? home : !home;
+    if (home) drawShowcase(myHome() ? (loggedIn() ? st().badges : []) : (hostDeco && hostDeco.badges) || []);
     OBST.length = 0; if (!home) OBST.push(...LOUNGE_OBST);
     if (!home) homeOwner = '';
     if (!decoDraft) applyDecor(currentDeco()); renderDock(); renderRoomLabel();
@@ -752,6 +790,7 @@
     JOIN_RE.lastIndex = 0; return true;
   }
   function openZone(zone) {
+    if (zone.showcase) return openShowcase();
     if (zone.vip) return isVip() ? (switchRoom(null), toast('🏛 라운지로 나왔어요')) : openVip();
     if (zone.closet) return openCloset();
     if (zone.desk) return openDesk();
@@ -971,7 +1010,7 @@
       setExpr(me, 'happy');
       ACC.call('seen', {ids: got.map((g) => g.id)}).catch(() => {}).finally(() => { afterSync.busy = false; }); }
     const nReq = (so.requests || []).length; if (seenReq >= 0 && nReq > seenReq) toast(`📩 친구 신청이 ${nReq}개 와 있어요 · 👥 친구에서 확인`); seenReq = nReq;
-    me.tag.textContent = badgeIcons(st().badges) + myName(); if (secretary && secretary.userData.skin !== mySkin()) { setSecretary(mySkin()); if (myHome()) setHomeSecretary(mySkin()); }
+    me.tag.textContent = badgeIcons(st().badges) + myName(); if (myHome()) drawShowcase(st().badges); if (secretary && secretary.userData.skin !== mySkin()) { setSecretary(mySkin()); if (myHome()) setHomeSecretary(mySkin()); }
     syncName(); pullData(); renderChips(); renderSocialBadge(); drawBoard(); renderSocial(); showCalls(); if (conn && conn.readyState === 1) setOnline(true); else renderPeople();
   }
   let nameSynced = false;
@@ -1031,8 +1070,6 @@
     };
   }
   // ───────── 뱃지 · VIP 라운지 · 전광판 슈퍼챗 · 비서 스킨 ─────────
-  const BADGES = {champ: {e: '🏆', name: '우승자', how: '사람 3명 이상 토너먼트·서바이벌·리그 우승'}, win50: {e: '🏅', name: '50승', how: '사람 2명 이상 판에서 1등 50번'}, mvp: {e: '👑', name: 'MVP', how: '우승 5번 또는 1등 200번'}};
-  const badgeIcons = (list) => (list || []).filter((b) => BADGES[b]).map((b) => BADGES[b].e).join('') + ((list || []).some((b) => BADGES[b]) ? ' ' : '');
   const VIP_PLANS_UI = [['d7', '7일권', 500, '7일 동안 자유 입장'], ['d30', '30일권', 1500, '30일 동안 자유 입장 · 하루 50칩꼴'], ['one', '1회권', 100, '오늘 하루 입장'], ['ten', '10회권', 800, '1회권 10장 (20% 할인)']];
   const dateKo = (t) => { const d = new Date(t); return `${d.getMonth() + 1}월 ${d.getDate()}일`; };
   function openVip() {
@@ -1040,8 +1077,8 @@
     if (!acctOn()) return toast('인터넷에 연결되면 들어갈 수 있어요');
     const v = st().vip || {}, stt = st().stats || {}, bs = st().badges || [];
     openSheet({kicker: 'VIP LOUNGE', title: '👑 VIP 라운지', html: `
-      <div class="card vip-card"><p>우승자·고수들만 모이는 라운지예요. <b>뱃지</b>가 있으면 무료, 없으면 <b>입장권</b>으로 들어가요.</p></div>
-      <div class="badge-grid">${Object.entries(BADGES).map(([k, b]) => `<div class="bdg ${bs.includes(k) ? 'on' : ''}"><i>${b.e}</i><b>${b.name}</b><small>${b.how}</small></div>`).join('')}</div>
+      <div class="card vip-card"><p>우승자·고수들만 모이는 라운지예요. 아래 <b>뱃지</b> 중 하나라도 있으면 무료, 없으면 <b>입장권</b>으로 들어가요.</p></div>
+      <div class="badge-grid">${Object.entries(BADGES).filter(([, b]) => b.vip).map(([k, b]) => `<div class="bdg ${bs.includes(k) ? 'on' : ''}"><i>${b.e}</i><b>${b.name}</b><small>${b.how}</small></div>`).join('')}</div>
       <p class="table-note" style="margin:6px 2px 12px">내 기록 · 1등 <b>${fmt(stt.wins || 0)}</b>번 · 우승 <b>${fmt(stt.champs || 0)}</b>번</p>
       <div class="card"><h3>내 입장권</h3><p>${v.badge ? '🎖 뱃지가 있어서 언제든 무료 입장!' : v.until > Date.now() ? `기간권 · ${dateKo(v.until)}까지` : v.day > Date.now() ? '오늘 하루 입장 중' : '기간권 없음'} · 1회권 ${v.tickets || 0}장</p></div>
       <button class="btn gold full" id="vipEnter" ${v.ok || v.tickets > 0 ? '' : 'disabled'}>${v.ok ? '👑 입장하기' : v.tickets > 0 ? '👑 1회권 쓰고 입장 (오늘 하루 자유 입장)' : '입장권이 필요해요'}</button>
@@ -1076,6 +1113,14 @@
       if (b.id === 'scSend') { const text = $('scText').value.trim(); if (!text) return toast('띄울 말을 써 주세요'); const price = tier === 'mega' ? 200 : 50; if (myChips() < price) return toast(`씽크칩이 ⬡${fmt(price - myChips())} 부족해요`);
         b.disabled = true; try { const r = await ACC.call('superchat', {text, tier, room: room.code}); if (r.ok) { closeSheet(); toast(`📢 전광판에 띄웠어요! -${price} 씽크칩`); } else { b.disabled = false; toast(r.error === 'slow' ? '10초에 한 번 보낼 수 있어요' : r.error === 'chips' ? '씽크칩이 부족해요' : '보내지 못했어요'); } } catch (er) { b.disabled = false; toast('인터넷 연결을 확인해 주세요'); } } };
   }
+  function openShowcase() {
+    const mine = myHome(), have = mine ? (loggedIn() ? st().badges || [] : []) : (hostDeco && hostDeco.badges) || [], stt = mine && loggedIn() ? st().stats || {} : null;
+    openSheet({kicker: 'BADGE COLLECTION', title: `🏅 ${mine ? '내' : `${homeOwner || '친구'}의`} 뱃지 진열장 · ${have.length}/${Object.keys(BADGES).length}`, html: `
+      ${mine && !loggedIn() ? '<div class="card"><p>로그인하면 뱃지를 모아서 전시할 수 있어요.</p></div>' : ''}
+      <div class="badge-grid">${Object.entries(BADGES).map(([k, b]) => { const on = have.includes(k), [cur, goal] = stt && !on ? b.need(stt) : [0, 0];
+        return `<div class="bdg ${on ? 'on' : ''}"><i>${on ? b.e : '❔'}</i><b>${b.name}${b.vip ? ' 🎟' : ''}</b><small>${b.how}</small>${stt && !on && goal > 1 ? `<span class="bdg-bar"><em style="width:${Math.min(100, (cur / goal) * 100)}%"></em></span><small>${fmt(Math.min(cur, goal))}/${fmt(goal)}</small>` : ''}</div>`; }).join('')}</div>
+      <p class="table-note" style="margin-top:8px">🎟 표시 뱃지가 있으면 VIP 라운지에 무료로 들어가요. 진열장은 내 방에 놀러 온 친구들에게도 보여요.</p>`});
+  }
   // 한정판 비서 스킨 (비서 데스크에서)
   function skinSection() {
     const owned = (loggedIn() && st().skins) || ['classic'], cur = mySkin(), now = Date.now();
@@ -1088,7 +1133,11 @@
     if (!owned && myChips() < k.price) return toast(`씽크칩이 ⬡${fmt(k.price - myChips())} 부족해요`);
     setSecretary(id); // 미리보기
     try { const r = await ACC.call('skin', {id}); if (!r.ok) { setSecretary(mySkin()); return toast(r.error === 'soldout' ? '판매가 끝난 한정판이에요' : r.error === 'chips' ? '씽크칩이 부족해요' : '바꾸지 못했어요'); }
-      store.set('thinkchip:skin', id); toast(owned ? `비서가 '${k.name}'(으)로 갈아입었어요` : `'${k.name}' 구매 완료! -${k.price} 씽크칩`); say({av: secretary, bubble: deskBubble, tag: npcTag}, '어때요? 잘 어울려요? 💕'); if (myHome()) setHomeSecretary(id);
+      store.set('thinkchip:skin', id); const th = r.thanks, sec = {av: secretary, bubble: deskBubble, tag: npcTag};
+      if (th) { toast(th.kind === 'ticket' ? `💝 비서가 답례로 VIP 1회권을 줬어요!` : th.kind === 'jackpot' ? `🎉 비서가 엄청 기뻐해요! 답례로 ⬡${fmt(th.amount)}!` : `💝 비서가 고맙다며 ⬡${fmt(th.amount)}을 돌려줬어요`);
+        say(sec, th.kind === 'jackpot' ? '꺄~ 너무 예뻐요!! 이거 받으세요 🎁✨' : th.kind === 'ticket' ? '고마워요! VIP 라운지에서 만나요 💜' : '어머, 저 주시는 거예요? 고마워요 💕');
+        secretary.userData.armPose = {r: [-2.6, 0.2], l: [-2.6, -0.2]}; setTimeout(() => { secretary.userData.armPose = null; }, 1600); const at = new THREE.Vector3(); secretary.getWorldPosition(at); at.y = 2.6; spark(at, true); setTimeout(() => spark(at, true), 350); }
+      else { toast(`비서가 '${k.name}'(으)로 갈아입었어요`); say(sec, '어때요? 잘 어울려요? 💕'); } if (myHome()) setHomeSecretary(id);
       if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'deco', deco: encodeDeco(myRoom.deco)})); openDesk(); } catch (e) { setSecretary(mySkin()); toast('인터넷 연결을 확인해 주세요'); }
   }
   // ───────── 접속자 · 친구 패널 (상단 '○명' 을 누르면 펼쳐져요, 롤 친구 목록처럼) ─────────
@@ -1271,7 +1320,7 @@
       for (const id of [...online.keys()]) if (!seen.has(id)) { chatLine('', `${online.get(id)}님이 나갔어요`, true); online.delete(id); despawn(id); }
       const owner = isHome() && !myHome() ? (m.players || []).find((p) => homeCode(p.pid) === room.code) : null;
       hostDeco = owner && owner.deco ? decodeDeco(owner.deco) : null; homeOwner = owner ? otherName(owner) : homeOwner; // 친구 방에 놀러 가면 그 친구가 꾸민 방이 보여요
-      if (!decoDraft) applyDecor(currentDeco()); if (isHome() && !myHome()) setHomeSecretary((hostDeco && hostDeco.skin) || ''); renderRoomLabel(); renderPeople();
+      if (!decoDraft) applyDecor(currentDeco()); if (isHome() && !myHome()) { setHomeSecretary((hostDeco && hostDeco.skin) || ''); drawShowcase((hostDeco && hostDeco.badges) || []); } renderRoomLabel(); renderPeople();
       gotFirstState = true; setOnline(true); drawBoard(); setTicker();
     } else if (m.t === 'pose') { const p = players.get(m.pid); if (p && m.pid !== ME) walkTo(p, m.x, m.z); }
     else if (m.t === 'chat') { const p = players.get(m.pid); if (m.sys) chatLine('', m.text, true); else if (handleSignal(m)) { chatLine(otherName(m), m.text); say(p, m.text); } }
