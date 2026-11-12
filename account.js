@@ -36,11 +36,12 @@
   function apply(d) {
     if (!d || !d.ok) return;
     Object.assign(state, {loggedIn: true, pid: d.pid, name: d.name, platform: d.platform, admin: !!d.admin, wallet: d.wallet, data: d.data || {},
-      social: {friends: d.friends, requests: d.requests, pending: d.pending, gifts: d.gifts, sentToday: d.sentToday, giftMax: d.giftMax}});
+      badges: d.badges || [], stats: d.stats || {}, vip: d.vip || {}, skins: d.skins || ['classic'], skin: d.skin || 'classic',
+      social: {friends: d.friends, requests: d.requests, pending: d.pending, gifts: d.gifts, invites: d.invites || [], sentToday: d.sentToday, giftMax: d.giftMax}});
   }
   async function call(op, extra = {}) {
     const token = ls.get(SKEY); if (!API) throw new Error('offline'); if (!token) return {error: 'login'};
-    const res = await fetch(`${API}/api/user`, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({token, op, ...extra})});
+    const res = await fetch(`${API}/api/user`, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({token, op, ...(state.where != null ? {where: state.where} : {}), ...extra})});
     const d = await res.json().catch(() => ({error: 'server'}));
     if (d.error === 'login') { logout(); return d; } // 세션 만료
     if (d.welcome) { state.welcomeBonus = d.welcome; ls.set('thinkchip:welcome', String(d.welcome)); } // 회원가입 보상: 화면에서 한 번 보여주고 clearWelcome()

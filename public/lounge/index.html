@@ -28,6 +28,7 @@
 
 <div class="ticker" aria-live="polite"><span class="tag">LIVE</span><div class="ticker-track"><span id="tickerText">라운지에 오신 걸 환영해요</span></div></div>
 
+<div class="sc-board" id="scBoard" hidden aria-live="polite"></div>
 <aside class="people" id="people" hidden aria-label="접속자와 친구"></aside>
 
 <nav class="dock-right" aria-label="라운지 메뉴">
@@ -44,7 +45,7 @@
   <div class="chat-grip" id="chatGrip" role="slider" aria-label="채팅창 크기 · 위로 끌면 크게, 아래로 내리면 숨겨요" tabindex="0"><i></i></div>
   <div class="chat-log" id="chatLog"></div>
   <div class="emotes" id="emotes">
-    <button data-emote="👋">👋</button><button data-emote="😂">😂</button><button data-emote="😮">😮</button><button data-emote="🤔">🤔</button>
+    <button data-sc="1" class="sc-btn" aria-label="전광판 슈퍼챗">📢</button>    <button data-emote="👋">👋</button><button data-emote="😂">😂</button><button data-emote="😮">😮</button><button data-emote="🤔">🤔</button>
     <button data-emote="😭">😭</button><button data-emote="😡">😡</button><button data-emote="😏">😏</button><button data-emote="🔥">🔥</button>
   </div>
   <form class="chat-bar" id="chatForm" autocomplete="off">

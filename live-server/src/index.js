@@ -74,7 +74,14 @@ export default {
       const code = m[1].toUpperCase();
       if (!CODE_RE.test(code)) return new Response('bad room', {status: 400});
       if (req.headers.get('Upgrade') !== 'websocket') return new Response('websocket only', {status: 426});
-      return env.ROOM.get(env.ROOM.idFromName(code)).fetch(req);
+      // 로그인한 사람: 세션을 확인해서 뱃지를 붙여 줘요 (클라이언트가 위조할 수 없게 워커가 헤더로). VIP 라운지는 입장권·뱃지가 있어야 들어가요.
+      const h = new Headers(req.headers); h.delete('x-tc-badges');
+      const ses = url.searchParams.get('token') ? await readSession(env, url.searchParams.get('token')) : null;
+      let pass = null; if (ses) { const pid = await pidOf(env, ses.a); if (pid === url.searchParams.get('pid')) pass = await env.USER.get(env.USER.idFromName(pid)).vipCheck().catch(() => null); }
+      if (VIP_RE.test(code) && !pass?.ok) return new Response('vip only', {status: 403});
+      if (pass?.badges?.length) h.set('x-tc-badges', pass.badges.join(','));
+      const u2 = new URL(req.url); u2.searchParams.delete('token');
+      return env.ROOM.get(env.ROOM.idFromName(code)).fetch(new Request(u2, {headers: h, method: req.method}));
     }
     if (url.pathname === '/' || url.pathname === '/health') return new Response('thinkchip-live ok', {headers: {'content-type': 'text/plain; charset=utf-8', 'access-control-allow-origin': '*'}});
     if (url.pathname === '/api/user') return userApi(req, env);
@@ -91,7 +98,15 @@ const MAX_FRIENDS = 100, MAX_INBOX = 50, INVITE_TTL = 2 * 3600e3;
 const GIFT_AMOUNTS = [100, 300, 1000, 3000];
 const GIFT_DAILY_MAX = 5000; // 한 사람이 하루에 보낼 수 있는 칩
 const INITIAL_CHIPS = 100, WELCOME_BONUS = 300, ATTEND_REWARD = 30, PLAY_DAILY_CAP = 200, RUN_MAX = 150, AD_REWARD = 20, AD_DAILY_LIMIT = 5, IMPORT_MAX = 3000;
-const CHIP_PACKS = {chips_300: 300, chips_1000: 1100, chips_3000: 3500}; // app.config.js chipPacks 와 같게
+const CHIP_PACKS = {chips_300: 300, chips_1000: 1100, chips_3000: 3500, vip_30: 500}; // app.config.js chipPacks 와 같게
+const VIP_PACKS = {vip_30: 30}; // 현금 패키지: VIP 30일 + 500칩 (스토어에 상품을 등록하면 앱에 자동으로 보여요)
+// ── VIP 라운지 · 뱃지 · 전광판 슈퍼챗 · 한정판 비서 스킨 ──
+const VIP_PLANS = {d7: {price: 500, days: 7}, d30: {price: 1500, days: 30}, one: {price: 100, tickets: 1}, ten: {price: 800, tickets: 10}};
+const SC_TIERS = {normal: {price: 50, ms: 8000}, mega: {price: 200, ms: 20000}};
+// 한정판 비서 스킨 (until 이 지나면 더 살 수 없어요. 산 사람은 계속 써요)
+const SKINS = {classic: {price: 0}, idol: {price: 300}, gold: {price: 600}, winter: {price: 400, until: '2027-01-01'}, hanbok: {price: 400, until: '2027-02-28'}};
+const VIP_RE = /^VIP\d$/;
+function badgesOf(st = {}) { const b = []; if ((st.champs || 0) >= 1) b.push('champ'); if ((st.wins || 0) >= 50) b.push('win50'); if ((st.champs || 0) >= 5 || (st.wins || 0) >= 200) b.push('mvp'); return b; }
 const SESSION_DAYS = 180;
 const ITEM_PRICES = {"hair:pony":[40,"포니테일"],"hair:curly":[60,"뽀글 펌"],"hair:long":[60,"긴 생머리"],"hair:spiky":[40,"삐죽 머리"],"hair:wolf":[60,"울프컷"],"hair:hime":[70,"히메컷"],"hair:dandy":[50,"댄디 투블럭"],"hair:wave":[80,"S컬 웨이브"],"top:knit":[50,"꽈배기 니트"],"top:shirt":[80,"셔츠 + 조끼"],"top:jacket":[90,"봄버 재킷"],"top:suit":[120,"블레이저"],"top:tank":[40,"나시"],"top:vneck":[70,"딥브이넥 니트"],"top:layered":[60,"레이어드 티"],"top:crop":[60,"크롭티"],"top:cardigan":[90,"오버핏 가디건"],"top:puffer":[130,"숏패딩"],"bottom:skirt":[40,"플리츠 스커트"],"bottom:jogger":[30,"트레이닝 팬츠"],"bottom:wide":[50,"와이드 슬랙스"],"bottom:cargo":[60,"카고 팬츠"],"bottom:mini":[50,"미니스커트"],"bottom:longskirt":[60,"롱스커트"],"shoes:boots":[40,"부츠"],"shoes:loafer":[40,"로퍼"],"shoes:chunky":[60,"어글리 슈즈"],"acc:glasses":[30,"동그란 안경"],"acc:sunglass":[50,"선글라스"],"acc:beanie":[40,"비니"],"acc:cap":[40,"볼캡"],"acc:headset":[70,"헤드셋"],"acc:ribbon":[30,"리본"],"acc:crown":[300,"왕관 (우승자)"],"acc:bucket":[50,"버킷햇"],"acc:earring":[40,"진주 귀걸이"],"acc:necklace":[40,"실버 목걸이"],"acc:hairpin":[30,"헤어핀"],"wall:cream":[60,"크림"],"wall:mint":[60,"민트"],"wall:pink":[60,"체리 핑크"],"wall:black":[80,"블랙"],"wall:sky":[60,"하늘"],"floor:white":[80,"화이트 우드"],"floor:marble":[100,"대리석"],"floor:walnut":[70,"월넛"],"floor:pinktile":[80,"핑크 타일"],"rug:red":[40,"레드"],"rug:green":[40,"포레스트"],"rug:purple":[40,"퍼플"],"rug:beige":[40,"베이지"],"items:arcade":[150,"아케이드 기계"],"items:trophy":[120,"트로피 장식장"],"items:tank":[130,"어항"],"items:piano":[200,"피아노"],"items:tree":[90,"반짝이 트리"],"items:bean":[70,"빈백 소파"],"items:neon":[60,"네온 하트"],"items:plants":[50,"화분 세트"]}; // 옷·가구 선물 가격표 (public/lounge 의 WARDROBE·DECOR 와 같게. 바뀌면 같이 고쳐요)
 const AVATAR_CATS = ['hair', 'top', 'bottom', 'shoes', 'acc'];
@@ -205,7 +220,12 @@ export class User extends DurableObject {
   isAdmin() { return String(this.env.ADMIN_PIDS || '').split(/[\s,]+/).filter(Boolean).includes(this.u.pid); }
   view(extra = {}) { const u = this.u; return {ok: true, pid: u.pid, name: u.name, platform: u.platform, admin: this.isAdmin(), wallet: this.wallet(), data: u.data,
     friends: Object.entries(u.friends).map(([pid, f]) => ({pid, name: f.name, nogift: !!f.toss, seen: f.seen || 0, where: f.where || ''})), invites: (u.invites || []).filter((i) => Date.now() - i.at < INVITE_TTL), requests: Object.entries(u.inReq).map(([pid, r]) => ({pid, name: r.name, at: r.at})),
-    pending: Object.keys(u.outReq), gifts: u.gifts, sentToday: u.sent.day === dayKey() ? u.sent.total : 0, giftMax: GIFT_DAILY_MAX, ...extra}; }
+    pending: Object.keys(u.outReq), gifts: u.gifts, stats: u.stats || {wins: 0, champs: 0}, badges: badgesOf(u.stats), vip: this.vipView(), skins: u.skins || ['classic'], skin: u.skin || 'classic', sentToday: u.sent.day === dayKey() ? u.sent.total : 0, giftMax: GIFT_DAILY_MAX, ...extra}; }
+  vipView() { const v = this.u.vip || {}, now = Date.now(), badge = badgesOf(this.u.stats).length > 0 || this.isAdmin();
+    return {until: v.until || 0, tickets: v.tickets || 0, day: v.day || 0, badge, ok: badge || (v.until || 0) > now || (v.day || 0) > now}; }
+  async vipCheck() { const v = this.vipView(); return {ok: v.ok, badges: badgesOf(this.u.stats), name: this.u.name || ''}; } // 워커가 VIP 라운지 입장 때 불러요
+  async award(kind) { const u = this.u; if (!u.pid) return 'nouser'; u.stats = u.stats || {wins: 0, champs: 0};
+    if (kind === 'win') u.stats.wins = (u.stats.wins || 0) + 1; else if (kind === 'champ') u.stats.champs = (u.stats.champs || 0) + 1; await this.save(); return 'ok'; }
   addChips(n, paid = false) { const w = this.u.w; w.chips = Math.min(9999999, w.chips + n); if (paid) w.paid += n; }
 
   async client(b) {
@@ -251,7 +271,8 @@ export class User extends DurableObject {
         const chips = CHIP_PACKS[b.sku], id = String(b.orderId || '').slice(0, 200);
         if (!chips || !id) return {error: 'bad', status: 400};
         if (w.orders.includes(id)) { extra.granted = 0; break; }
-        w.orders = [...w.orders, id].slice(-500); this.addChips(chips, true); extra.granted = chips; break;
+        w.orders = [...w.orders, id].slice(-500); this.addChips(chips, true); extra.granted = chips;
+        if (VIP_PACKS[b.sku]) { const v = u.vip = u.vip || {}; v.until = Math.max(Date.now(), v.until || 0) + VIP_PACKS[b.sku] * 864e5; extra.vipDays = VIP_PACKS[b.sku]; } break;
       }
       case 'import': { // 로그인 전 이 기기에 모은 칩을 처음 한 번 계정으로 옮겨요 (최대 3,000, 선물은 안 되는 칩으로)
         if (w.imported) { extra.imported = 0; break; }
@@ -306,6 +327,34 @@ export class User extends DurableObject {
         const r = await this.other(to).receiveItem({id: gid, from: u.pid, name: u.name || '플레이어', cat: b.cat, item: b.id, itemName: item[1], price: item[0], at: Date.now()});
         if (r !== 'ok') { w.chips += item[0]; await this.save(); return {error: r || 'fail', status: 400}; }
         u.sentIds = [...u.sentIds, gid].slice(-100); break;
+      }
+      case 'vip': { // VIP 입장권: 기간권(7·30일) · 횟수권(1회·10회) — 게임에서 번 칩으로도 살 수 있어요
+        const plan = VIP_PLANS[b.plan]; if (!plan) return {error: 'bad', status: 400};
+        if (w.chips < plan.price) return {...this.view(), error: 'chips', status: 400};
+        w.chips -= plan.price; w.paid = Math.min(w.paid, w.chips); const v = u.vip = u.vip || {};
+        if (plan.days) v.until = Math.max(Date.now(), v.until || 0) + plan.days * 864e5; else v.tickets = (v.tickets || 0) + plan.tickets; break;
+      }
+      case 'vipEnter': { // 뱃지·기간권이 있으면 그냥, 없으면 횟수권 1장 → 오늘 하루 자유 입장
+        const v = this.vipView(); if (v.ok) break;
+        if (!(u.vip?.tickets > 0)) return {...this.view(), error: 'novip', status: 400};
+        u.vip.tickets -= 1; const kst = new Date(Date.now() + 9 * 3600e3); kst.setUTCHours(24, 0, 0, 0); u.vip.day = kst.getTime() - 9 * 3600e3; extra.usedTicket = true; break;
+      }
+      case 'superchat': { // 전광판 슈퍼챗: 라운지 모두에게 크게 떠요
+        const tier = SC_TIERS[b.tier] ? b.tier : 'normal', price = SC_TIERS[tier].price, text = String(b.text || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 40), room = String(b.room || '');
+        if (!text || !CODE_RE.test(room)) return {error: 'bad', status: 400};
+        if (Date.now() - (u.scAt || 0) < 10e3) return {...this.view(), error: 'slow', status: 429};
+        if (w.chips < price) return {...this.view(), error: 'chips', status: 400};
+        w.chips -= price; w.paid = Math.min(w.paid, w.chips); u.scAt = Date.now();
+        await this.env.ROOM.get(this.env.ROOM.idFromName(room)).superchat({pid: u.pid, name: u.name || '플레이어', text, tier, ms: SC_TIERS[tier].ms, badges: badgesOf(u.stats)}); break;
+      }
+      case 'skin': { // 한정판 비서 스킨: 사기 + 쓰기
+        const id = String(b.id || ''), sk = SKINS[id]; if (!sk) return {error: 'bad', status: 400};
+        const owned = u.skins || ['classic'];
+        if (!owned.includes(id) && !this.isAdmin()) {
+          if (sk.until && Date.now() > Date.parse(sk.until + 'T00:00:00+09:00')) return {error: 'soldout', status: 400};
+          if (w.chips < sk.price) return {...this.view(), error: 'chips', status: 400};
+          w.chips -= sk.price; w.paid = Math.min(w.paid, w.chips); u.skins = [...owned, id]; }
+        u.skin = id; break;
       }
       case 'invite': { // 친구 부르기 (롤처럼): 오프라인이어도 다음에 들어오면 보여요
         if (!u.friends[to]) return {error: 'notfriend', status: 400};
@@ -383,7 +432,7 @@ export class Room extends DurableObject {
   view(viewer) {
     const on = this.online(), host = this.hostId(on);
     const players = Object.values(this.s.players).filter((p) => on.has(p.pid) || (this.s.phase !== 'lobby' && p.inRound))
-      .sort((a, b) => a.joinedAt - b.joinedAt).map((p) => ({pid: p.pid, name: p.name, bot: isBot(p.pid), ready: p.ready, score: p.score, done: p.done, inRound: p.inRound, online: on.has(p.pid), host: p.pid === host, look: p.look || '', deco: p.deco || '', pos: this.pos?.[p.pid] || null}));
+      .sort((a, b) => a.joinedAt - b.joinedAt).map((p) => ({pid: p.pid, name: p.name, badges: p.badges || [], bot: isBot(p.pid), ready: p.ready, score: p.score, done: p.done, inRound: p.inRound, online: on.has(p.pid), host: p.pid === host, look: p.look || '', deco: p.deco || '', pos: this.pos?.[p.pid] || null}));
     const {code, phase, game, level, seed, round, startAt} = this.s;
     let fh = null;
     if (game === 'forehead' && this.s.fh && phase !== 'lobby') {
@@ -708,8 +757,14 @@ export class Room extends DurableObject {
     if (sr.kind === 'tournament') return (sr.bracket[sr.stage] || []).some((mt) => mt.a === pid || mt.b === pid);
     return sr.members.includes(pid);
   }
+  async superchat(sc) { const item = {t: 'sc', ...sc, at: Date.now()}; this.s.sc = [...(this.s.sc || []).filter((x) => Date.now() - x.at < 60e3), item].slice(-3); this.broadcast(item); this.sysChat(`📢 ${sc.name}: ${sc.text}`); await this.save(); return 'ok'; }
+  // 뱃지용 기록: 사람 2명 이상이 함께한 판의 단독 1등 = 1승, 사람 3명 이상 시리즈 우승 = 우승 1회 (로그인한 계정만)
+  award(pid, kind) { if (!/^[a-f0-9]{24}$/.test(pid) || !this.env.USER) return; try { const p = this.env.USER.get(this.env.USER.idFromName(pid)).award(kind); this.ctx.waitUntil?.(p.catch(() => {})); p.catch?.(() => {}); } catch {} }
   finishRound() {
     const s = this.s; s.phase = 'result';
+    { const hum = Object.values(s.players).filter((p) => p.inRound && !isBot(p.pid));
+      if (hum.length >= 2) { const all = Object.values(s.players).filter((p) => p.inRound), top = Math.max(...all.map((p) => p.score || 0)), best = all.filter((p) => (p.score || 0) === top);
+        if (best.length === 1 && !isBot(best[0].pid) && top > 0) this.award(best[0].pid, 'win'); } }
     const sr = s.series; if (!sr || !sr.started || sr.done) return;
     const racers = Object.values(s.players).filter((p) => p.inRound), name = (id) => s.players[id]?.name || '?';
     const sorted = [...racers].sort((a, b) => b.score - a.score);
@@ -750,6 +805,7 @@ export class Room extends DurableObject {
         this.sysChat(`${next[0].label} 진출: ${next.filter((m) => m.label !== '3·4위전').map((m) => `${name(m.a)}${m.b ? ` vs ${name(m.b)}` : ''}`).join(' / ')}`);
       }
     }
+    if (sr.done && sr.members.filter((id) => !isBot(id)).length >= 3) for (const id of sr.champion || []) if (!isBot(id)) this.award(id, 'champ');
     // Next round of a series gets a fresh random game (host can still change it).
     if (!sr.done) { const pool = GAMES.filter((g) => !PARTY.includes(g) && !TURN.includes(g) && !RETIRED.includes(g) && g !== s.game); s.game = pool[Math.floor(Math.random() * pool.length)]; }
   }
@@ -768,13 +824,14 @@ export class Room extends DurableObject {
     if (!this.humans().size && this.s.phase !== 'lobby') { const hp = this.s.hp; this.s = this.fresh(); if (hp) this.s.hp = hp; } // everyone had left: start over (방명록·방문자 수는 남겨요)
     this.s.code = code;
     const p = this.s.players[pid] || {pid, joinedAt: Date.now(), ready: false, score: 0, done: false, inRound: false};
-    this.s.players[pid] = {...p, name, look: cleanLook(url.searchParams.get('look')), deco: cleanDeco(url.searchParams.get('deco'))};
+    const badges = (req.headers.get('x-tc-badges') || '').split(',').filter((b) => ['champ', 'win50', 'mvp'].includes(b));
+    this.s.players[pid] = {...p, name, badges, look: cleanLook(url.searchParams.get('look')), deco: cleanDeco(url.searchParams.get('deco'))};
     // Forget players who left long ago so the room does not fill with ghosts.
     for (const [id, q] of Object.entries(this.s.players)) if (id !== pid && !on.has(id) && !q.inRound && !isBot(id)) delete this.s.players[id];
     server.serializeAttachment({pid});
     this.visit(pid);
     await this.sync();
-    try { server.send(JSON.stringify({t: 'chatlog', items: this.s.chat || []})); server.send(JSON.stringify(this.hpView())); } catch {}
+    try { server.send(JSON.stringify({t: 'chatlog', items: this.s.chat || []})); server.send(JSON.stringify(this.hpView())); for (const sc of (this.s.sc || []).filter((x) => Date.now() - x.at < (x.ms || 8000))) server.send(JSON.stringify(sc)); } catch {}
     return new Response(null, {status: 101, webSocket: client});
   }
   async webSocketMessage(ws, raw) {
