@@ -4,7 +4,7 @@
 import {DurableObject} from 'cloudflare:workers';
 
 const MAX_PLAYERS = 8, LOUNGE_MAX = 20; // LNG* = 3D 라운지 공개방 (게임 대신 함께 돌아다니는 공간)
-const cleanDeco = (v) => String(v || '').replace(/[^a-z0-9._]/g, '').slice(0, 120); // lounge 방 꾸미기 encodeDeco
+const cleanDeco = (v) => String(v || '').replace(/[^a-z0-9._]/g, '').slice(0, 400); // lounge 방 꾸미기 encodeDeco
 const cleanLook = (v) => String(v || '').replace(/[^a-z0-9.]/g, '').slice(0, 300); // lounge/avatar.js encodeLook
 const GAMES = ['flip', 'blind', 'triad', 'trust', 'baseball', 'nim', 'auction', 'maze', 'draw', 'marbles', 'redlight', 'bridge', 'minority', 'forehead', 'liar', 'nunchi', 'vote', 'sudoku', 'merge', 'stroop', 'gomoku', 'dots', 'tele', 'mind', 'onecard'];
 // 목록에서 내린 게임: 예전 방은 계속 열리지만 탈락전 랜덤 뽑기에는 나오지 않아요
@@ -106,6 +106,7 @@ const SC_TIERS = {normal: {price: 50, ms: 8000}, mega: {price: 200, ms: 20000}};
 // 한정판 비서 스킨 (until 이 지나면 더 살 수 없어요. 산 사람은 계속 써요)
 const SKINS = {classic: {price: 0}, idol: {price: 300}, gold: {price: 600}, winter: {price: 400, until: '2027-01-01'}, hanbok: {price: 400, until: '2027-02-28'}};
 const VIP_RE = /^VIP\d$/;
+const REFUND_MS = 10 * 60e3; // 구매 취소는 10분 안에만
 // 뱃지 (주니어 네이버 동물농장처럼 모아서 내 방 진열장에 전시). VIP 라운지 무료 입장은 VIP_FREE 뱃지만.
 const BADGE_IDS = ['first', 'win10', 'win50', 'win100', 'champ', 'champ3', 'mvp', 'friend5', 'attend7', 'vip', 'patron'];
 const VIP_FREE = ['champ', 'win50', 'mvp'];
@@ -119,7 +120,7 @@ const badNorm = (t) => String(t || '').toLowerCase().replace(/[\s0-9._\-~!@#$%^&
 const hasBad = (t) => { const n = badNorm(t); return BAD_WORDS.some((w) => n.includes(w)); };
 const maskBad = (t) => hasBad(t) ? String(t).replace(new RegExp(BAD_WORDS.map((w) => w.split('').join('[\\s0-9._~!*-]*')).join('|'), 'gi'), (m) => '♡'.repeat(Math.min(4, m.length))) : t;
 const SESSION_DAYS = 180;
-const ITEM_PRICES = {"hair:pony":[40,"포니테일"],"hair:curly":[60,"뽀글 펌"],"hair:long":[60,"긴 생머리"],"hair:spiky":[40,"삐죽 머리"],"hair:wolf":[60,"울프컷"],"hair:hime":[70,"히메컷"],"hair:dandy":[50,"댄디컷"],"hair:wave":[80,"S컬 웨이브"],"top:knit":[50,"꽈배기 니트"],"top:shirt":[60,"셔츠 + 넥타이"],"top:jacket":[90,"봄버 재킷"],"top:suit":[120,"정장 재킷"],"top:tank":[40,"나시"],"top:vneck":[70,"딥브이넥 니트"],"top:layered":[60,"레이어드 티"],"top:crop":[60,"크롭티"],"top:cardigan":[70,"단추 가디건"],"top:puffer":[130,"숏패딩"],"bottom:skirt":[40,"플리츠 스커트"],"bottom:jogger":[30,"트레이닝 팬츠"],"bottom:wide":[50,"슬랙스"],"bottom:cargo":[60,"카고 팬츠"],"bottom:mini":[50,"미니스커트"],"bottom:longskirt":[60,"롱스커트"],"shoes:boots":[40,"부츠"],"shoes:loafer":[40,"로퍼"],"shoes:chunky":[60,"하이탑"],"shoes:mary":[50,"메리제인"],"hair:mperm":[60,"애즈펌"],"top:blouse":[50,"리본 블라우스"],"top:sailor":[60,"세일러 카라"],"top:dress":[90,"원피스"],"top:baseball":[80,"야구 점퍼"],"acc:glasses":[30,"동그란 안경"],"acc:sunglass":[50,"선글라스"],"acc:beanie":[40,"비니"],"acc:cap":[40,"볼캡"],"acc:headset":[70,"헤드셋"],"acc:ribbon":[30,"리본"],"acc:crown":[300,"왕관 (우승자)"],"acc:bucket":[50,"버킷햇"],"acc:earring":[40,"진주 귀걸이"],"acc:necklace":[40,"실버 목걸이"],"acc:hairpin":[30,"헤어핀"],"wall:cream":[60,"크림"],"wall:mint":[60,"민트"],"wall:pink":[60,"체리 핑크"],"wall:black":[80,"블랙"],"wall:sky":[60,"하늘"],"floor:white":[80,"화이트 우드"],"floor:marble":[100,"대리석"],"floor:walnut":[70,"월넛"],"floor:pinktile":[80,"핑크 타일"],"rug:red":[40,"레드"],"rug:green":[40,"포레스트"],"rug:purple":[40,"퍼플"],"rug:beige":[40,"베이지"],"items:arcade":[150,"아케이드 기계"],"items:trophy":[120,"트로피 장식장"],"items:tank":[130,"어항"],"items:piano":[200,"피아노"],"items:tree":[90,"반짝이 트리"],"items:bean":[70,"빈백 소파"],"items:neon":[60,"네온 하트"],"items:plants":[50,"화분 세트"]}; // 옷·가구 선물 가격표 (public/lounge 의 WARDROBE·DECOR 와 같게. 바뀌면 같이 고쳐요)
+const ITEM_PRICES = {"hair:pony":[40,"포니테일"],"hair:curly":[60,"물결펌"],"hair:long":[60,"긴 생머리"],"hair:spiky":[40,"삐죽 머리"],"hair:wolf":[60,"울프컷"],"hair:hime":[70,"히메컷"],"hair:dandy":[50,"댄디컷"],"hair:wave":[80,"S컬 웨이브"],"top:knit":[50,"꽈배기 니트"],"top:shirt":[60,"셔츠 + 넥타이"],"top:jacket":[90,"봄버 재킷"],"top:suit":[120,"정장 재킷"],"top:tank":[40,"나시"],"top:vneck":[70,"딥브이넥 니트"],"top:layered":[60,"레이어드 티"],"top:crop":[60,"크롭티"],"top:cardigan":[70,"단추 가디건"],"top:puffer":[130,"숏패딩"],"bottom:skirt":[40,"플리츠 스커트"],"bottom:jogger":[30,"트레이닝 팬츠"],"bottom:wide":[50,"슬랙스"],"bottom:cargo":[60,"카고 팬츠"],"bottom:mini":[50,"미니스커트"],"bottom:longskirt":[60,"롱스커트"],"shoes:boots":[40,"부츠"],"shoes:loafer":[40,"로퍼"],"shoes:chunky":[60,"하이탑"],"shoes:mary":[50,"메리제인"],"hair:mperm":[60,"애즈펌"],"top:blouse":[50,"리본 블라우스"],"top:sailor":[60,"세일러 카라"],"top:dress":[90,"원피스"],"top:baseball":[80,"야구 점퍼"],"acc:glasses":[30,"동그란 안경"],"acc:sunglass":[50,"선글라스"],"acc:beanie":[40,"비니"],"acc:cap":[40,"볼캡"],"acc:headset":[70,"헤드셋"],"acc:ribbon":[30,"리본"],"acc:crown":[300,"왕관 (우승자)"],"acc:bucket":[50,"버킷햇"],"acc:earring":[40,"진주 귀걸이"],"acc:necklace":[40,"실버 목걸이"],"acc:hairpin":[30,"헤어핀"],"wall:cream":[60,"크림"],"wall:mint":[60,"민트"],"wall:pink":[60,"체리 핑크"],"wall:black":[80,"블랙"],"wall:sky":[60,"하늘"],"floor:white":[80,"화이트 우드"],"floor:marble":[100,"대리석"],"floor:walnut":[70,"월넛"],"floor:pinktile":[80,"핑크 타일"],"rug:red":[40,"레드"],"rug:green":[40,"포레스트"],"rug:purple":[40,"퍼플"],"rug:beige":[40,"베이지"],"items:arcade":[150,"아케이드 기계"],"items:trophy":[120,"트로피 장식장"],"items:tank":[130,"어항"],"items:piano":[200,"피아노"],"items:tree":[90,"반짝이 트리"],"items:bean":[70,"빈백 소파"],"items:neon":[60,"네온 하트"],"items:plants":[50,"화분 세트"],"items:sofa":[120,"2인 소파"],"items:bed":[150,"침대"],"items:desk":[100,"책상 세트"],"items:tv":[130,"TV"],"items:shelf":[80,"책장"],"items:lamp":[40,"무드등"]}; // 옷·가구 선물 가격표 (public/lounge 의 WARDROBE·DECOR 와 같게. 바뀌면 같이 고쳐요)
 const AVATAR_CATS = ['hair', 'top', 'bottom', 'shoes', 'acc'];
 
 // 로그인 후 돌아갈 수 있는 사이트 (다른 사이트로 세션이 새지 않게)
@@ -231,12 +232,13 @@ export class User extends DurableObject {
   isAdmin() { return String(this.env.ADMIN_PIDS || '').split(/[\s,]+/).filter(Boolean).includes(this.u.pid); }
   view(extra = {}) { const u = this.u; return {ok: true, pid: u.pid, name: u.name, platform: u.platform, admin: this.isAdmin(), wallet: this.wallet(), data: u.data,
     friends: Object.entries(u.friends).map(([pid, f]) => ({pid, name: f.name, nogift: !!f.toss, seen: f.seen || 0, where: f.where || ''})), invites: (u.invites || []).filter((i) => Date.now() - i.at < INVITE_TTL), requests: Object.entries(u.inReq).map(([pid, r]) => ({pid, name: r.name, at: r.at})),
-    pending: Object.keys(u.outReq), gifts: u.gifts, stats: u.stats || {wins: 0, champs: 0}, badges: badgesOf(u), vip: this.vipView(), skins: u.skins || ['classic'], skin: u.skin || 'classic', sentToday: u.sent.day === dayKey() ? u.sent.total : 0, giftMax: GIFT_DAILY_MAX, ...extra}; }
+    pending: Object.keys(u.outReq), gifts: u.gifts, stats: u.stats || {wins: 0, champs: 0}, badges: badgesOf(u), vip: this.vipView(), skins: u.skins || ['classic'], skin: u.skin || 'classic', buys: (u.buys || []).filter((x) => !x.refunded && Date.now() - x.at < REFUND_MS).map(({id, kind, amount, what, at}) => ({id, kind, amount, what, at})), refundMs: REFUND_MS, sentToday: u.sent.day === dayKey() ? u.sent.total : 0, giftMax: GIFT_DAILY_MAX, ...extra}; }
   vipView() { const v = this.u.vip || {}, now = Date.now(), badge = badgesOf(this.u).some((b) => VIP_FREE.includes(b)) || this.isAdmin();
     return {until: v.until || 0, tickets: v.tickets || 0, day: v.day || 0, badge, ok: badge || (v.until || 0) > now || (v.day || 0) > now}; }
   async vipCheck() { const v = this.vipView(); return {ok: v.ok, badges: badgesOf(this.u), name: this.u.name || ''}; } // 워커가 VIP 라운지 입장 때 불러요
   async award(kind) { const u = this.u; if (!u.pid) return 'nouser'; u.stats = u.stats || {wins: 0, champs: 0};
     if (kind === 'win') u.stats.wins = (u.stats.wins || 0) + 1; else if (kind === 'champ') u.stats.champs = (u.stats.champs || 0) + 1; await this.save(); return 'ok'; }
+  record(r) { const id = 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); this.u.buys = [...(this.u.buys || []).filter((x) => Date.now() - x.at < 864e5), {...r, id, at: Date.now()}].slice(-30); return id; }
   addChips(n, paid = false) { const w = this.u.w; w.chips = Math.min(9999999, w.chips + n); if (paid) w.paid += n; }
 
   async client(b) {
@@ -276,7 +278,22 @@ export class User extends DurableObject {
         const amount = Math.trunc(Number(b.amount));
         if (!(amount > 0 && amount <= 1000000)) return {error: 'bad', status: 400};
         if (w.chips < amount) return {...this.view(), error: 'chips', status: 400};
-        w.chips -= amount; w.paid = Math.min(w.paid, w.chips); break;
+        w.chips -= amount; w.paid = Math.min(w.paid, w.chips);
+        if (b.what) extra.buyId = this.record({kind: 'spend', amount, what: String(b.what).replace(/[^a-z0-9:,_]/gi, '').slice(0, 200)}); break;
+      }
+      case 'refund': { // 구매 취소: 산 지 REFUND_MS(10분) 안에만. 쓴 칩은 돌려주고 산 물건은 빼요
+        const r = (u.buys || []).find((x) => x.id === String(b.id || ''));
+        if (!r || r.refunded) return {...this.view(), error: 'gone', status: 400};
+        if (Date.now() - r.at > REFUND_MS) return {...this.view(), error: 'late', status: 400};
+        const v = u.vip = u.vip || {};
+        if (r.kind === 'vip') { const plan = VIP_PLANS[r.plan];
+          if (plan.days) v.until = Math.max(0, (v.until || 0) - plan.days * 864e5);
+          else { if ((v.tickets || 0) < plan.tickets) return {...this.view(), error: 'used', status: 400}; v.tickets -= plan.tickets; } }
+        if (r.kind === 'skin') { const t = r.thanks || {};
+          if (t.kind === 'ticket') { if (!(v.tickets > 0)) return {...this.view(), error: 'used', status: 400}; v.tickets -= 1; }
+          else if (t.amount) { if (w.chips + r.amount < t.amount) return {...this.view(), error: 'used', status: 400}; w.chips -= t.amount; }
+          u.skins = (u.skins || []).filter((x) => x !== r.item); if (u.skin === r.item) u.skin = 'classic'; }
+        this.addChips(r.amount); w.paid = Math.min(w.paid, w.chips); r.refunded = true; extra.refunded = r; break;
       }
       case 'purchase': { // 결제 완료된 주문 지급 (같은 주문은 한 번만). 영수증 서버 검증은 다음 단계
         const chips = CHIP_PACKS[b.sku], id = String(b.orderId || '').slice(0, 200);
@@ -343,6 +360,7 @@ export class User extends DurableObject {
         const plan = VIP_PLANS[b.plan]; if (!plan) return {error: 'bad', status: 400};
         if (w.chips < plan.price) return {...this.view(), error: 'chips', status: 400};
         w.chips -= plan.price; w.paid = Math.min(w.paid, w.chips); const v = u.vip = u.vip || {};
+        extra.buyId = this.record({kind: 'vip', amount: plan.price, plan: b.plan, what: `vip:${b.plan}`});
         v.bought = true; if (plan.days) v.until = Math.max(Date.now(), v.until || 0) + plan.days * 864e5; else v.tickets = (v.tickets || 0) + plan.tickets; break;
       }
       case 'vipEnter': { // 뱃지·기간권이 있으면 그냥, 없으면 횟수권 1장 → 오늘 하루 자유 입장
@@ -370,7 +388,8 @@ export class User extends DurableObject {
           const roll = Math.random(), v = u.vip = u.vip || {};
           if (roll < 0.25) { v.tickets = (v.tickets || 0) + 1; extra.thanks = {kind: 'ticket', amount: 1}; }
           else if (roll < 0.35) { const n = Math.round(sk.price * 0.5); this.addChips(n); extra.thanks = {kind: 'jackpot', amount: n}; }
-          else { const n = Math.round(sk.price * (0.1 + Math.random() * 0.15)); this.addChips(n); extra.thanks = {kind: 'chips', amount: n}; } }
+          else { const n = Math.round(sk.price * (0.1 + Math.random() * 0.15)); this.addChips(n); extra.thanks = {kind: 'chips', amount: n}; }
+          extra.buyId = this.record({kind: 'skin', amount: sk.price, item: id, thanks: extra.thanks, what: `skin:${id}`}); }
         u.skin = id; break;
       }
       case 'invite': { // 친구 부르기 (롤처럼): 오프라인이어도 다음에 들어오면 보여요

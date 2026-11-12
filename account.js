@@ -36,7 +36,7 @@
   function apply(d) {
     if (!d || !d.ok) return;
     Object.assign(state, {loggedIn: true, pid: d.pid, name: d.name, platform: d.platform, admin: !!d.admin, wallet: d.wallet, data: d.data || {},
-      badges: d.badges || [], stats: d.stats || {}, vip: d.vip || {}, skins: d.skins || ['classic'], skin: d.skin || 'classic',
+      badges: d.badges || [], stats: d.stats || {}, vip: d.vip || {}, skins: d.skins || ['classic'], skin: d.skin || 'classic', buys: d.buys || [], refundMs: d.refundMs || 600000,
       social: {friends: d.friends, requests: d.requests, pending: d.pending, gifts: d.gifts, invites: d.invites || [], sentToday: d.sentToday, giftMax: d.giftMax}});
   }
   async function call(op, extra = {}) {

@@ -506,10 +506,12 @@
     if (ph) { let o = ph.object; while (o && !others.some((p) => p.av === o)) o = o.parent; const who = others.find((p) => p.av === o); if (who) { approachFor(who); return; } }
     hideRx(); camState.pan.set(0, 0, 0); // 걸어가면 다시 내 캐릭터 중심으로 (손인사 중에 바닥을 누르면 멈추고 걸어가요)
     const hit = ray.intersectObjects(clickables.filter((o) => o.userData.zone.group?.visible !== false), false)[0];
-    if (hit) { goToZone(hit.object.userData.zone); return; }
+    if (hit) { const zz = hit.object.userData.zone; if (!zz.furn) { goToZone(zz); return; } if (myHome() && !placingSc) return openFurniture(zz.furn); }
     const fh = ray.intersectObject(floor, false)[0];
-    if (placingSc && fh) { placingSc = false; const x = Math.max(-9.6, Math.min(9.6, fh.point.x)), z = Math.max(-10.3, Math.min(9.6, fh.point.z)), cur = myRoom.deco.sc || SC_HOME;
-      myRoom.deco.sc = [Math.round(x * 10) / 10, Math.round(z * 10) / 10, cur[2] || 0]; placeShowcase(myRoom.deco.sc); saveRoomLayout(); toast('📍 진열장을 옮겼어요'); return; }
+    if (placingSc && fh) { const what = placingSc; placingSc = false; const x = Math.round(Math.max(-9.9, Math.min(9.9, fh.point.x)) * 10) / 10, z = Math.round(Math.max(-10.3, Math.min(9.9, fh.point.z)) * 10) / 10;
+      if (what === true) { const cur = myRoom.deco.sc || SC_HOME; myRoom.deco.sc = [x, z, cur[2] || 0]; placeShowcase(myRoom.deco.sc); }
+      else { const lay = myRoom.deco.lay = myRoom.deco.lay || {}, g = furniture[what], cur = lay[what] || g.userData.home; lay[what] = [x, z, cur[2]]; placeFurniture(lay); }
+      saveRoomLayout(); toast('📍 옮겼어요'); return; }
     if (fh) { walkTo(me, fh.point.x, fh.point.z); sendPose(); }
   }
   // 게임으로 들어갈 때: 내 캐릭터가 폴짝 뛰고 화면이 라운지 색으로 덮인 뒤 넘어가요 (뚝 끊기지 않게)
@@ -577,20 +579,21 @@
     wall: [{id: 'navy', name: '네이비', price: 0, c: 0x1e2a4a}, {id: 'cream', name: '크림', price: 60, c: 0xe9dfc9}, {id: 'mint', name: '민트', price: 60, c: 0x9fd8c8}, {id: 'pink', name: '체리 핑크', price: 60, c: 0xf2b6c6}, {id: 'black', name: '블랙', price: 80, c: 0x0b0b10}, {id: 'sky', name: '하늘', price: 60, c: 0xa9c8f0}],
     floor: [{id: 'oak', name: '원목', price: 0, c: 0x7a5a43}, {id: 'white', name: '화이트 우드', price: 80, c: 0xd9cdbd}, {id: 'marble', name: '대리석', price: 100, c: 0xcfd2d8}, {id: 'walnut', name: '월넛', price: 70, c: 0x4a3326}, {id: 'pinktile', name: '핑크 타일', price: 80, c: 0xe9b7c4}],
     rug: [{id: 'navy', name: '네이비', price: 0, c: 0x26345e}, {id: 'red', name: '레드', price: 40, c: 0x7a1f2b}, {id: 'green', name: '포레스트', price: 40, c: 0x1f5a3e}, {id: 'purple', name: '퍼플', price: 40, c: 0x4a2f7a}, {id: 'beige', name: '베이지', price: 40, c: 0xcdb99a}],
-    items: [{id: 'arcade', name: '아케이드 기계', price: 150}, {id: 'trophy', name: '트로피 장식장', price: 120}, {id: 'tank', name: '어항', price: 130}, {id: 'piano', name: '피아노', price: 200}, {id: 'tree', name: '반짝이 트리', price: 90}, {id: 'bean', name: '빈백 소파', price: 70}, {id: 'neon', name: '네온 하트', price: 60}, {id: 'plants', name: '화분 세트', price: 50}],
+    items: [{id: 'arcade', name: '아케이드 기계', price: 150}, {id: 'trophy', name: '트로피 장식장', price: 120}, {id: 'tank', name: '어항', price: 130}, {id: 'piano', name: '피아노', price: 200}, {id: 'tree', name: '반짝이 트리', price: 90}, {id: 'bean', name: '빈백 소파', price: 70}, {id: 'neon', name: '네온 하트', price: 60}, {id: 'plants', name: '화분 세트', price: 50},
+      {id: 'sofa', name: '2인 소파', price: 120}, {id: 'bed', name: '침대', price: 150}, {id: 'desk', name: '책상 세트', price: 100}, {id: 'tv', name: 'TV', price: 130}, {id: 'shelf', name: '책장', price: 80}, {id: 'lamp', name: '무드등', price: 40}],
   };
   const ROOM_KEY = 'thinkchip:room:v1';
   const DEFAULT_DECO = {wall: 'navy', floor: 'oak', rug: 'navy', items: []};
-  const encodeDeco = (d) => [d.wall, d.floor, d.rug, (d.items || []).join('_'), mySkin(), (loggedIn() ? st().badges || [] : []).join('_'), Array.isArray(d.sc) ? d.sc.map((v) => Math.round(v * 10)).join('_') : ''].join('.');
+  const encodeDeco = (d) => [d.wall, d.floor, d.rug, (d.items || []).join('_'), mySkin(), (loggedIn() ? st().badges || [] : []).join('_'), encodeLay(d)].join('.');
   const decodeDeco = (str) => { const [w, f, r, it] = String(str || '').split('.'); const ok = (cat, v) => DECOR[cat].some((x) => x.id === v);
-    return {wall: ok('wall', w) ? w : 'navy', floor: ok('floor', f) ? f : 'oak', rug: ok('rug', r) ? r : 'navy', items: String(it || '').split(/[_+]/).filter((x) => DECOR.items.some((y) => y.id === x)), skin: skinOn(String(str || '').split('.')[4]), badges: String(String(str || '').split('.')[5] || '').split('_').filter((b) => BADGES[b]), sc: (() => { const v = String(String(str || '').split('.')[6] || '').split('_').map(Number); return v.length === 3 && v.every(Number.isFinite) ? [Math.max(-100, Math.min(100, v[0])) / 10, Math.max(-105, Math.min(100, v[1])) / 10, v[2] / 10] : null; })()}; };
+    return {wall: ok('wall', w) ? w : 'navy', floor: ok('floor', f) ? f : 'oak', rug: ok('rug', r) ? r : 'navy', items: String(it || '').split(/[_+]/).filter((x) => DECOR.items.some((y) => y.id === x)), skin: skinOn(String(str || '').split('.')[4]), badges: String(String(str || '').split('.')[5] || '').split('_').filter((b) => BADGES[b]), ...(() => { const L = decodeLay(String(str || '').split('.')[6]); const sc = L.sc || null; delete L.sc; return {sc, lay: L}; })()}; };
   let myRoom = (() => { const v = store.get(ROOM_KEY, null); return v && v.deco ? {deco: Object.assign({}, DEFAULT_DECO, v.deco), owned: Array.isArray(v.owned) ? v.owned : []} : {deco: {...DEFAULT_DECO}, owned: []}; })();
   let shownDeco = myRoom.deco; // 지금 화면에 보이는 방 (친구 방이면 방장 방)
   const furniture = {};
   (function buildFurniture() {
     const G = (id, x, z, ry = 0) => { const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; g.visible = false; scene.add(g); furniture[id] = g; return g; };
     let g = G('arcade', -9.4, 6.6, Math.PI / 2); box(1.1, 2.2, 0.9, M(0x2b2f8a), 0, 1.1, 0, g); box(0.9, 0.7, 0.05, M(0x0b1430, {emissive: 0x5b6cff, emissiveIntensity: 0.9}), 0, 1.6, 0.46, g); box(1.0, 0.12, 0.5, M(0x1a1d55), 0, 1.05, 0.6, g); cyl(0.06, 0.06, 0.16, M(0xff4d5e), -0.2, 1.17, 0.62, 12, g); cyl(0.05, 0.05, 0.05, M(0xf7ce55), 0.2, 1.13, 0.62, 12, g);
-    g = G('trophy', 2.2, -10.3); box(2.2, 2.4, 0.5, mats.wood, 0, 1.2, 0, g); for (let i = 0; i < 3; i++) box(2.0, 0.05, 0.45, mats.gold, 0, 0.5 + i * 0.7, 0.03, g); for (let i = 0; i < 4; i++) { cyl(0.12, 0.08, 0.3, mats.gold, -0.75 + i * 0.5, 1.37, 0.05, 12, g); cyl(0.05, 0.05, 0.08, mats.gold, -0.75 + i * 0.5, 1.2, 0.05, 8, g); }
+    g = G('trophy', 5.6, -10.3); box(2.2, 2.4, 0.5, mats.wood, 0, 1.2, 0, g); for (let i = 0; i < 3; i++) box(2.0, 0.05, 0.45, mats.gold, 0, 0.5 + i * 0.7, 0.03, g); for (let i = 0; i < 4; i++) { cyl(0.12, 0.08, 0.3, mats.gold, -0.75 + i * 0.5, 1.37, 0.05, 12, g); cyl(0.05, 0.05, 0.08, mats.gold, -0.75 + i * 0.5, 1.2, 0.05, 8, g); }
     g = G('tank', 9.5, -6.2, -Math.PI / 2); box(2.0, 0.8, 0.8, mats.wood, 0, 0.4, 0, g); const w = box(1.9, 1.0, 0.7, new THREE.MeshPhysicalMaterial({color: 0x7fd3ff, transparent: true, opacity: 0.45, roughness: 0.05}), 0, 1.3, 0, g); w.castShadow = false;
       [0xff8a4c, 0xf7ce55, 0xff6fc8].forEach((c, i) => { const fsh = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), M(c)); fsh.scale.x = 1.6; fsh.position.set(-0.5 + i * 0.5, 1.2 + (i % 2) * 0.25, 0); fsh.userData.swim = i; g.add(fsh); });
     g = G('piano', 6.5, 9.4, Math.PI); box(2.0, 1.1, 0.7, M(0x0b0b10, {roughness: 0.2}), 0, 0.85, 0, g); box(1.9, 0.06, 0.35, M(0xffffff), 0, 1.0, 0.45, g); for (let i = 0; i < 9; i++) box(0.06, 0.06, 0.2, M(0x0b0b10), -0.8 + i * 0.2, 1.04, 0.38, g); box(0.9, 0.5, 0.4, M(0x0b0b10), 0, 0.25, 0.9, g);
@@ -600,7 +603,18 @@
     g = G('neon', -10.7, 2.8, Math.PI / 2); const hs = new THREE.Shape(); hs.moveTo(0, -0.6); hs.bezierCurveTo(-1.2, 0.2, -0.5, 1.0, 0, 0.45); hs.bezierCurveTo(0.5, 1.0, 1.2, 0.2, 0, -0.6);
       const heart = new THREE.Mesh(new THREE.ShapeGeometry(hs), new THREE.MeshBasicMaterial({color: 0xff4d8d, toneMapped: false})); heart.position.y = 3.6; g.add(heart); const hl = new THREE.PointLight(0xff4d8d, 0.6, 5, 2); hl.position.set(0, 3.6, 0.5); g.add(hl);
     g = G('plants', 9.4, 9.4); [[0, 0, 1.2], [-1.1, 0.3, 0.8], [0.4, -1.1, 0.9]].forEach(([x, z, sc]) => { cyl(0.3 * sc, 0.24 * sc, 0.55 * sc, mats.pot, x, 0.28 * sc, z, 16, g); for (let i = 0; i < 4; i++) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.34 * sc, 12, 10), mats.plant); l.position.set(x + Math.cos(i * 1.6) * 0.18 * sc, (0.85 + (i % 2) * 0.25) * sc, z + Math.sin(i * 1.6) * 0.18 * sc); l.scale.y = 1.3; l.castShadow = true; g.add(l); } });
+    g = G('sofa', -6.0, 5.4, Math.PI / 2); { const c = M(0xd98c6a, {roughness: 0.8}); box(2.6, 0.45, 1.0, c, 0, 0.4, 0, g); box(2.6, 0.8, 0.28, c, 0, 0.85, -0.42, g); for (const x of [-1.25, 1.25]) box(0.26, 0.65, 1.0, c, x, 0.6, 0, g); for (const x of [-0.6, 0.6]) { const cu = box(0.9, 0.18, 0.75, M(0xf2e6d0, {roughness: 0.9}), x, 0.7, 0.05, g); cu.castShadow = false; } }
+    g = G('bed', 6.6, 3.0, -Math.PI / 2); box(2.0, 0.4, 3.0, mats.wood, 0, 0.25, 0, g); box(1.9, 0.25, 2.8, M(0xf6f3ec, {roughness: 0.9}), 0, 0.55, 0.05, g); box(1.92, 0.2, 1.7, M(0x9fb7d9, {roughness: 0.9}), 0, 0.62, 0.55, g); box(2.0, 1.1, 0.15, mats.wood, 0, 0.75, -1.5, g); for (const x of [-0.5, 0.5]) { const pl = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 12), M(0xffffff, {roughness: 0.9})); pl.scale.set(1.2, 0.45, 0.8); pl.position.set(x, 0.8, -1.05); g.add(pl); }
+    g = G('desk', -6.6, -4.4, Math.PI / 2); box(2.0, 0.08, 0.9, mats.wood, 0, 1.0, 0, g); for (const [x, z] of [[-0.9, -0.38], [0.9, -0.38], [-0.9, 0.38], [0.9, 0.38]]) box(0.07, 1.0, 0.07, mats.wood, x, 0.5, z, g); box(0.7, 0.45, 0.04, M(0x0b1222, {emissive: 0x3a5ad9, emissiveIntensity: 0.6}), 0, 1.3, -0.25, g); box(0.6, 0.06, 0.6, M(0x2a3a66), 0, 0.55, 0.85, g); box(0.6, 0.6, 0.06, M(0x2a3a66), 0, 0.85, 1.12, g);
+    g = G('tv', 0, 9.6, Math.PI); box(2.4, 0.5, 0.6, mats.wood, 0, 0.25, 0, g); box(2.2, 1.25, 0.08, M(0x0b0b10, {roughness: 0.2}), 0, 1.25, 0, g); box(2.05, 1.1, 0.02, M(0x101a33, {emissive: 0x3a6ad9, emissiveIntensity: 0.5}), 0, 1.25, 0.05, g);
+    g = G('shelf', 9.9, -2.6, -Math.PI / 2); box(1.8, 2.4, 0.45, mats.wood, 0, 1.2, 0, g); for (let r = 0; r < 4; r++) { box(1.7, 0.05, 0.4, M(0x2a1d14), 0, 0.3 + r * 0.6, 0.02, g); for (let k = 0; k < 6; k++) box(0.14, 0.42, 0.3, M([0xff7a8a, 0x5aa9ff, 0xf7ce55, 0x3fcf9a, 0x9d86ff][(r + k) % 5], {roughness: 0.8}), -0.65 + k * 0.24 + (r % 2) * 0.05, 0.53 + r * 0.6, 0.04, g); }
+    g = G('lamp', 9.4, 6.4); cyl(0.2, 0.25, 0.05, mats.gold, 0, 0.03, 0, 16, g); cyl(0.03, 0.03, 1.6, mats.gold, 0, 0.8, 0, 8, g); { const sh = new THREE.Mesh(new THREE.SphereGeometry(0.35, 20, 14), M(0xffe2b8, {emissive: 0xffb45a, emissiveIntensity: 0.9})); sh.position.y = 1.75; g.add(sh); const l = new THREE.PointLight(0xffb45a, 0.6, 6, 2); l.position.y = 1.7; g.add(l); }
   })();
+  for (const [id, g] of Object.entries(furniture)) { g.userData.home = [g.position.x, g.position.z, g.rotation.y]; const zone = {furn: id, group: g, pos: [g.position.x, g.position.z]}; registerClick(g, zone); }
+  // 가구·진열장 배치: lay = {id: [x, z, 회전]} (방 주인이 놓은 자리. 친구가 놀러 와도 같은 자리에 보여요)
+  function placeFurniture(lay) { for (const [id, g] of Object.entries(furniture)) { const p = (lay && lay[id]) || g.userData.home; g.position.set(p[0], 0, p[1]); g.rotation.y = p[2]; } }
+  const encodeLay = (d) => { const L = {...(d.lay || {})}; if (Array.isArray(d.sc)) L.sc = d.sc; return Object.entries(L).filter(([k, v]) => /^[a-z]+$/.test(k) && Array.isArray(v)).map(([k, [x, z, r]]) => `${k}${Math.round(x * 10) + 200}y${Math.round(z * 10) + 200}r${Math.round((((r % 6.3) + 6.3) % 6.3) * 10)}`).join('_'); };
+  const decodeLay = (str) => { const out = {}; for (const m of String(str || '').matchAll(/([a-z]+)(\d+)y(\d+)r(\d+)/g)) out[m[1]] = [Math.max(-10.5, Math.min(10.5, (Number(m[2]) - 200) / 10)), Math.max(-10.5, Math.min(10.5, (Number(m[3]) - 200) / 10)), Number(m[4]) / 10]; return out; };
   const pick = (cat, id) => DECOR[cat].find((x) => x.id === id) || DECOR[cat][0];
   function applyDecor(d) {
     shownDeco = d;
@@ -609,6 +623,7 @@
     mats.floor.color.setHex(d.floor === 'oak' && day ? mats.floorDay : pick('floor', d.floor).c);
     mats.rug.color.setHex(pick('rug', d.rug).c);
     for (const [id, g] of Object.entries(furniture)) g.visible = (d.items || []).includes(id);
+    placeFurniture(d.lay);
   }
   const isAdmin = () => loggedIn() && !!st().admin; // 관리자 계정: 옷·가구 전부 열림
   const decoOwned = (cat, id) => isAdmin() || (DECOR[cat].find((x) => x.id === id)?.price || 0) === 0 || myRoom.owned.includes(`${cat}:${id}`);
@@ -634,10 +649,11 @@
       if (b.dataset.dcat === 'items') { const i = d.items.indexOf(b.dataset.did); if (i >= 0) d.items.splice(i, 1); else d.items.push(b.dataset.did); openRoomDeco(); return; }
       if (b.dataset.dcat) { d[b.dataset.dcat] = b.dataset.did; openRoomDeco(); return; }
       if (b.id === 'decoSave') { if (total > myChips() && !(acctOn() && !loggedIn())) return toast('씽크칩이 부족해요');
-        b.disabled = true; payChips(total, '방 꾸미기를 사려면 ').then((ok) => { b.disabled = false; if (!ok) return;
+        (async () => { if (total && !(await confirmBuy({title: `🛋️ ${due.length}개를 사서 꾸밀까요?`, desc: due.map((x) => pick(x.cat, x.id).name).join(', '), price: total}))) return;
+        b.disabled = true; const ok = await payChips(total, '방 꾸미기를 사려면 ', due.map((x) => `${x.cat}:${x.id}`).join(',')); b.disabled = false; if (!ok) return; const bid = payChips.lastId;
         myRoom.owned = [...new Set([...myRoom.owned, ...due.map((x) => `${x.cat}:${x.id}`)])]; myRoom.deco = JSON.parse(JSON.stringify(d)); store.set(ROOM_KEY, myRoom);
         if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'deco', deco: encodeDeco(myRoom.deco)}));
-        toast(total ? `구매 완료! -${total} 씽크칩` : '방을 저장했어요'); decoDraft = null; closeSheet(); drawBoard(); setTicker(); pushData('room'); }); }
+        toast(total ? `구매 완료! -${total} 씽크칩` : '방을 저장했어요'); decoDraft = null; closeSheet(); drawBoard(); setTicker(); pushData('room'); if (bid) showUndo(bid, `가구·벽지 ${due.length}개`, total); })(); }
     };
   }
   let hostDeco = null, homeOwner = ''; // 놀러 간 친구 방 주인이 꾸민 방
@@ -695,9 +711,22 @@
   function showName() { const l = document.getElementById('nameLabel'); if (l && typeof myName === 'function') l.textContent = myName(); }
   function editName() { openFriends(); setTimeout(() => { const i = document.getElementById('nameInput'); if (i) { i.focus(); i.select(); } }, 80); }
   function openSheet({kicker = '', title = '', html = '', cls = '', onClose = null}) {
+    if (sheetOnClose && !$('sheet').hidden && $('sheetKicker').textContent !== kicker) { const f = sheetOnClose; sheetOnClose = null; f(); } // 다른 창으로 바뀌면 앞 창 정리 (꾸미기 미리보기 등)
     $('sheetKicker').textContent = kicker; $('sheetTitle').textContent = title; $('sheetBody').innerHTML = html;
-    $('sheet').className = 'sheet ' + cls; $('sheet').hidden = false; $('backdrop').hidden = cls === 'closet'; sheetOnClose = onClose;
+    const keepPeek = !$('sheet').hidden && $('sheet').classList.contains('peek') && $('sheet').dataset.cls === cls; $('sheet').dataset.cls = cls;
+    $('sheet').className = 'sheet ' + cls + (keepPeek ? ' peek' : ''); $('sheet').style.transform = ''; $('sheet').hidden = false; $('backdrop').hidden = cls === 'closet'; sheetOnClose = onClose;
   }
+  // 아래 창 손잡이: 살짝 내리면 작게 접혀서 캐릭터·방이 크게 보이고, 다시 올리면 펼쳐져요. 끝까지 내리면 닫혀요
+  (function sheetDrag() {
+    const sh = $('sheet'); let y0 = null, dy = 0, t0 = 0;
+    const start = (e) => { if (e.target.closest('button,input')) return; y0 = e.clientY; dy = 0; t0 = Date.now(); sh.classList.add('dragging'); try { e.target.setPointerCapture(e.pointerId); } catch (er) {} };
+    const move = (e) => { if (y0 == null) return; dy = e.clientY - y0; const peek = sh.classList.contains('peek'); sh.style.transform = `translateY(${Math.max(peek ? -40 : -24, dy)}px)`; };
+    const end = () => { if (y0 == null) return; y0 = null; sh.classList.remove('dragging'); sh.style.transform = ''; const peek = sh.classList.contains('peek'), fast = Date.now() - t0 < 250;
+      if (Math.abs(dy) < 6) { if (peek) sh.classList.remove('peek'); return; } // 접힌 상태에서 톡 누르면 펼치기
+      if (peek) { if (dy < -20) sh.classList.remove('peek'); else if (dy > 60) closeSheet(); }
+      else if (dy > 220 || (fast && dy > 120)) closeSheet(); else if (dy > 40) sh.classList.add('peek'); };
+    for (const el of [sh.querySelector('.sheet-grip'), sh.querySelector('.sheet-head')]) { if (!el) continue; el.style.touchAction = 'none'; el.addEventListener('pointerdown', start); el.addEventListener('pointermove', move); el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end); }
+  })();
   function closeSheet() { $('sheet').hidden = true; $('backdrop').hidden = true; const f = sheetOnClose; sheetOnClose = null; f && f(); }
   $('sheetClose').onclick = closeSheet; $('backdrop').onclick = closeSheet;
 
@@ -823,6 +852,7 @@
       <div class="card reward"><div><h3>오늘의 출석 보너스</h3><p>${done ? '내일 다시 받을 수 있어요' : '하루 한 번 받을 수 있어요'}</p></div><strong>+${ATTEND}</strong></div>
       <button class="btn gold full" id="attendBtn" ${done ? 'disabled' : ''}>${done ? '오늘은 받았어요 ✓' : '출석 보너스 받기'}</button>
       ${skinSection()}
+      ${recentBuysHtml()}
       <div class="card" style="margin-top:12px"><h3>내 기록</h3><div class="stats"><div><b>${acctOn() && !loggedIn() ? '-' : fmt(myChips())}</b><small>씽크칩</small></div><div><b>${plays}</b><small>최근 플레이</small></div><div><b>${wins}</b><small>최근 승리</small></div></div>
       ${bestList.length ? `<p style="margin-top:10px">${bestList.map(([id, s]) => `${esc(GAME[id]?.title || id)} <b style="color:var(--gold)">${fmt(s)}</b>`).join(' · ')}</p>` : '<p style="margin-top:10px">아직 기록이 없어요. 테이블에서 한 판 해볼까요?</p>'}</div>
       <a class="btn ghost full" style="display:grid;place-items:center;text-decoration:none;color:inherit;margin-top:8px" href="${new URL('?wallet=1&from=lounge', ARENA).href}">⬡ 씽크칩 충전 · 지갑</a>
@@ -832,6 +862,7 @@
       <div class="card"><h3>비서의 팁</h3><p>${['심리전 테이블에선 채팅 이모티콘으로 표정을 바꿔 블러핑해 보세요 😏', '드레스룸에서 얼굴은 무료로 바꿀 수 있어요.', '친구 방을 만들면 라운지와 파티 게임을 같은 사람들과 할 수 있어요.', '메인 매치는 매일 자정에 바뀌어요.'][new Date().getDate() % 4]}</p></div>`});
     $('deskName').onchange = (e) => { const q = profile(); q.nickname = e.target.value.trim().slice(0, 12); saveProfile(q); me.tag.textContent = myName(); showName(); reconnect(); if (loggedIn()) ACC.call('hello', {name: myName()}).catch(() => {}); toast('이름을 바꿨어요'); };
     $('sheetBody').querySelectorAll('[data-skin]').forEach((x) => { x.onclick = () => buySkin(x.dataset.skin); });
+    $('sheetBody').querySelectorAll('[data-refund]').forEach((x) => { x.onclick = async () => { await refundBuy(x.dataset.refund); openDesk(); }; });
     if ($('deskLogin')) $('deskLogin').onclick = () => openLogin();
     if ($('logoutBtn')) $('logoutBtn').onclick = (e) => { e.preventDefault(); if (confirm('로그아웃할까요? 칩과 친구는 계정에 그대로 남아 있어요.')) { ACC.logout(); location.reload(); } };
     const b = $('attendBtn'); if (b) b.onclick = async () => {
@@ -894,8 +925,10 @@
   function wear() {
     const due = unpaid(draft), total = due.reduce((a, b) => a + b.price, 0);
     if (total > myChips() && !(acctOn() && !loggedIn())) { toast('씽크칩이 부족해요. 게임으로 모아 보세요!'); return; }
-    if (wear.busy) return; wear.busy = true;
-    payChips(total, '옷을 사려면 ').then((ok) => { wear.busy = false; if (ok) wearDone(due, total); });
+    if (wear.busy) return;
+    (async () => { if (total && !(await confirmBuy({title: `👕 ${due.length}개를 사서 입을까요?`, desc: due.map((x) => (W[x.cat].find((i) => i.id === x.id) || {}).name || x.id).join(', '), price: total}))) return;
+      wear.busy = true; const what = due.map((x) => `${x.cat}:${x.id}`).join(','), ok = await payChips(total, '옷을 사려면 ', what); wear.busy = false;
+      if (ok) { wearDone(due, total); if (payChips.lastId) showUndo(payChips.lastId, `옷 ${due.length}개`, total); } })();
   }
   function wearDone(due, total) {
     mine.owned = [...new Set([...mine.owned, ...due.map((x) => `${x.cat}:${x.id}`)])]; mine.look = Object.assign({}, draft); A.saveMine(mine);
@@ -981,11 +1014,12 @@
   let tossTried = 0;
   function tossAuto() { if (!IN_TOSS || !ACC || !acctOn() || ACC.hasSession() || Date.now() - tossTried < 5000) return; tossTried = Date.now(); ACC.loginDevice(myName()).then((ok) => { if (ok) afterSync(); }); }
   // 칩 쓰기: 로그인 상태면 서버 지갑에서, 오프라인 데모면 이 기기 지갑에서. 성공하면 true
-  async function payChips(total, why) {
+  async function payChips(total, why, what) {
+    payChips.lastId = null;
     if (!total) return true;
     if (!acctOn()) { if (total > myChips()) { toast('씽크칩이 부족해요'); return false; } addChips(-total); return true; }
     if (!loggedIn()) { openLogin(why); return false; }
-    try { const r = await ACC.call('spend', {amount: total}); if (r.ok) return true; toast(r.error === 'chips' ? '씽크칩이 부족해요' : '잠시 후 다시 시도해 주세요'); }
+    try { const r = await ACC.call('spend', {amount: total, what}); if (r.ok) { payChips.lastId = r.buyId || null; return true; } toast(r.error === 'chips' ? '씽크칩이 부족해요' : '잠시 후 다시 시도해 주세요'); }
     catch (e) { toast('인터넷 연결을 확인해 주세요'); }
     return false;
   }
@@ -1074,9 +1108,9 @@
       if (b.dataset.gtab) { giftTab = b.dataset.gtab; return openGift(f); }
       if (b.id === 'giftBack') { closeSheet(); return openFriends(); }
       if (b.id === 'giftCharge') { location.href = new URL('../index.html?wallet=1&from=lounge', location.href).href; return; }
-      if (b.dataset.amt) { const a = Number(b.dataset.amt); if (confirm(`${f.name}님에게 ⬡${fmt(a)} 씽크칩을 선물할까요?\n보낸 선물은 되돌릴 수 없어요.`)) { b.disabled = true; sendGift(f, a); } return; }
+      if (b.dataset.amt) { const a = Number(b.dataset.amt); if (await confirmBuy({title: `🎁 ${f.name}님에게 칩을 선물할까요?`, price: a, note: '보낸 선물은 취소할 수 없어요', cta: '선물하기'})) { b.disabled = true; sendGift(f, a); } return; }
       if (b.dataset.gi) { const [c, id] = b.dataset.gi.split(':'), it = itemList.find((x) => x.c === c && x.id === id); if (!it) return;
-        if (!confirm(`${f.name}님에게 '${it.name}'(⬡${it.price})을 선물할까요?`)) return; b.disabled = true;
+        if (!(await confirmBuy({title: `🎁 ${f.name}님에게 '${it.name}'을 선물할까요?`, price: it.price, note: '보낸 선물은 취소할 수 없어요', cta: '선물하기'}))) return; b.disabled = true;
         let r; try { r = await ACC.call('giftItem', {to: f.pid, cat: c, id, gid: 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9)}); } catch (er) { r = {error: 'net'}; }
         if (r.ok) { toast(`🎁 ${f.name}님에게 '${it.name}'을 선물했어요`); setExpr(me, 'happy'); chatLine('', `🎁 ${f.name}님에게 '${it.name}' 선물을 보냈어요`, true); drawBoard(); closeSheet(); openFriends(); }
         else { toast(r.error === 'owned' ? `${f.name}님은 이미 가지고 있어요 (칩은 돌려받았어요)` : r.error === 'chips' ? '씽크칩이 부족해요' : `선물하지 못했어요 · ${socialMsg(r.error)}`); b.disabled = false; } }
@@ -1102,7 +1136,7 @@
         closeSheet(); switchRoom('VIP1'); me.av.position.set(0, 0, 4); toast(r.usedTicket ? '👑 1회권을 썼어요 · 오늘 하루 자유 입장!' : '👑 VIP 라운지에 오신 걸 환영해요'); } catch (er) { b.disabled = false; toast('인터넷 연결을 확인해 주세요'); } return; }
       if (b.dataset.vplan) { const pl = VIP_PLANS_UI.find((x) => x[0] === b.dataset.vplan); if (myChips() < pl[2]) return toast(`씽크칩이 ⬡${fmt(pl[2] - myChips())} 부족해요`);
         if (!(await confirmBuy({title: `👑 VIP ${pl[1]}을 살까요?`, desc: pl[3], price: pl[2]}))) return;
-        b.disabled = true; try { const r = await ACC.call('vip', {plan: pl[0]}); toast(r.ok ? `${pl[1]} 구매 완료! -${pl[2]} 씽크칩` : r.error === 'chips' ? '씽크칩이 부족해요' : '구매하지 못했어요'); if (r.ok) openVip(); } catch (er) { toast('인터넷 연결을 확인해 주세요'); } b.disabled = false; } };
+        b.disabled = true; try { const r = await ACC.call('vip', {plan: pl[0]}); toast(r.ok ? `${pl[1]} 구매 완료! -${pl[2]} 씽크칩` : r.error === 'chips' ? '씽크칩이 부족해요' : '구매하지 못했어요'); if (r.ok) { openVip(); if (r.buyId) showUndo(r.buyId, `VIP ${pl[1]}`, pl[2]); } } catch (er) { toast('인터넷 연결을 확인해 주세요'); } b.disabled = false; } };
   }
   // 전광판 슈퍼챗: 화면 위에 크게 지나가요 (일반 8초 · 메가 20초)
   const scQueue = []; let scBusy = false;
@@ -1125,7 +1159,19 @@
     $('sheetBody').onclick = async (e) => { const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.tier) { const t = $('scText').value; tier = b.dataset.tier; draw(); $('scText').value = t; return; }
       if (b.id === 'scSend') { const text = $('scText').value.trim(); if (!text) return toast('띄울 말을 써 주세요'); const price = tier === 'mega' ? 200 : 50; if (myChips() < price) return toast(`씽크칩이 ⬡${fmt(price - myChips())} 부족해요`);
+        if (!(await confirmBuy({title: '📢 전광판에 띄울까요?', desc: `“${text}”`, price, note: '전광판에 뜬 슈퍼챗은 취소할 수 없어요', cta: '띄우기'}))) return;
         b.disabled = true; try { const r = await ACC.call('superchat', {text, tier, room: room.code}); if (r.ok) { closeSheet(); toast(`📢 전광판에 띄웠어요! -${price} 씽크칩`); } else { b.disabled = false; toast(r.error === 'slow' ? '10초에 한 번 보낼 수 있어요' : r.error === 'chips' ? '씽크칩이 부족해요' : '보내지 못했어요'); } } catch (er) { b.disabled = false; toast('인터넷 연결을 확인해 주세요'); } } };
+  }
+  function openFurniture(id) {
+    const it = DECOR.items.find((x) => x.id === id); if (!it) return;
+    if (!myHome()) return toast(`${homeOwner || '친구'}님 방의 ${it.name}이에요`);
+    openSheet({kicker: 'FURNITURE', title: `🛋️ ${it.name}`, html: `<div class="vip-plans"><button class="vip-plan" data-fa="move"><b>📍 옮기기</b><small>바닥을 눌러 놓을 곳 고르기</small></button><button class="vip-plan" data-fa="rot"><b>↻ 돌리기</b><small>45°씩</small></button><button class="vip-plan" data-fa="reset"><b>↩ 원래 자리</b><small>처음 놓인 곳으로</small></button><button class="vip-plan" data-fa="hide"><b>📦 치우기</b><small>보관함으로 (꾸미기에서 다시 놓기)</small></button></div>`});
+    $('sheetBody').onclick = (e) => { const b = e.target.closest('[data-fa]'); if (!b) return; const a = b.dataset.fa, lay = myRoom.deco.lay = myRoom.deco.lay || {}, g = furniture[id], cur = lay[id] || g.userData.home;
+      if (a === 'move') { closeSheet(); placingSc = id; toast(`바닥을 눌러 ${it.name}을(를) 놓을 곳을 고르세요`); return; }
+      if (a === 'rot') lay[id] = [cur[0], cur[1], Math.round((cur[2] + Math.PI / 4) * 10) / 10 % 6.3];
+      if (a === 'reset') delete lay[id];
+      if (a === 'hide') { myRoom.deco.items = (myRoom.deco.items || []).filter((x) => x !== id); closeSheet(); }
+      applyDecor(currentDeco()); saveRoomLayout(); toast(a === 'hide' ? '📦 치웠어요 · 꾸미기 > 가구에서 다시 놓을 수 있어요' : a === 'rot' ? '↻ 돌렸어요' : '↩ 원래 자리로'); };
   }
   function saveRoomLayout() { store.set(ROOM_KEY, myRoom); pushData('room'); if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'deco', deco: encodeDeco(myRoom.deco)})); }
   function openShowcase() {
@@ -1148,10 +1194,41 @@
     return `<div class="card" style="margin-top:12px"><h3>💁 비서 스킨 <small style="color:var(--muted);font-weight:600">· 바꾼 스킨은 내 방에도 서 있어요</small></h3><div class="items skin-items">${Object.entries(SEC_SKINS).map(([id, k]) => { const own = owned.includes(id) || isAdmin() || !k.price, gone = k.until && now > Date.parse(k.until + 'T00:00:00+09:00');
       return `<button class="item ${cur === id ? 'on' : ''}" data-skin="${id}" ${!own && gone ? 'disabled' : ''}>${esc(k.name)}${k.until ? `<em class="limited">${gone ? '판매 종료' : `한정 ~${dateKo(Date.parse(k.until) - 864e5)}`}</em>` : ''}<span class="price ${!k.price ? 'free' : own ? 'owned' : ''}">${!k.price ? '기본' : own ? (cur === id ? '사용 중' : '보유') : `⬡${k.price}`}</span></button>`; }).join('')}</div></div>`;
   }
+  // 구매 취소: 산 지 10분 안에만 (서버가 시간을 확인해요). 산 직후엔 아래에 '구매 취소' 바가 잠깐 떠요
+  function showUndo(id, label, amount) {
+    let el = $('undoBar'); if (!el) { el = document.createElement('div'); el.id = 'undoBar'; el.className = 'undo-bar'; document.body.appendChild(el); }
+    el.innerHTML = `<span>✓ ${esc(label)} 구매 완료 <small>· ${Math.round((st().refundMs || 600000) / 60000)}분 안에 취소 가능</small></span><button data-undo="${esc(id)}">구매 취소</button>`; el.hidden = false;
+    clearTimeout(showUndo.t); showUndo.t = setTimeout(() => { el.hidden = true; }, 9000);
+    el.onclick = (e) => { const b = e.target.closest('[data-undo]'); if (b) { el.hidden = true; refundBuy(b.dataset.undo); } };
+  }
+  async function refundBuy(id) {
+    const it = (st().buys || []).find((x) => x.id === id), left = it ? (st().refundMs || 600000) - (Date.now() - it.at) : 0;
+    if (it && left <= 0) return toast('취소할 수 있는 시간(10분)이 지났어요');
+    if (!(await confirmBuy({title: '↩ 이 구매를 취소할까요?', desc: it ? whatText(it.what) : '', price: it ? it.amount : 0, note: '쓴 칩을 돌려받고, 산 물건은 빠져요', cta: '구매 취소'}))) return;
+    let r; try { r = await ACC.call('refund', {id}); } catch (e) { return toast('인터넷 연결을 확인해 주세요'); }
+    if (!r.ok) return toast(r.error === 'late' ? '취소할 수 있는 시간(10분)이 지났어요' : r.error === 'used' ? '이미 사용해서 취소할 수 없어요' : '취소할 수 없는 구매예요');
+    const keys = String(r.refunded.what || '').split(',').filter(Boolean);
+    const ak = keys.filter((k) => ['hair', 'top', 'bottom', 'shoes', 'acc'].includes(k.split(':')[0])), rk = keys.filter((k) => ['wall', 'floor', 'rug', 'items'].includes(k.split(':')[0]));
+    if (ak.length) { mine.owned = mine.owned.filter((k) => !ak.includes(k)); const def = (A.GENDER_DEFAULT || {})[mine.look.body === 'm' ? 'm' : 'f'] || {};
+      for (const k of ak) { const [c, i] = k.split(':'); if (mine.look[c] === i) mine.look[c] = c === 'acc' ? 'none' : def[c] || W[c][0].id; }
+      A.saveMine(mine); me.look = A.encodeLook(mine.look); rebuildMe(); sendLook(); pushData('avatar'); }
+    if (rk.length) { myRoom.owned = myRoom.owned.filter((k) => !rk.includes(k)); const d = myRoom.deco;
+      for (const k of rk) { const [c, i] = k.split(':'); if (c === 'items') d.items = (d.items || []).filter((x) => x !== i); else if (d[c] === i) d[c] = DEFAULT_DECO[c]; }
+      store.set(ROOM_KEY, myRoom); applyDecor(currentDeco()); saveRoomLayout(); }
+    if (r.refunded.kind === 'skin') { setSecretary(mySkin()); if (myHome()) setHomeSecretary(mySkin()); }
+    toast(`↩ 구매를 취소했어요 · ⬡${fmt(r.refunded.amount)} 돌려받았어요`); drawBoard(); renderChips();
+  }
+  function whatText(what) { return String(what || '').split(',').filter(Boolean).map((k) => { const [c, i] = k.split(':');
+    if (c === 'vip') return `VIP ${(VIP_PLANS_UI.find((x) => x[0] === i) || [])[1] || ''}`; if (c === 'skin') return `비서 스킨 '${(SEC_SKINS[i] || {}).name || i}'`;
+    if (W[c]) return (W[c].find((x) => x.id === i) || {}).name || i; if (DECOR[c]) return pick(c, i).name; return i; }).join(', '); }
+  function recentBuysHtml() {
+    const list = loggedIn() ? (st().buys || []).filter((x) => (st().refundMs || 600000) - (Date.now() - x.at) > 0) : []; if (!list.length) return '';
+    return `<div class="card" style="margin-top:12px"><h3>↩ 최근 구매 <small style="color:var(--muted);font-weight:600">· 10분 안에만 취소할 수 있어요</small></h3>${list.map((x) => `<div class="pp-row"><div class="pp-name"><b>${esc(whatText(x.what))}</b><small>⬡${fmt(x.amount)} · ${Math.max(1, Math.ceil(((st().refundMs || 600000) - (Date.now() - x.at)) / 60000))}분 남음</small></div><button class="pp-btn ghost" data-refund="${esc(x.id)}">구매 취소</button></div>`).join('')}</div>`;
+  }
   // 구매 확인 창: 칩을 쓰기 전에 한 번 더 물어봐요
-  function confirmBuy({title, desc = '', price}) {
+  function confirmBuy({title, desc = '', price, note = '', cta = '구매하기'}) {
     return new Promise((res) => { let el = $('confirmPop'); if (!el) { el = document.createElement('div'); el.id = 'confirmPop'; el.className = 'confirm-pop'; document.body.appendChild(el); }
-      el.innerHTML = `<div class="cp-card" role="dialog" aria-modal="true"><b>${esc(title)}</b>${desc ? `<p>${esc(desc)}</p>` : ''}<div class="cp-price">⬡ ${fmt(price)} <small>· 보유 ⬡${fmt(myChips())} → ⬡${fmt(Math.max(0, myChips() - price))}</small></div><div class="cp-btns"><button class="btn ghost" data-cb="no">취소</button><button class="btn gold" data-cb="yes">구매하기</button></div></div>`;
+      el.innerHTML = `<div class="cp-card" role="dialog" aria-modal="true"><b>${esc(title)}</b>${desc ? `<p>${esc(desc)}</p>` : ''}<div class="cp-price">⬡ ${fmt(price)} <small>· 보유 ⬡${fmt(myChips())} → ⬡${fmt(Math.max(0, myChips() - price))}</small></div><p class="cp-note">${esc(note || (acctOn() && loggedIn() ? `산 뒤 ${Math.round((st().refundMs || 600000) / 60000)}분 안에는 구매를 취소할 수 있어요` : ''))}</p><div class="cp-btns"><button class="btn ghost" data-cb="no">취소</button><button class="btn gold" data-cb="yes">${esc(cta)}</button></div></div>`;
       el.hidden = false; el.onclick = (e) => { const b = e.target.closest('[data-cb]'); if (!b && e.target !== el) return; el.hidden = true; res(!!b && b.dataset.cb === 'yes'); }; });
   }
   async function buySkin(id) {
@@ -1166,7 +1243,7 @@
         say(sec, th.kind === 'jackpot' ? '꺄~ 너무 예뻐요!! 이거 받으세요 🎁✨' : th.kind === 'ticket' ? '고마워요! VIP 라운지에서 만나요 💜' : '어머, 저 주시는 거예요? 고마워요 💕');
         secretary.userData.armPose = {r: [-2.6, 0.2], l: [-2.6, -0.2]}; setTimeout(() => { secretary.userData.armPose = null; }, 1600); const at = new THREE.Vector3(); secretary.getWorldPosition(at); at.y = 2.6; spark(at, true); setTimeout(() => spark(at, true), 350); }
       else { toast(`비서가 '${k.name}'(으)로 갈아입었어요`); say(sec, '어때요? 잘 어울려요? 💕'); } if (myHome()) setHomeSecretary(id);
-      if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'deco', deco: encodeDeco(myRoom.deco)})); openDesk(); } catch (e) { setSecretary(mySkin()); toast('인터넷 연결을 확인해 주세요'); }
+      if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'deco', deco: encodeDeco(myRoom.deco)})); openDesk(); if (r.buyId) setTimeout(() => showUndo(r.buyId, `'${k.name}' 스킨`, k.price), 2600); } catch (e) { setSecretary(mySkin()); toast('인터넷 연결을 확인해 주세요'); }
   }
   // ───────── 접속자 · 친구 패널 (상단 '○명' 을 누르면 펼쳐져요, 롤 친구 목록처럼) ─────────
   const ONLINE_MS = 3 * 60e3;
@@ -1391,6 +1468,7 @@
     walkTo: (x, z) => { walkTo(me, x, z); sendPose(); },
     goZone: (id) => goToZone(ZONES.find((z) => z.id === id)),
     openZone: (id) => openZone(ZONES.find((z) => z.id === id)),
+    furniture: () => Object.entries(furniture).filter(([, g]) => g.visible).map(([id]) => id),
     room: () => ({...room}),
     // 영상 녹화용: 실시간 루프를 멈추고 dt 만큼씩 한 프레임 그리기
     manual: (on) => { manual = !!on; if (!manual) { clock.getDelta(); tick(); } },

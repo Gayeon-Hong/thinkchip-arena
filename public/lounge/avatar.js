@@ -10,7 +10,7 @@
     // g: 'f' 여자 전용 · 'm' 남자 전용 · 없으면 공용. hide: 예전 아이템 (산 사람만 보여요)
     hair: [
       {id: 'bob', name: '단발', price: 0, g: 'f'}, {id: 'buns', name: '양갈래 번', price: 0, g: 'f'}, {id: 'pony', name: '포니테일', price: 40, g: 'f'},
-      {id: 'long', name: '긴 생머리', price: 60, g: 'f'}, {id: 'hime', name: '히메컷', price: 70, g: 'f'}, {id: 'wave', name: 'S컬 웨이브', price: 80, g: 'f'}, {id: 'curly', name: '뽀글 펌', price: 60, g: 'f'},
+      {id: 'long', name: '긴 생머리', price: 60, g: 'f'}, {id: 'hime', name: '히메컷', price: 70, g: 'f'}, {id: 'wave', name: 'S컬 웨이브', price: 80, g: 'f'}, {id: 'curly', name: '물결펌', price: 60, g: 'f'},
       {id: 'part', name: '가르마', price: 0, g: 'm'}, {id: 'buzz', name: '짧은 머리', price: 0, g: 'm'}, {id: 'spiky', name: '삐죽 머리', price: 40, g: 'm'},
       {id: 'dandy', name: '댄디컷', price: 50, g: 'm'}, {id: 'mperm', name: '애즈펌', price: 60, g: 'm'}, {id: 'wolf', name: '울프컷', price: 60, g: 'm'},
     ],
@@ -115,31 +115,37 @@
     const bangs = (list) => list.forEach(([x, y, z, sx, sy, sz, rz, rx]) => {
       const b = add(g, sphere(r * 0.42, 32, 24), H, x * r, cy + (y + 0.14) * r, (z - 0.04) * r); b.scale.set(sx, sy * 0.78, sz); b.rotation.set((rx || 0.35) + 0.15, 0, rz || 0);
     });
-    const backVol = (z = -0.3, sy = 0.98, y = -0.12) => { const b = add(g, sphere(r * 1.08, 40, 32), H, 0, cy + y * r, z * r); b.scale.set(1.06, sy, 0.74); return b; };
+    const backVol = (z = -0.3, sy = 0.98, y = -0.12, sx = 1.06, sz = 0.74) => { const b = add(g, sphere(r * 1.08, 40, 32), H, 0, cy + y * r, z * r); b.scale.set(sx, sy, sz); return b; };
+    // 긴 머리: 목을 덮지 않게 뒤로 빼서 등 쪽으로 흘러내려요 (옆에서 보면 목이 보이게)
+    const longBack = (sy = 1.25) => { backVol(-0.42, 1.0, -0.05, 1.04, 0.72); const b = add(g, sphere(r * 0.95, 32, 24), H, 0, cy - r * 0.75, -r * 0.62); b.scale.set(1.0, sy, 0.5); return b; };
+    const wavyStrand = (x, z, len, amp = 0.09, rr = 0.2) => { for (let k = 0; k < len; k++) add(g, sphere(r * rr * (1 - k * 0.05), 16, 12), H, (x + Math.sin(k * 1.6) * amp * Math.sign(x || 1)) * r, cy - r * (0.05 + k * 0.27), z * r - k * r * 0.03); };
     if (style === 'buzz') { const c = add(g, sphere(r * 1.03, 48, 32, 0, Math.PI * 2, 0, Math.PI * 0.5), H, 0, cy + r * 0.02, -r * 0.04); c.rotation.x = -0.35; return; }
     cap();
     if (style === 'bob') { backVol(); for (const s of [-1, 1]) add(g, capsule(r * 0.24, r * 0.5), H, s * r * 0.88, cy - r * 0.3, -r * 0.02).scale.set(0.8, 1, 1);
       bangs([[-0.42, 0.5, 0.62, 1.0, 0.62, 0.55, 0.35], [0.05, 0.56, 0.68, 1.15, 0.6, 0.55, -0.05], [0.48, 0.48, 0.6, 0.95, 0.6, 0.55, -0.4]]); }
-    if (style === 'long') { const b = backVol(-0.32, 1.4, -0.45); for (const s of [-1, 1]) add(g, capsule(r * 0.24, r * 1.0), H, s * r * 0.86, cy - r * 0.55, -r * 0.05);
+    if (style === 'long') { longBack(1.3); for (const s of [-1, 1]) { const st = add(g, capsule(r * 0.17, r * 0.75), H, s * r * 0.86, cy - r * 0.45, -r * 0.28); st.rotation.x = 0.12; }
       bangs([[-0.3, 0.55, 0.62, 1.2, 0.6, 0.55, 0.25], [0.35, 0.52, 0.6, 1.1, 0.6, 0.55, -0.3]]); }
     if (style === 'part') { bangs([[-0.15, 0.62, 0.6, 1.7, 0.62, 0.6, 0.32, 0.4], [0.62, 0.45, 0.5, 0.8, 0.62, 0.55, -0.6]]); const t = add(g, new THREE.ConeGeometry(r * 0.14, r * 0.4, 16), H, r * 0.1, cy + r * 1.12, r * 0.05); t.rotation.z = -0.5; }
     if (style === 'spiky') { for (let i = 0; i < 7; i++) { const c = add(g, new THREE.ConeGeometry(r * 0.24, r * 0.6, 12), H, (i - 3) * r * 0.24, cy + r * 0.95 + Math.cos((i - 3) * 0.5) * r * 0.1, r * 0.1 - Math.abs(i - 3) * r * 0.06); c.rotation.x = -0.2; c.rotation.z = -(i - 3) * 0.2; } }
     if (style === 'buns') { backVol(-0.28, 1, -0.02); for (const s of [-1, 1]) add(g, sphere(r * 0.36, 28, 24), H, s * r * 0.78, cy + r * 0.78, -r * 0.1);
       bangs([[-0.3, 0.55, 0.62, 1.1, 0.55, 0.55, 0.2], [0.3, 0.55, 0.62, 1.1, 0.55, 0.55, -0.2]]); }
-    if (style === 'pony') { bangs([[0, 0.6, 0.6, 1.6, 0.55, 0.55, 0]]); const t = add(g, capsule(r * 0.2, r * 0.7), H, 0, cy + r * 0.1, -r * 1.08); t.rotation.x = 0.5;
-      add(g, new THREE.TorusGeometry(r * 0.13, r * 0.05, 8, 20), mat(0xff6b8a), 0, cy + r * 0.62, -r * 0.9).rotation.x = 1.1; }
+    if (style === 'pony') { bangs([[-0.3, 0.58, 0.62, 1.1, 0.58, 0.55, 0.25], [0.32, 0.56, 0.6, 1.05, 0.58, 0.55, -0.25]]);
+      // 풍성한 포니테일: 뒤로 튀어나왔다가 아래로 흘러내려서 옆에서도 잘 보여요
+      [[0, 0.55, -1.05, 0.34], [0, 0.25, -1.28, 0.36], [0, -0.12, -1.36, 0.33], [0, -0.48, -1.32, 0.28], [0, -0.78, -1.2, 0.2]].forEach(([x, y, z, rr]) => { const p = add(g, sphere(r * rr, 20, 16), H, x, cy + y * r, z * r); p.scale.set(1.05, 1.15, 0.95); });
+      add(g, new THREE.TorusGeometry(r * 0.17, r * 0.06, 8, 20), mat(0xff6b8a, {roughness: 0.4}), 0, cy + r * 0.66, -r * 0.92).rotation.x = 1.1; }
     if (style === 'wolf') { backVol(-0.34, 0.82, 0.02); for (const s of [-1, 1]) for (let k = 0; k < 2; k++) { const c = add(g, new THREE.ConeGeometry(r * 0.16, r * 0.55, 10), H, s * r * (0.7 + k * 0.08), cy - r * (0.3 + k * 0.22), -r * (0.25 + k * 0.18)); c.rotation.z = Math.PI + s * 0.2; } // 레이어드 뒷머리
       bangs([[-0.45, 0.48, 0.6, 0.9, 0.7, 0.55, 0.45], [0, 0.52, 0.66, 1.0, 0.7, 0.55, 0], [0.45, 0.48, 0.6, 0.9, 0.7, 0.55, -0.45]]); }
-    if (style === 'hime') { backVol(-0.32, 1.45, -0.5); for (const s of [-1, 1]) { const side = add(g, new THREE.BoxGeometry(r * 0.22, r * 0.75, r * 0.3), H, s * r * 0.86, cy - r * 0.32, r * 0.18); side.rotation.z = s * 0.04; } // 옆머리 일자
+    if (style === 'hime') { longBack(1.35); for (const s of [-1, 1]) { const side = add(g, new THREE.BoxGeometry(r * 0.2, r * 0.6, r * 0.26), H, s * r * 0.88, cy - r * 0.22, r * 0.12); side.rotation.z = s * 0.04; } // 옆머리 일자 (짧게 → 목이 보여요)
       bangs([[-0.42, 0.5, 0.62, 1.0, 0.55, 0.5, 0.05], [0, 0.53, 0.68, 1.05, 0.55, 0.5, 0], [0.42, 0.5, 0.62, 1.0, 0.55, 0.5, -0.05]]); } // 일자 앞머리
     if (style === 'dandy') { bangs([[-0.2, 0.62, 0.62, 1.7, 0.55, 0.55, 0.15, 0.6], [0.45, 0.58, 0.58, 1.0, 0.5, 0.5, -0.3, 0.6]]); const top = add(g, sphere(r * 0.9, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.4), H, 0, cy + r * 0.32, 0); top.scale.set(1.08, 0.9, 1.08); }
-    if (style === 'wave') { const b = backVol(-0.32, 1.45, -0.5); for (const s of [-1, 1]) for (let k = 0; k < 4; k++) add(g, sphere(r * 0.24, 18, 14), H, s * r * (0.86 + (k % 2) * 0.08), cy - r * (0.2 + k * 0.32), -r * 0.05);
+    if (style === 'wave') { longBack(1.2); for (const s of [-1, 1]) for (let k = 0; k < 4; k++) add(g, sphere(r * (0.22 + k * 0.02), 18, 14), H, s * r * (0.84 + (k % 2) * 0.12), cy - r * (0.15 + k * 0.32), -r * (0.3 + k * 0.06)); // 끝으로 갈수록 굵어지는 S컬
       bangs([[-0.35, 0.55, 0.62, 1.2, 0.6, 0.55, 0.3], [0.38, 0.5, 0.6, 1.0, 0.6, 0.55, -0.35]]); }
     if (style === 'mperm') { const top = add(g, sphere(r * 0.95, 32, 20, 0, Math.PI * 2, 0, Math.PI * 0.42), H, 0, cy + r * 0.3, -r * 0.02); top.scale.set(1.08, 0.95, 1.08);
       for (let i = 0; i < 9; i++) { const a = (i / 9) * Math.PI - Math.PI; add(g, sphere(r * 0.2, 16, 12), H, Math.cos(a) * r * 0.62, cy + r * 1.0 + Math.sin(i * 1.7) * r * 0.05, r * 0.2 + Math.sin(-a) * r * 0.2); }
       bangs([[-0.35, 0.5, 0.64, 0.95, 0.62, 0.55, 0.45, 0.5], [0.05, 0.54, 0.7, 1.05, 0.62, 0.55, 0.1, 0.5], [0.45, 0.5, 0.62, 0.9, 0.62, 0.55, -0.3, 0.5]]); } // 쉼표처럼 내린 앞머리 + 볼륨
-    if (style === 'curly') { for (let i = 0; i < 14; i++) { const a = (i / 14) * Math.PI * 2; add(g, sphere(r * 0.3, 20, 16), H, Math.cos(a) * r * 0.82, cy + r * 0.55 + Math.sin(a * 2) * r * 0.06, Math.sin(a) * r * 0.75 - r * 0.12); }
-      for (let i = 0; i < 5; i++) add(g, sphere(r * 0.3, 20, 16), H, (i - 2) * r * 0.34, cy + r * 0.98, (i % 2) * r * 0.1 - r * 0.05); }
+    if (style === 'curly') { // 물결펌: 동글동글이 아니라 어깨 아래로 물결치는 긴 머리
+      longBack(1.15); for (const s of [-1, 1]) { wavyStrand(s * 0.86, -0.22, 5, 0.12, 0.2); wavyStrand(s * 0.55, -0.62, 6, 0.1, 0.22); } wavyStrand(0.001, -0.75, 6, 0.08, 0.24);
+      bangs([[-0.38, 0.52, 0.62, 1.1, 0.62, 0.55, 0.35], [0.4, 0.5, 0.6, 1.05, 0.62, 0.55, -0.35]]); }
   }
 
   // ── 상의 ──
