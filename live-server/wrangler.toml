@@ -25,8 +25,8 @@ new_sqlite_classes = ["User"]
 [vars]
 ADMIN_PIDS = "6ed1070a82ab8dfec6e8bad6"
 
-# 토스 인앱결제 주문 확인용 mTLS 인증서 (05_toss_mtls_upload_windows.cmd 로 올린 뒤 ID 를 넣고 주석을 풀어요)
+# 토스 인앱결제 주문 확인용 mTLS 인증서 (05_toss_mtls_upload_windows.cmd 로 올린 뒤 올린 인증서, 2027-12-07 만료 전에 새로 발급해 교체)
 # 이 바인딩이 없으면 지금처럼 주문번호 중복만 막고 지급해요
-# [[mtls_certificates]]
-# binding = "TOSS_MTLS"
-# certificate_id = ""
+[[mtls_certificates]]
+binding = "TOSS_MTLS"
+certificate_id = "485e0541-1f6c-49cf-8f2f-7fe487315290"
