@@ -21,7 +21,7 @@ export function selectTriad(g,index) {
  const selected=g.selected.includes(index)?g.selected.filter(i=>i!==index):[...g.selected,index];
  if(selected.length!==3)return {...g,selected,last:null};
  const valid=isTrio(selected.map(i=>g.board[i]));
- if(!valid){const cards=selected.map(i=>g.board[i]),why=['color','shape','count'].filter(k=>new Set(cards.map(c=>c[k])).size===2);return {...g,selected:[],mistakes:g.mistakes+1,score:Math.max(0,g.score-8),last:{valid:false,why}};}
+ if(!valid){const cards=selected.map(i=>g.board[i]),why=['color','shape','count'].filter(k=>new Set(cards.map(c=>c[k])).size===2);return {...g,selected:[],mistakes:g.mistakes+1,score:Math.max(0,g.score-8),last:{valid:false,why,cards}};}
  const round=g.round+1,over=round===5;
  return {...g,selected:[],round,score:g.score+40,solved:g.solved+1,over,board:over?g.board:trioBoard(g.seed,round),last:{valid:true}};
 }
