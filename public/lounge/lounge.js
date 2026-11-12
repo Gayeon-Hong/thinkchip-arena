@@ -46,6 +46,7 @@
     {id: 'closet', title: '드레스룸', sub: '옷·소품 꾸미기', icon: '👕', closet: true, pos: [-8.6, 0.4], color: 0xffffff},
     {id: 'desk', title: '비서 데스크', sub: '출석 보너스 · 내 기록', icon: '💁', desk: true, pos: [8.6, 0.4], color: 0x7c8cff},
     {id: 'showcase', title: '뱃지 진열장', sub: '모은 뱃지 전시', icon: '🏅', showcase: true, pos: [0, -10.3], color: 0xf7ce55},
+    {id: 'door', title: '내 방 문', sub: '라운지 ↔ 내 방', icon: '🚪', door: true, pos: [-9.7, -3.0], color: 0xf7ce55},
     {id: 'vip', title: 'VIP 라운지', sub: '뱃지·입장권이 있어야 들어가요', icon: '👑', vip: true, pos: [-8.4, -6.6], color: 0xb569ff},
   ];
   const GAME = Object.fromEntries([...CFG.GAMES, ...CFG.PARTY].map((g) => [g.id, g]));
@@ -252,6 +253,21 @@
       x.beginPath(); x.arc(64, 64, 58, 0, Math.PI * 2); x.fillStyle = on ? '#f7ce55' : '#3a3f52'; x.fill(); x.beginPath(); x.arc(64, 64, 48, 0, Math.PI * 2); x.fillStyle = on ? '#fff6d8' : '#262a38'; x.fill();
       x.font = `${on ? 58 : 48}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.globalAlpha = on ? 1 : 0.35; x.fillStyle = '#8a90a6'; x.fillText(on ? BADGES[sl.id].e : '?', 64, 70); x.globalAlpha = 1; sl.tex.needsUpdate = true; }
   }
+  // 내 방 문: 왼쪽 벽에 달린 나무 문. 라운지에선 '내 방', 내 방에선 '라운지로' (걸어가서 문을 열고 들어가요)
+  (function doorG() {
+    const z = ZONES.find((x) => x.door), g = new THREE.Group(); g.position.set(-ROOM + 0.12, 0, z.pos[1]); g.rotation.y = Math.PI / 2; scene.add(g);
+    box(1.9, 3.1, 0.18, mats.gold, 0, 1.55, 0, g); box(1.7, 2.95, 0.2, M(0x2a1d14), 0, 1.5, 0.01, g);
+    const hinge = new THREE.Group(); hinge.position.set(-0.8, 0, 0.12); g.add(hinge); z.leaf = hinge;
+    const leaf = box(1.6, 2.85, 0.1, M(0xb07a4a, {roughness: 0.55}), 0.8, 1.45, 0, hinge);
+    for (const [y, h] of [[2.2, 0.9], [0.9, 1.1]]) { const pnl = box(1.1, h, 0.04, M(0x9a6438, {roughness: 0.6}), 0.8, y, 0.06, hinge); pnl.castShadow = false; }
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.08, 14, 10), mats.gold); knob.position.set(1.38, 1.4, 0.12); hinge.add(knob);
+    const plate = box(0.9, 0.28, 0.03, M(0xfff6d8, {emissive: 0xf7ce55, emissiveIntensity: 0.25}), 0.8, 2.55, 0.09, hinge); plate.castShadow = false;
+    const mat = cyl(0.9, 0.9, 0.02, M(0x9b1b30, {roughness: 0.95}), 0, 0.012, 1.0, 28, g); mat.scale.z = 0.55;
+    const l = new THREE.PointLight(0xffd59a, 0.5, 4, 2); l.position.set(0, 3.2, 0.6); g.add(l);
+    const sign = neon('🏠 내 방', '#f7ce55', 2.2); sign.position.set(0, 3.75, 0.2); g.add(sign); z.sign = sign;
+    registerClick(g, z);
+  })();
+  function openDoor(then) { const z = ZONES.find((x) => x.door); if (!z || !z.leaf) return then && then(); let k = 0; const step = () => { k += 0.08; z.leaf.rotation.y = -Math.sin(Math.min(1, k) * Math.PI / 2) * 1.4; if (k < 1) requestAnimationFrame(step); else setTimeout(() => { then && then(); z.leaf.rotation.y = 0; }, 150); }; step(); }
   // 화분 · 스탠드 조명 장식
   function plant(x, z, s = 1) { cyl(0.32 * s, 0.25 * s, 0.6 * s, mats.pot, x, 0.3 * s, z, 20); for (let i = 0; i < 5; i++) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.38 * s, 16, 12), mats.plant); l.position.set(x + Math.cos(i * 1.3) * 0.22 * s, (0.95 + (i % 3) * 0.22) * s, z + Math.sin(i * 1.3) * 0.22 * s); l.scale.y = 1.3; l.castShadow = true; scene.add(l); } }
   plant(-9.8, -9.8, 1.4); plant(9.6, -9.6, 1.2); plant(-9.8, 9.2, 1.1); plant(3.6, -9.6, 0.9); plant(-3.6, -9.6, 0.9);
@@ -673,7 +689,8 @@
   function currentDeco() { if (decoDraft) return decoDraft; if (isVip()) return VIP_DECO; if (!isHome()) return DEFAULT_DECO; return myHome() ? myRoom.deco : (hostDeco || DEFAULT_DECO); }
   function applyMode() {
     const home = isHome();
-    for (const z of ZONES) if (z.group) z.group.visible = z.closet || z.showcase ? home : !home;
+    for (const z of ZONES) if (z.group && !z.door) z.group.visible = z.closet || z.showcase ? home : !home;
+    { const dz = ZONES.find((z) => z.door); if (dz && dz.group && dz.doorHome !== home) { dz.doorHome = home; const old = dz.sign, ns = neon(home ? '🏛️ 라운지로' : '🏠 내 방', '#f7ce55', 2.2); ns.position.copy(old.position); dz.group.remove(old); dz.group.add(ns); dz.sign = ns; } }
     if (home) { drawShowcase(myHome() ? (loggedIn() ? st().badges : []) : (hostDeco && hostDeco.badges) || []); placeShowcase(myHome() ? myRoom.deco.sc : hostDeco && hostDeco.sc); }
     OBST.length = 0; if (!home) OBST.push(...LOUNGE_OBST);
     if (!home) homeOwner = '';
@@ -832,6 +849,7 @@
     JOIN_RE.lastIndex = 0; return true;
   }
   function openZone(zone) {
+    if (zone.door) return openDoor(() => { if (isHome()) goLounge(); else goHome(); me.av.position.set(-9.0, 0, zone.pos[1]); me.target = null; me.av.rotation.y = Math.PI / 2; sendPose(); }); // 문 앞에서 나와요
     if (zone.showcase) return openShowcase();
     if (zone.vip) return isVip() ? (switchRoom(null), toast('🏛 라운지로 나왔어요')) : openVip();
     if (zone.closet) return openCloset();
