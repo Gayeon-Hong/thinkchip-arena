@@ -320,6 +320,11 @@ export class User extends DurableObject {
           if (t.wait || t.retry) return {...this.view(), error: 'pending', status: 503}; // 기기 줄에 남겨 두고 다음에 다시 확인
           if (t.bad || t.sku !== b.sku) return {...this.view(), error: 'bad', status: 400};
         }
+        else { // MS 스토어(PWA)는 서버에서 확인할 공식 방법이 없어서, 확인 안 된 지급은 하루 5건까지만 받아요
+          const day = Date.now() - 864e5; w.msBuys = (w.msBuys || []).filter((t) => t > day);
+          if (w.msBuys.length >= 5) return {...this.view(), error: 'pending', status: 429};
+          w.msBuys = [...w.msBuys, Date.now()];
+        }
         const owner = await this.env.USER.get(this.env.USER.idFromName('__orders__')).claimOrder(id, u.pid).catch(() => u.pid);
         if (owner !== u.pid) return {...this.view(), error: 'bad', status: 400}; // 다른 계정이 이미 받은 주문
         w.orders = [...w.orders, id].slice(-500); this.addChips(chips, true); extra.granted = chips;
