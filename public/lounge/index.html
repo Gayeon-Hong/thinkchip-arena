@@ -18,7 +18,7 @@
     <span><b>THINKCHIP LOUNGE</b><small id="roomLabel">공개 라운지</small></span>
   </a>
   <div class="top-right">
-    <span class="online" id="online"><i></i><b>1</b>명</span>
+    <button class="online" id="online" aria-label="접속자·친구 목록"><i></i><b>1</b>명</button>
     <button class="pill name-pill" id="nameBtn" aria-label="내 이름 바꾸기" title="이름 바꾸기"><span aria-hidden="true">✏️</span><b id="nameLabel">나</b></button>
     <button class="pill chips" id="chipsBtn" aria-label="내 씽크칩"><span class="chip-dot">⬡</span><b id="chips">100</b></button>
     <button class="icon" id="viewBtn" aria-label="시점 바꾸기" title="시점 바꾸기">🎥</button>
@@ -27,6 +27,8 @@
 </header>
 
 <div class="ticker" aria-live="polite"><span class="tag">LIVE</span><div class="ticker-track"><span id="tickerText">라운지에 오신 걸 환영해요</span></div></div>
+
+<aside class="people" id="people" hidden aria-label="접속자와 친구"></aside>
 
 <nav class="dock-right" aria-label="라운지 메뉴">
   <button data-open="games"><span>🎮</span>게임</button>

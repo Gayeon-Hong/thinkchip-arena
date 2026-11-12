@@ -189,7 +189,9 @@
 
   // ───────── 캐릭터 ─────────
   const labels = $('labels');
-  const OBST = ZONES.filter((z) => z.games || z.main).map((z) => ({x: z.pos[0], z: z.pos[1], r: z.main ? 2.0 : 1.55})); // 캐릭터가 못 지나가는 테이블 (원)
+  for (const z of ZONES) z.group = z.sign && z.sign.parent; // 라운지 ↔ 내 방 전환 때 통째로 숨기고 보여요
+  const LOUNGE_OBST = ZONES.filter((z) => z.games || z.main).map((z) => ({x: z.pos[0], z: z.pos[1], r: z.main ? 2.0 : 1.55})); // 캐릭터가 못 지나가는 테이블 (원)
+  const OBST = [...LOUNGE_OBST];
   // 테이블을 뚫지 않고 가장자리를 따라 돌아가요. 도는 방향은 부딪힌 순간 한 번만 정해서 (매 프레임 바뀌면 제자리에서 떨어요)
   function avoid(p, pos, dx, dz, step) {
     for (const o of OBST) {
@@ -348,6 +350,7 @@
   const flyers = [];
   function playRx(fromId, toId, k) {
     const a = players.get(fromId), b = players.get(toId), r = RX[k]; if (!a || !b || !r) return;
+    if (k === 'rose') return playRose(a, b);
     const n = k === 'heart' ? 5 : k === 'boo' ? 3 : 3;
     for (let i = 0; i < n; i++) { const sp = emojiSprite(r.e); sp.scale.setScalar(0.01); flyers.push({sp, a, b, t: -i * 0.12, dur: 0.85 + Math.random() * 0.25, side: (Math.random() - 0.5) * 1.4, k}); }
     if (k === 'boo') { a.av.userData.armPose = {r: [-1.2, 0], l: [-1.2, 0]}; setTimeout(() => { if (!a.hs) a.av.userData.armPose = null; }, 900); }
@@ -355,8 +358,19 @@
     setTimeout(() => { if (!players.has(b.id)) return; setExpr(b, r.expr, 3500); say(b, r.say); }, 900);
     if (fromId === ME || toId === ME) chatLine('', `${fromId === ME ? '나' : otherName({pid: a.id, name: a.name})} → ${toId === ME ? '나' : otherName({pid: b.id, name: b.name})} ${r.e} ${r.label}`, true);
   }
+  // 장미: 상대를 바라보고 한쪽 무릎을 꿇은 채 장미를 내밀었다가 → 장미가 날아가 안기고 → 일어나요
+  function playRose(a, b) {
+    clearTimeout(a.roseT); a.target = null;
+    a.av.rotation.y = Math.atan2(b.av.position.x - a.av.position.x, b.av.position.z - a.av.position.z);
+    a.av.userData.kneel = true; a.kneelUntil = simT + 2.6; a.av.userData.armPose = {r: [-1.5, 0.15]}; setExpr(a, 'wink', 3000);
+    const sp = emojiSprite('🌹'); sp.scale.setScalar(0.42); flyers.push({sp, a, b, t: -1.3, dur: 1.0, side: 0.25, k: 'rose', hold: true});
+    a.roseT = setTimeout(() => { a.av.userData.kneel = false; if (!a.hs) a.av.userData.armPose = null; }, 2600);
+    setTimeout(() => { if (!players.has(b.id)) return; setExpr(b, 'happy', 4000); say(b, '🌹💕'); }, 2300);
+    if (a.id === ME || b.id === ME) chatLine('', `${a.id === ME ? '나' : otherName({pid: a.id, name: a.name})} → ${b.id === ME ? '나' : otherName({pid: b.id, name: b.name})} 🌹 무릎 꿇고 장미`, true);
+  }
+  const handV = new THREE.Vector3();
   function stepFlyers(dt) {
-    for (let i = flyers.length - 1; i >= 0; i--) { const f = flyers[i]; f.t += dt; if (f.t < 0) continue;
+    for (let i = flyers.length - 1; i >= 0; i--) { const f = flyers[i]; f.t += dt; if (f.t < 0) { if (f.hold) { const h = A.handWorld(f.a.av, 'r', handV); if (h) f.sp.position.set(h.x, h.y + 0.25, h.z); } continue; }
       const u = Math.min(1, f.t / f.dur), pa = f.a.av.position, pb = f.b.av.position;
       if (!players.has(f.a.id) || !players.has(f.b.id) || u >= 1) { if (u >= 1 && players.has(f.b.id)) { const at = pb.clone(); at.y = 2.4; spark(at, f.k === 'heart'); } scene.remove(f.sp); f.sp.material.dispose(); flyers.splice(i, 1); continue; }
       const dx = pb.x - pa.x, dz = pb.z - pa.z, len = Math.hypot(dx, dz) || 1;
@@ -419,7 +433,7 @@
     const others = [...players.values()].filter((p) => p !== me), ph = ray.intersectObjects(others.map((p) => p.av), true)[0];
     if (ph) { let o = ph.object; while (o && !others.some((p) => p.av === o)) o = o.parent; const who = others.find((p) => p.av === o); if (who) { approachFor(who); return; } }
     hideRx(); camState.pan.set(0, 0, 0); // 걸어가면 다시 내 캐릭터 중심으로 (손인사 중에 바닥을 누르면 멈추고 걸어가요)
-    const hit = ray.intersectObjects(clickables, false)[0];
+    const hit = ray.intersectObjects(clickables.filter((o) => o.userData.zone.group?.visible !== false), false)[0];
     if (hit) { goToZone(hit.object.userData.zone); return; }
     const fh = ray.intersectObject(floor, false)[0];
     if (fh) { walkTo(me, fh.point.x, fh.point.z); sendPose(); }
@@ -461,7 +475,7 @@
           avoid(p, pos, dx, dz, step);
           const want = Math.atan2(dx, dz); let diff = want - p.av.rotation.y; diff = Math.atan2(Math.sin(diff), Math.cos(diff)); p.av.rotation.y += diff * Math.min(1, dt * 10); }
       }
-      if (!p.target && !p.hs && !(p === me && camState.closeUp)) { // 서 있을 땐 카메라(또는 방금 말한 사람) 쪽으로 천천히 몸을 돌려요 — 말풍선과 표정이 잘 보이게
+      if (!p.target && !p.hs && !p.av.userData.kneel && !(p === me && camState.closeUp)) { // 서 있을 땐 카메라(또는 방금 말한 사람) 쪽으로 천천히 몸을 돌려요 — 말풍선과 표정이 잘 보이게
         const f = lookAtSpeaker && lookAtSpeaker.id !== p.id && t - lookAtSpeaker.at < 4 ? lookAtSpeaker.av.position : camera.position;
         let diff = Math.atan2(f.x - pos.x, f.z - pos.z) - p.av.rotation.y; diff = Math.atan2(Math.sin(diff), Math.cos(diff));
         p.av.rotation.y += diff * Math.min(1, dt * 2.5);
@@ -471,7 +485,8 @@
       project({x: pos.x, z: pos.z}, 2.75, p.tag); project({x: pos.x, z: pos.z}, 3.15, p.bubble);
     }
     stepHandshake(dt); stepFlyers(dt);
-    if (secretary) { A.animateAvatar(secretary, t, 'idle', 1.3); const wp = new THREE.Vector3(); secretary.getWorldPosition(wp); project({x: wp.x, z: wp.z}, 2.75, npcTag); project({x: wp.x, z: wp.z}, 3.15, deskBubble); }
+    if (secretary && !secretary.parent.visible) { npcTag.style.display = 'none'; deskBubble.style.display = 'none'; }
+    else if (secretary) { A.animateAvatar(secretary, t, 'idle', 1.3); const wp = new THREE.Vector3(); secretary.getWorldPosition(wp); project({x: wp.x, z: wp.z}, 2.75, npcTag); project({x: wp.x, z: wp.z}, 3.15, deskBubble); }
     const mz = ZONES.find((z) => z.main); if (mz.spin) mz.spin.rotation.y += dt * 0.6;
     if (furniture.tank && furniture.tank.visible) furniture.tank.children.forEach((c) => { if (c.userData.swim != null) c.position.x = Math.sin(t * 0.8 + c.userData.swim * 2) * 0.7; });
     for (const z of ZONES) if (z.sign) z.sign.visible = !camState.closeUp && (camState.pitch > 0.5 || z.sign.getWorldPosition(v3).distanceTo(camera.position) > 7); // 클로즈업·눈높이 보기에선 가까운 간판이 화면을 가리지 않게
@@ -534,7 +549,7 @@
     const btn = (cat, it) => { const on = cat === 'items' ? d.items.includes(it.id) : d[cat] === it.id; const own = decoOwned(cat, it.id);
       const sw = it.c != null ? `<i style="display:block;width:100%;height:16px;border-radius:6px;margin-bottom:5px;background:#${it.c.toString(16).padStart(6, '0')}"></i>` : '';
       return `<button class="item ${on ? 'on' : ''}" data-dcat="${cat}" data-did="${it.id}">${sw}${esc(it.name)}<span class="price ${it.price === 0 ? 'free' : own ? 'owned' : ''}">${it.price === 0 ? '기본' : own ? '보유' : `⬡${it.price}`}</span></button>`; };
-    openSheet({kicker: 'MY ROOM', title: '🏠 방 꾸미기', cls: 'closet', onClose: () => { decoDraft = null; applyDecor(room.public ? myRoom.deco : (hostDeco || myRoom.deco)); }, html: `
+    openSheet({kicker: 'MY ROOM', title: '🏠 방 꾸미기', cls: 'closet', onClose: () => { decoDraft = null; applyDecor(currentDeco()); }, html: `
       <div class="tabs">${tabs.map(([id, n]) => `<button data-dtab="${id}" class="${decoTab === id ? 'on' : ''}">${n}</button>`).join('')}</div>
       <div class="items">${DECOR[decoTab].map((it) => btn(decoTab, it)).join('')}</div>
       <p style="font-size:11.5px;color:var(--muted);margin:10px 2px 0">${decoTab === 'items' ? '눌러서 놓기 / 빼기. ' : ''}꾸민 방은 내가 만든 친구 방에 들어온 친구들에게도 보여요.</p>
@@ -551,7 +566,32 @@
         toast(total ? `구매 완료! -${total} 씽크칩` : '방을 저장했어요'); decoDraft = null; closeSheet(); drawBoard(); setTicker(); pushData('room'); }); }
     };
   }
-  let hostDeco = null; // 친구 방 방장이 꾸민 방
+  let hostDeco = null, homeOwner = ''; // 놀러 간 친구 방 주인이 꾸민 방
+  // ───────── 라운지 ↔ 내 방 ─────────
+  // 라운지: 게임 테이블·파티·비서 데스크 (모두 같은 기본 인테리어)
+  // 내 방: 내가 꾸민 벽지·바닥·가구 + 드레스룸. 친구는 친구 목록에서 '놀러가기'로 들어와요 (방 코드 H + 내 ID 앞 5자리)
+  const homeCode = (id) => 'H' + String(id || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 5).padEnd(5, '0');
+  const isHome = () => !room.public && /^H[A-Z0-9]{5}$/.test(room.code || '');
+  const myHome = () => isHome() && room.code === homeCode(ME);
+  function currentDeco() { if (decoDraft) return decoDraft; if (!isHome()) return DEFAULT_DECO; return myHome() ? myRoom.deco : (hostDeco || DEFAULT_DECO); }
+  function applyMode() {
+    const home = isHome();
+    for (const z of ZONES) if (z.group) z.group.visible = z.closet ? home : !home;
+    OBST.length = 0; if (!home) OBST.push(...LOUNGE_OBST);
+    if (!home) homeOwner = '';
+    if (!decoDraft) applyDecor(currentDeco()); renderDock(); renderRoomLabel();
+    $('hint').textContent = home ? (myHome() ? '여기는 내 방이에요 · 꾸미기·드레스룸은 오른쪽 메뉴에서' : '친구 방에 놀러 왔어요 · 캐릭터를 눌러 인사해 보세요') : '바닥을 눌러 걸어가고, 테이블을 눌러 게임을 골라요';
+  }
+  function goHome(then) { if (!myHome()) { switchRoom(homeCode(ME)); me.av.position.set(0, 0, 3); toast('🏠 내 방에 들어왔어요'); } if (then) setTimeout(then, 450); }
+  function goLounge(then) { if (isHome()) { switchRoom(null); me.av.position.set(0, 0, 4); toast('🏛 라운지로 나왔어요'); } if (then) setTimeout(then, 450); }
+  function goRoom(code) { if (!code || /^LNG\d$/.test(code)) { if (isHome() || !room.public) switchRoom(null); return; } if (code !== room.code) { switchRoom(code); me.av.position.set(0, 0, 4); } }
+  function renderDock() {
+    const home = isHome(), items = home
+      ? [...(myHome() ? [['deco', '🛋️', '꾸미기'], ['closet', '👕', '드레스룸']] : [['home', '🏠', '내 방']]), ['lounge', '🏛️', '라운지'], ['games', '🎮', '게임'], ['friends', '👥', '친구']]
+      : [['games', '🎮', '게임'], ['home', '🏠', '내 방'], ['desk', '💁', '비서'], ['friends', '👥', '친구']];
+    document.querySelector('.dock-right').innerHTML = items.map(([k, e, n]) => `<button data-open="${k}"><span>${e}</span>${n}</button>`).join('');
+    renderSocialBadge();
+  }
   // ───────── UI ─────────
   function toast(msg) { const el = $('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('show'), 2600); }
   function renderChips() { $('chips').textContent = acctOn() && !loggedIn() ? (IN_TOSS ? '…' : '로그인') : fmt(myChips()); }
@@ -779,8 +819,8 @@
   // ── 미니홈피 감성: 방마다 TODAY/TOTAL 방문자 수 + 방명록 ──
   let hp = null; // {today, total, gb:[{name, look, text, at}]}
   function renderRoomLabel() {
-    const base = room.public ? '공개 라운지' : `친구 방 · ${room.code}`;
-    $('roomLabel').innerHTML = hp && !room.public ? `${esc(room.code)} · <span class="hp-count">TODAY <b>${hp.today}</b> · TOTAL <b>${hp.total}</b></span>` : esc(base);
+    const base = room.public ? '공개 라운지' : isHome() ? (myHome() ? '🏠 내 방' : `🏠 ${homeOwner || '친구'}의 방`) : `친구 방 · ${room.code}`;
+    $('roomLabel').innerHTML = hp && !room.public ? `${esc(isHome() ? base : room.code)} · <span class="hp-count">TODAY <b>${hp.today}</b> · TOTAL <b>${hp.total}</b></span>` : esc(base);
   }
   const ago = (t) => { const m = Math.floor((Date.now() - t) / 60000); return m < 1 ? '방금' : m < 60 ? `${m}분 전` : m < 1440 ? `${Math.floor(m / 60)}시간 전` : `${Math.floor(m / 1440)}일 전`; };
   function renderGuestbook() {
@@ -867,7 +907,7 @@
     if (pulledData || !loggedIn() || !st().wallet) return; pulledData = true; const d = st().data || {};
     if (d.avatar && d.avatar.look) { const owned = [...new Set([...(d.avatar.owned || []), ...mine.owned])]; mine = {look: Object.assign({}, A.DEFAULT_LOOK, d.avatar.look), owned}; A.saveMine(mine); me.look = A.encodeLook(mine.look); rebuildMe(); sendLook(); if (owned.length > (d.avatar.owned || []).length) pushData('avatar'); }
     else { if (d.avatar && Array.isArray(d.avatar.owned)) { mine.owned = [...new Set([...mine.owned, ...d.avatar.owned])]; A.saveMine(mine); } if (localStorage.getItem('thinkchip:avatar:v1')) pushData('avatar'); }
-    if (d.room && d.room.deco) { myRoom = {deco: Object.assign({}, DEFAULT_DECO, d.room.deco), owned: [...new Set([...(d.room.owned || []), ...myRoom.owned])]}; store.set(ROOM_KEY, myRoom); if (!decoDraft) applyDecor(room.public ? myRoom.deco : (hostDeco || myRoom.deco)); if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'deco', deco: encodeDeco(myRoom.deco)})); }
+    if (d.room && d.room.deco) { myRoom = {deco: Object.assign({}, DEFAULT_DECO, d.room.deco), owned: [...new Set([...(d.room.owned || []), ...myRoom.owned])]}; store.set(ROOM_KEY, myRoom); if (!decoDraft) applyDecor(currentDeco()); if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'deco', deco: encodeDeco(myRoom.deco)})); }
     else { if (d.room && Array.isArray(d.room.owned)) { myRoom.owned = [...new Set([...myRoom.owned, ...d.room.owned])]; store.set(ROOM_KEY, myRoom); } if (myRoom.owned.length) pushData('room'); }
   }
   async function sendGift(f, amount) {
@@ -894,7 +934,7 @@
       setExpr(me, 'happy');
       ACC.call('seen', {ids: got.map((g) => g.id)}).catch(() => {}).finally(() => { afterSync.busy = false; }); }
     const nReq = (so.requests || []).length; if (seenReq >= 0 && nReq > seenReq) toast(`📩 친구 신청이 ${nReq}개 와 있어요 · 👥 친구에서 확인`); seenReq = nReq;
-    syncName(); pullData(); renderChips(); renderSocialBadge(); drawBoard(); renderSocial();
+    syncName(); pullData(); renderChips(); renderSocialBadge(); drawBoard(); renderSocial(); showCalls(); if (conn && conn.readyState === 1) setOnline(true); else renderPeople();
   }
   let nameSynced = false;
   function syncName() { // 새 기기에서 처음이면 계정 이름을 쓰고, 아니면 이 기기에서 정한 이름을 계정에 올려요
@@ -952,6 +992,47 @@
         else { toast(r.error === 'owned' ? `${f.name}님은 이미 가지고 있어요 (칩은 돌려받았어요)` : r.error === 'chips' ? '씽크칩이 부족해요' : `선물하지 못했어요 · ${socialMsg(r.error)}`); b.disabled = false; } }
     };
   }
+  // ───────── 접속자 · 친구 패널 (상단 '○명' 을 누르면 펼쳐져요, 롤 친구 목록처럼) ─────────
+  const ONLINE_MS = 3 * 60e3;
+  const isOn = (f) => players.has(f.pid) || Date.now() - (f.seen || 0) < ONLINE_MS;
+  function friendsOnline() { return loggedIn() ? (social().friends || []).filter(isOn).length : 0; }
+  function whereText(f) { if (players.has(f.pid)) return '같은 방에 있어요'; if (!isOn(f)) return f.seen ? `오프라인 · ${ago(f.seen)}` : '오프라인';
+    const w = f.where || ''; return !w || /^LNG\d$/.test(w) ? '온라인 · 공개 라운지' : w === homeCode(f.pid) ? '온라인 · 자기 방' : /^H/.test(w) ? '온라인 · 친구 방' : '온라인 · 친구 라운지'; }
+  let peopleOpen = false;
+  function togglePeople(on = !peopleOpen) { peopleOpen = on; $('people').hidden = !on; $('online').classList.toggle('open', on); if (on) { renderPeople(); syncSocial(); } }
+  function renderPeople() {
+    const box = $('people'); if (!box || box.hidden) return;
+    const here = [...players.values()].filter((p) => p !== me), so = social(), fr = loggedIn() ? [...(so.friends || [])] : [], frIds = new Set(fr.map((f) => f.pid)), pend = new Set(so.pending || []);
+    fr.sort((a, b) => (players.has(b.pid) - players.has(a.pid)) || (isOn(b) - isOn(a)) || (b.seen || 0) - (a.seen || 0));
+    const row = (name, sub, dot, btns, attrs = '') => `<div class="pp-row" ${attrs}><i class="pp-dot ${dot}"></i><div class="pp-name"><b>${esc(name)}</b><small>${esc(sub)}</small></div>${btns}</div>`;
+    box.innerHTML = `<div class="pp-head"><b>${esc(isHome() ? (myHome() ? '🏠 내 방' : `🏠 ${homeOwner || '친구'}의 방`) : room.public ? '🏛 공개 라운지' : '👥 친구 라운지')}</b><button class="pp-x" data-pp="close" aria-label="접기">✕</button></div>
+      <div class="pp-sec">지금 여기 <span>${here.length + 1}</span></div>
+      ${row(myName() + ' (나)', '', 'on', '')}
+      ${here.map((p) => row(p.name, frIds.has(p.id) ? '친구' : '', 'on', loggedIn() && !frIds.has(p.id) ? (pend.has(p.id) ? '<span class="pp-tag">신청함</span>' : `<button class="pp-btn" data-padd="${esc(p.id)}">+ 친구</button>`) : '', `data-pme="${esc(p.id)}"`)).join('')}
+      <div class="pp-sec">내 친구 <span>${fr.filter(isOn).length}/${fr.length}</span></div>
+      ${!loggedIn() ? `<p class="pp-empty">로그인하면 친구 목록과 접속 상태가 보여요</p>${IN_TOSS ? '' : '<button class="btn kakao full" data-pp="login">🔑 로그인하기</button>'}`
+        : fr.length ? fr.map((f) => { const here = players.has(f.pid), on = isOn(f), go = on && !here ? (f.where || room.code) : homeCode(f.pid), canGo = !here && go !== room.code;
+          return row(f.name, whereText(f), here || on ? 'on' : 'off', `${here ? '' : `<button class="pp-btn" data-pinv="${esc(f.pid)}" title="지금 있는 곳으로 부르기">📨 초대</button>`}${canGo ? `<button class="pp-btn ghost" data-pgo="${esc(go)}" data-pn="${esc(f.name)}" title="${on ? '친구가 있는 곳으로' : '친구 방 구경'}">${on ? '따라가기' : '🏠 놀러가기'}</button>` : ''}`); }).join('')
+        : '<p class="pp-empty">아직 친구가 없어요 · 위에서 + 친구를 눌러 보세요</p>'}
+      ${loggedIn() && (so.requests || []).length ? `<button class="btn ghost full" data-pp="req" style="margin-top:8px">📩 받은 친구 신청 ${so.requests.length}개</button>` : ''}`;
+  }
+  async function sendInvite(pid) {
+    const f = (social().friends || []).find((x) => x.pid === pid); if (!f) return;
+    try { const r = await ACC.call('invite', {to: pid, room: room.code}); toast(r.ok ? `${f.name}님을 불렀어요 📨${isOn(f) ? '' : ' · 다음에 들어오면 알려 줄게요'}` : r.error === 'slow' ? '방금 불렀어요 · 조금 뒤에 다시 불러요' : socialMsg(r.error)); } catch (e) { toast('인터넷 연결을 확인해 주세요'); }
+  }
+  // 친구가 나를 부르면: 위에 '놀러가기' 알림 (오프라인일 때 온 것도 들어오면 보여요)
+  const shownCalls = new Set();
+  function showCalls() {
+    const inv = (social().invites || []).filter((i) => !shownCalls.has(i.id)); if (!inv.length) return;
+    const i = inv[inv.length - 1]; inv.forEach((x) => shownCalls.add(x.id));
+    let el = $('callPop'); if (!el) { el = document.createElement('div'); el.id = 'callPop'; el.className = 'invite-pop call-pop'; document.body.appendChild(el); }
+    const w = !i.room || /^LNG\d$/.test(i.room) ? '공개 라운지' : i.room === homeCode(i.from) ? `${i.name}님의 방` : /^H/.test(i.room) ? '친구 방' : '친구 라운지';
+    const here = i.room === room.code || (!i.room && room.public);
+    el.innerHTML = `<div class="ip-ico" style="background:#ff6f91">📨</div><div class="ip-txt"><b>${esc(i.name)}님이 불러요!</b><small>${esc(w)}${i.at ? ` · ${ago(i.at)}` : ''}</small></div><button class="btn ghost" data-cp="no">나중에</button>${here ? '' : '<button class="btn gold" data-cp="go">놀러가기</button>'}`;
+    el.hidden = false; clearTimeout(showCalls.t); showCalls.t = setTimeout(() => { el.hidden = true; }, 15000);
+    el.onclick = (e) => { const b = e.target.closest('[data-cp]'); if (!b) return; el.hidden = true; if (b.dataset.cp === 'go') { goRoom(i.room); toast(`${w}(으)로 가는 중…`); } };
+    ACC.call('seen', {ids: inv.map((x) => x.id)}).catch(() => {});
+  }
   function celebrate(pid) { if (players.has(pid)) setTimeout(() => requestHandshake(pid), 400); } // 친구가 되는 순간 같은 라운지면 손인사
   async function shareFriendLink() {
     if (!loggedIn()) return openLogin('친구 추가 링크를 보내려면 ');
@@ -969,7 +1050,17 @@
   const newCode = () => Array.from({length: 4}, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
 
   $('nameBtn').onclick = editName; showName();
-  document.querySelector('.dock-right').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; ({games: openGames, closet: () => goToZone(ZONES.find((z) => z.closet)), desk: () => goToZone(ZONES.find((z) => z.desk)), friends: openFriends, room: openRoomDeco})[b.dataset.open]?.(); };
+  $('online').onclick = () => togglePeople();
+  $('people').addEventListener('pointerdown', (e) => e.stopPropagation());
+  $('people').onclick = async (e) => { const b = e.target.closest('button,[data-pme]'); if (!b) return;
+    if (b.dataset.pp === 'close') return togglePeople(false);
+    if (b.dataset.pp === 'login') return openLogin('친구 목록을 보려면 ');
+    if (b.dataset.pp === 'req') return openFriends();
+    if (b.dataset.padd) { try { const r = await ACC.call('request', {to: b.dataset.padd}); const made = r.ok && r.friends.some((f) => f.pid === b.dataset.padd); toast(r.ok ? (made ? '친구가 됐어요! 🎉' : '친구 신청을 보냈어요') : socialMsg(r.error)); if (made) celebrate(b.dataset.padd); } catch (er) { toast('인터넷 연결을 확인해 주세요'); } return renderPeople(); }
+    if (b.dataset.pinv) return sendInvite(b.dataset.pinv);
+    if (b.dataset.pgo) { goRoom(b.dataset.pgo); toast(`${b.dataset.pn}님에게 가는 중…`); return togglePeople(false); }
+    if (b.dataset.pme) { const p = players.get(b.dataset.pme); if (p) { togglePeople(false); approachFor(p); } } };
+  document.querySelector('.dock-right').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; ({games: openGames, closet: () => goHome(() => goToZone(ZONES.find((z) => z.closet))), desk: () => goLounge(() => goToZone(ZONES.find((z) => z.desk))), friends: openFriends, deco: () => goHome(openRoomDeco), room: () => goHome(openRoomDeco), home: () => goHome(), lounge: () => goLounge()})[b.dataset.open]?.(); };
   $('chipsBtn').onclick = () => (acctOn() && !loggedIn() ? openLogin() : openDesk());
   // 왼쪽 위 로고: 라운지를 떠나지 않고 방 정보·이동 메뉴를 열어요 (예전엔 옛 홈으로 나가서 돌아올 길이 없었어요)
   $('brandBtn').onclick = (e) => { e.preventDefault(); openSheet({kicker: room.public ? 'PUBLIC LOUNGE' : 'FRIEND ROOM', title: room.public ? '🌐 공개 라운지' : `👥 친구 방 · ${room.code}`, html: `
@@ -1045,11 +1136,11 @@
   const online = new Map();
   let conn = null, retry = 0, retryTimer = 0, pingTimer = 0, gotFirstState = false;
   function switchRoom(code) {
-    room.public = !code; room.code = code || 'LNG1';
+    room.public = !code || /^LNG\d$/.test(code); room.code = code || 'LNG1'; hostDeco = null; if (ACC) ACC.state.where = room.code;
     hp = null; renderRoomLabel();
     const u = new URL(location.href); if (room.public) u.searchParams.delete('room'); else u.searchParams.set('room', room.code); history.replaceState(null, '', u);
     for (const id of [...players.keys()]) if (id !== ME) despawn(id); online.clear(); $('chatLog').innerHTML = ''; gotFirstState = false;
-    reconnect();
+    applyMode(); reconnect(); if (loggedIn()) ACC.call('hello').catch(() => {});
   }
   // 폰에서 앱을 내렸다 올리거나 인터넷이 돌아오면 바로 다시 연결
   const wake = () => { if (!document.hidden && (!conn || conn.readyState > 1)) reconnect(); };
@@ -1064,7 +1155,7 @@
     ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } handle(m); };
     ws.onclose = () => { if (conn !== ws) return; setOnline(false); retryTimer = setTimeout(connect, Math.min(10000, 700 * 2 ** Math.min(retry++, 4))); }; // 끊기면 계속 다시 붙어요
   }
-  function setOnline(on) { $('online').classList.toggle('off', !on); $('online').innerHTML = on ? `<i></i><b>${online.size + 1}</b>명` : '<i></i><b>오프라인</b>'; }
+  function setOnline(on) { const fo = friendsOnline(); $('online').classList.toggle('off', !on); $('online').innerHTML = (on ? `<i></i><b>${online.size + 1}</b>명` : '<i></i><b>오프라인</b>') + (fo ? `<em>친구 ${fo}</em>` : '') + '<s>▾</s>'; renderPeople(); }
   function sendPose() { const t = me.target || me.av.position; if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'pose', x: Math.round(t.x * 100) / 100, z: Math.round(t.z * 100) / 100})); }
   function sendLook() { if (conn && conn.readyState === 1) conn.send(JSON.stringify({t: 'look', look: A.encodeLook(mine.look)})); }
   function handle(m) {
@@ -1078,15 +1169,15 @@
         pl.tag.textContent = p.name; online.set(p.pid, p.name);
       }
       for (const id of [...online.keys()]) if (!seen.has(id)) { chatLine('', `${online.get(id)}님이 나갔어요`, true); online.delete(id); despawn(id); }
-      const host = (m.players || []).find((p) => p.host);
-      hostDeco = !room.public && host && host.pid !== ME && host.deco ? decodeDeco(host.deco) : null; // 친구 방이면 방장이 꾸민 방을 보여줘요
-      if (!decoDraft) applyDecor(hostDeco || myRoom.deco);
+      const owner = isHome() && !myHome() ? (m.players || []).find((p) => homeCode(p.pid) === room.code) : null;
+      hostDeco = owner && owner.deco ? decodeDeco(owner.deco) : null; homeOwner = owner ? otherName(owner) : homeOwner; // 친구 방에 놀러 가면 그 친구가 꾸민 방이 보여요
+      if (!decoDraft) applyDecor(currentDeco()); renderRoomLabel(); renderPeople();
       gotFirstState = true; setOnline(true); drawBoard(); setTicker();
     } else if (m.t === 'pose') { const p = players.get(m.pid); if (p && m.pid !== ME) walkTo(p, m.x, m.z); }
     else if (m.t === 'chat') { const p = players.get(m.pid); if (m.sys) chatLine('', m.text, true); else if (handleSignal(m)) { chatLine(otherName(m), m.text); say(p, m.text); } }
     else if (m.t === 'hp') { hp = m; renderRoomLabel(); if ($('gbList')) renderGuestbook(); }
     else if (m.t === 'chatlog') { (m.items || []).filter((c) => !/^\[\[(ok|cancel|hs|rx):/.test(c.text || '')).slice(-6).forEach((c) => chatLine(c.sys ? '' : otherName(c), c.text, c.sys)); }
-    else if (m.t === 'error' && m.code === 'full') { toast('공개 라운지가 꽉 차서 옆 라운지로 옮겨요'); const n = Number((room.code || 'LNG1').slice(3)) || 1; switchRoom(null); room.code = `LNG${Math.min(9, n + 1)}`; reconnect(); }
+    else if (m.t === 'error' && m.code === 'full') { toast('공개 라운지가 꽉 차서 옆 라운지로 옮겨요'); const n = Number((room.code || 'LNG1').slice(3)) || 1; switchRoom(null); room.code = `LNG${Math.min(9, n + 1)}`; if (ACC) ACC.state.where = room.code; reconnect(); }
   }
 
   // ───────── 시작 ─────────

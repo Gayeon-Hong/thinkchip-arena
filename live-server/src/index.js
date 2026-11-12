@@ -87,7 +87,7 @@ export default {
 // 로그인: 웹/MS Store = 카카오, 토스 앱 = 토스 사용자 키. 로그인하면 서명된 세션 토큰을 줘요 (서버에 세션 저장 없음).
 // 계정마다 공개 id(pid = HMAC(비밀, 계정))로 User Durable Object 하나: 지갑(칩)·친구·선물함·저장 데이터.
 const PID_RE = /^[a-f0-9]{24}$/;
-const MAX_FRIENDS = 100, MAX_INBOX = 50;
+const MAX_FRIENDS = 100, MAX_INBOX = 50, INVITE_TTL = 2 * 3600e3;
 const GIFT_AMOUNTS = [100, 300, 1000, 3000];
 const GIFT_DAILY_MAX = 5000; // 한 사람이 하루에 보낼 수 있는 칩
 const INITIAL_CHIPS = 100, WELCOME_BONUS = 300, ATTEND_REWARD = 30, PLAY_DAILY_CAP = 200, RUN_MAX = 150, AD_REWARD = 20, AD_DAILY_LIMIT = 5, IMPORT_MAX = 3000;
@@ -204,7 +204,7 @@ export class User extends DurableObject {
   // 관리자(ADMIN_PIDS, wrangler.toml): 옷·가구를 전부 가진 것으로 (힌트·칩은 다른 사람과 똑같이)
   isAdmin() { return String(this.env.ADMIN_PIDS || '').split(/[\s,]+/).filter(Boolean).includes(this.u.pid); }
   view(extra = {}) { const u = this.u; return {ok: true, pid: u.pid, name: u.name, platform: u.platform, admin: this.isAdmin(), wallet: this.wallet(), data: u.data,
-    friends: Object.entries(u.friends).map(([pid, f]) => ({pid, name: f.name, nogift: !!f.toss})), requests: Object.entries(u.inReq).map(([pid, r]) => ({pid, name: r.name, at: r.at})),
+    friends: Object.entries(u.friends).map(([pid, f]) => ({pid, name: f.name, nogift: !!f.toss, seen: f.seen || 0, where: f.where || ''})), invites: (u.invites || []).filter((i) => Date.now() - i.at < INVITE_TTL), requests: Object.entries(u.inReq).map(([pid, r]) => ({pid, name: r.name, at: r.at})),
     pending: Object.keys(u.outReq), gifts: u.gifts, sentToday: u.sent.day === dayKey() ? u.sent.total : 0, giftMax: GIFT_DAILY_MAX, ...extra}; }
   addChips(n, paid = false) { const w = this.u.w; w.chips = Math.min(9999999, w.chips + n); if (paid) w.paid += n; }
 
@@ -214,6 +214,10 @@ export class User extends DurableObject {
     if (typeof b.name === 'string' && b.name.trim() && cleanName(b.name) !== u.name) { // 이름을 바꾸면 친구들 목록에도
       u.name = cleanName(b.name); for (const f of Object.keys(u.friends)) { try { await this.other(f).rename(u.pid, u.name); } catch {} } }
     if (u.toss !== !!b.toss) u.toss = !!b.toss;
+    // 접속 상태: 내 친구들 목록에 '온라인 · 어디' 로 보여요 (90초에 한 번, 또는 방을 옮겼을 때만 친구들에게 알려요)
+    { const now = Date.now(), where = typeof b.where === 'string' && (b.where === '' || CODE_RE.test(b.where)) ? b.where : (u.where || ''), moved = where !== (u.where || '');
+      u.seen = now; u.where = where;
+      if (moved || now - (u.pushAt || 0) > 90e3) { u.pushAt = now; await Promise.all(Object.keys(u.friends).map((f) => this.other(f).presence(u.pid, now, where).catch(() => {}))); } }
     const to = String(b.to || ''), extra = {};
     if (!w.welcomed) { w.welcomed = true; this.addChips(WELCOME_BONUS); extra.welcome = WELCOME_BONUS; } // 회원가입(첫 로그인) 보상
     switch (b.op) {
@@ -303,7 +307,14 @@ export class User extends DurableObject {
         if (r !== 'ok') { w.chips += item[0]; await this.save(); return {error: r || 'fail', status: 400}; }
         u.sentIds = [...u.sentIds, gid].slice(-100); break;
       }
-      case 'seen': { const ids = new Set((Array.isArray(b.ids) ? b.ids : []).map(String)); u.gifts = u.gifts.filter((g) => !ids.has(g.id)); break; } // 받은 선물 알림 확인
+      case 'invite': { // 친구 부르기 (롤처럼): 오프라인이어도 다음에 들어오면 보여요
+        if (!u.friends[to]) return {error: 'notfriend', status: 400};
+        const where = typeof b.room === 'string' && (b.room === '' || CODE_RE.test(b.room)) ? b.room : '';
+        u.invSent = u.invSent || {}; if (Date.now() - (u.invSent[to] || 0) < 20e3) return {...this.view(), error: 'slow', status: 429};
+        u.invSent[to] = Date.now(); const r = await this.other(to).invited({id: `${u.pid}:${Date.now()}`, from: u.pid, name: u.name || '친구', room: where, at: Date.now()});
+        if (r !== 'ok') return {error: r, status: 400}; break;
+      }
+      case 'seen': { const ids = new Set((Array.isArray(b.ids) ? b.ids : []).map(String)); u.gifts = u.gifts.filter((g) => !ids.has(g.id)); u.invites = (u.invites || []).filter((i) => !ids.has(i.id)); break; } // 받은 선물 알림 확인
       default: return {error: 'op', status: 400};
     }
     await this.save(); return this.view(extra);
@@ -323,6 +334,9 @@ export class User extends DurableObject {
     u.inReq[from] = {name: cleanName(name), at: Date.now()}; await this.save(); return {r: 'ok'};
   }
   async link(pid, name, toss = false) { const u = this.u; delete u.inReq[pid]; delete u.outReq[pid]; u.friends[pid] = {name: cleanName(name), at: u.friends[pid]?.at || Date.now(), toss}; await this.save(); return {r: 'ok', toss: !!u.toss}; }
+  async presence(pid, seen, where) { const f = this.u.friends[pid]; if (f) { f.seen = seen; f.where = where; await this.save(); } return 'ok'; }
+  async invited(i) { const u = this.u; if (!u.friends[i.from]) return 'notfriend';
+    u.invites = [...(u.invites || []).filter((x) => x.from !== i.from && Date.now() - x.at < INVITE_TTL), {...i, name: cleanName(i.name)}].slice(-20); await this.save(); return 'ok'; }
   async rename(pid, name) { const f = this.u.friends[pid]; if (f) { f.name = cleanName(name); await this.save(); } return 'ok'; }
   async unlink(pid) { delete this.u.friends[pid]; await this.save(); return 'ok'; }
   async receiveItem(g) { // 받은 옷·가구는 바로 내 옷장/방 보관함에
