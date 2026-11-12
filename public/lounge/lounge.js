@@ -246,7 +246,7 @@
   })();
   const SC_HOME = [0, -10.3, 0];
   function placeShowcase(sc) { const z = ZONES.find((x) => x.showcase); if (!z || !z.group) return; const [x, zz, r] = Array.isArray(sc) && sc.length === 3 ? sc : SC_HOME;
-    z.group.position.set(x, 0, zz); z.group.rotation.y = r; z.pos = [x, zz]; }
+    z.group.position.set(x, 0, zz); z.group.rotation.y = fromQ(snapQ(r)); z.pos = [x, zz]; }
   let placingSc = false;
   function drawShowcase(have) {
     for (const sl of showcaseSlots) { const x = sl.cv.getContext('2d'), on = (have || []).includes(sl.id); x.clearRect(0, 0, 128, 128);
@@ -633,9 +633,12 @@
   })();
   for (const [id, g] of Object.entries(furniture)) { g.userData.home = [g.position.x, g.position.z, g.rotation.y]; const zone = {furn: id, group: g, pos: [g.position.x, g.position.z]}; registerClick(g, zone); }
   // 가구·진열장 배치: lay = {id: [x, z, 회전]} (방 주인이 놓은 자리. 친구가 놀러 와도 같은 자리에 보여요)
-  function placeFurniture(lay) { for (const [id, g] of Object.entries(furniture)) { const p = (lay && lay[id]) || g.userData.home; g.position.set(p[0], 0, p[1]); g.rotation.y = p[2]; } }
-  const encodeLay = (d) => { const L = {...(d.lay || {})}; if (Array.isArray(d.sc)) L.sc = d.sc; return Object.entries(L).filter(([k, v]) => /^[a-z]+$/.test(k) && Array.isArray(v)).map(([k, [x, z, r]]) => `${k}${Math.round(x * 10) + 200}y${Math.round(z * 10) + 200}r${Math.round((((r % 6.3) + 6.3) % 6.3) * 10)}`).join('_'); };
-  const decodeLay = (str) => { const out = {}; for (const m of String(str || '').matchAll(/([a-z]+)(\d+)y(\d+)r(\d+)/g)) out[m[1]] = [Math.max(-10.5, Math.min(10.5, (Number(m[2]) - 200) / 10)), Math.max(-10.5, Math.min(10.5, (Number(m[3]) - 200) / 10)), Number(m[4]) / 10]; return out; };
+  function placeFurniture(lay) { for (const [id, g] of Object.entries(furniture)) { const p = (lay && lay[id]) || g.userData.home; g.position.set(p[0], 0, p[1]); g.rotation.y = lay && lay[id] ? fromQ(snapQ(p[2])) : p[2]; } }
+  const encodeLay = (d) => { const L = {...(d.lay || {})}; if (Array.isArray(d.sc)) L.sc = d.sc; return Object.entries(L).filter(([k, v]) => /^[a-z]+$/.test(k) && Array.isArray(v)).map(([k, [x, z, r]]) => `${k}${Math.round(x * 10) + 200}y${Math.round(z * 10) + 200}q${snapQ(r)}`).join('_'); };
+  // 회전은 벽 기준 45° 단위로만 (0·45·90…): q = 0~7 칸. 예전 형식 r(라디안×10)도 읽어서 가장 가까운 칸으로 맞춰요
+  function snapQ(r) { return ((Math.round((Number(r) || 0) / (Math.PI / 4)) % 8) + 8) % 8; }
+  function fromQ(q) { return q * (Math.PI / 4); }
+  const decodeLay = (str) => { const out = {}; for (const m of String(str || '').matchAll(/([a-z]+)(\d+)y(\d+)([qr])(\d+)/g)) out[m[1]] = [Math.max(-10.5, Math.min(10.5, (Number(m[2]) - 200) / 10)), Math.max(-10.5, Math.min(10.5, (Number(m[3]) - 200) / 10)), m[4] === 'q' ? fromQ(Number(m[5]) % 8) : fromQ(snapQ(Number(m[5]) / 10))]; return out; };
   const pick = (cat, id) => DECOR[cat].find((x) => x.id === id) || DECOR[cat][0];
   function applyDecor(d) {
     shownDeco = d;
@@ -1232,7 +1235,7 @@
     openSheet({kicker: 'FURNITURE', title: `🛋️ ${it.name}`, html: `${u ? `<button class="btn gold full" data-fa="use" style="margin-bottom:10px">${u.label}</button>` : ''}<div class="vip-plans"><button class="vip-plan" data-fa="move"><b>📍 옮기기</b><small>바닥을 눌러 놓을 곳 고르기</small></button><button class="vip-plan" data-fa="rot"><b>↻ 돌리기</b><small>45°씩</small></button><button class="vip-plan" data-fa="reset"><b>↩ 원래 자리</b><small>처음 놓인 곳으로</small></button><button class="vip-plan" data-fa="hide"><b>📦 치우기</b><small>보관함으로 (꾸미기에서 다시 놓기)</small></button></div>`});
     $('sheetBody').onclick = (e) => { const b = e.target.closest('[data-fa]'); if (!b) return; if (b.dataset.fa === 'use') return useFurniture(id); const a = b.dataset.fa, lay = myRoom.deco.lay = myRoom.deco.lay || {}, g = furniture[id], cur = lay[id] || g.userData.home;
       if (a === 'move') { closeSheet(); placingSc = id; toast(`바닥을 눌러 ${it.name}을(를) 놓을 곳을 고르세요`); return; }
-      if (a === 'rot') lay[id] = [cur[0], cur[1], Math.round((cur[2] + Math.PI / 4) * 10) / 10 % 6.3];
+      if (a === 'rot') lay[id] = [cur[0], cur[1], fromQ((snapQ(cur[2]) + 1) % 8)];
       if (a === 'reset') delete lay[id];
       if (a === 'hide') { myRoom.deco.items = (myRoom.deco.items || []).filter((x) => x !== id); closeSheet(); }
       applyDecor(currentDeco()); saveRoomLayout(); toast(a === 'hide' ? '📦 치웠어요 · 꾸미기 > 가구에서 다시 놓을 수 있어요' : a === 'rot' ? '↻ 돌렸어요' : '↩ 원래 자리로'); };
@@ -1248,7 +1251,7 @@
       ${mine ? '<div class="vip-plans" style="margin-top:10px"><button class="vip-plan" data-sc-act="move"><b>📍 위치 옮기기</b><small>바닥을 눌러 놓을 곳 고르기</small></button><button class="vip-plan" data-sc-act="rot"><b>↻ 돌리기</b><small>45°씩 방향 바꾸기</small></button><button class="vip-plan" data-sc-act="reset"><b>↩ 원래 자리</b><small>뒷벽 가운데로</small></button></div>' : ''}`});
     $('sheetBody').onclick = (e) => { const b = e.target.closest('[data-sc-act]'); if (!b) return; const a = b.dataset.scAct;
       if (a === 'move') { closeSheet(); placingSc = true; toast('바닥을 눌러 진열장을 놓을 곳을 고르세요'); return; }
-      if (a === 'rot') { const c = myRoom.deco.sc || SC_HOME; myRoom.deco.sc = [c[0], c[1], Math.round(((c[2] || 0) + Math.PI / 4) * 10) / 10 % 6.3]; }
+      if (a === 'rot') { const c = myRoom.deco.sc || SC_HOME; myRoom.deco.sc = [c[0], c[1], fromQ((snapQ(c[2] || 0) + 1) % 8)]; }
       if (a === 'reset') delete myRoom.deco.sc;
       placeShowcase(myRoom.deco.sc); saveRoomLayout(); toast(a === 'rot' ? '↻ 방향을 바꿨어요' : '↩ 원래 자리로 옮겼어요'); };
   }
