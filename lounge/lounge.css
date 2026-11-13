@@ -214,3 +214,12 @@ button.online{cursor:pointer;font:inherit;font-size:11.5px}.online em{font-style
 .booth-result img{max-width:100%;max-height:52vh;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.35);-webkit-touch-callout:default;user-select:auto}
 .booth-btns{display:flex;gap:10px}.booth-btns .btn{flex:1}
 .booth-count em{font-style:normal;font-size:12px;font-weight:700;opacity:.85;margin-top:6px}
+.booth-label{font-size:12px;font-weight:800;color:var(--muted);margin:0 0 6px}
+.booth-bgs{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:0 0 14px}
+.booth-bgs button{border:2px solid transparent;border-radius:12px;height:58px;font-family:inherit;display:grid;align-content:center;justify-items:center;gap:2px;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.booth-bgs button i{font-style:normal;font-size:15px;line-height:1;min-height:15px}
+.booth-bgs button small{font-size:10.5px;font-weight:800;color:#1b2440;background:rgba(255,255,255,.75);border-radius:8px;padding:1px 6px}
+.booth-bgs button.on{border-color:var(--gold);box-shadow:0 0 0 3px rgba(247,206,85,.35)}
+.booth-opt{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin:0 0 12px}
+.booth-opt input{width:18px;height:18px;accent-color:var(--gold)}
+.booth-opt span{margin-left:auto;font-size:16px}

@@ -48,6 +48,7 @@
     {id: 'showcase', title: '뱃지 진열장', sub: '모은 뱃지 전시', icon: '🏅', showcase: true, pos: [0, -10.3], color: 0xf7ce55},
     {id: 'door', title: '내 방 문', sub: '라운지 ↔ 내 방', icon: '🚪', door: true, pos: [-9.7, -3.0], color: 0xf7ce55},
     {id: 'vip', title: 'VIP 라운지', sub: '뱃지·입장권이 있어야 들어가요', icon: '👑', vip: true, pos: [-8.4, -6.6], color: 0xb569ff},
+    {id: 'booth', title: '인생네컷 부스', sub: '배경을 골라 네 컷 촬영', icon: '📸', booth: true, pos: [6.8, -9.2], color: 0xff8fb1},
   ];
   const GAME = Object.fromEntries([...CFG.GAMES, ...CFG.PARTY].map((g) => [g.id, g]));
   function dailyGame() { const d = new Date(), k = d.getFullYear() * 372 + d.getMonth() * 31 + d.getDate(); const list = CFG.GAMES; return list.length ? list[(k * 7 + 3) % list.length] : null; }
@@ -268,6 +269,22 @@
     registerClick(g, z);
   })();
   function openDoor(then) { const z = ZONES.find((x) => x.door); if (!z || !z.leaf) return then && then(); let k = 0; const step = () => { k += 0.08; z.leaf.rotation.y = -Math.sin(Math.min(1, k) * Math.PI / 2) * 1.4; if (k < 1) requestAnimationFrame(step); else setTimeout(() => { then && then(); z.leaf.rotation.y = 0; }, 150); }; step(); }
+  // 📸 인생네컷 부스 (포토 스튜디오): 뒤쪽 벽 오른편. 배경 막 앞에 서서 찍으면 고른 배경이 사진 뒤에 깔려요
+  const boothBg = {mat: new THREE.MeshBasicMaterial({color: 0xffc9dc, toneMapped: false})}; // 배경 막은 조명과 상관없이 고른 색 그대로 찍히게
+  (function boothStudio() {
+    const z = ZONES.find((x) => x.booth), g = new THREE.Group(); g.position.set(z.pos[0], 0, z.pos[1]); scene.add(g); z.group = g;
+    const shell = M(0x2a2350, {roughness: 0.5}), pink = M(0xff8fb1, {roughness: 0.9});
+    box(4.6, 0.05, 2.6, M(0x3a3170, {roughness: 0.85}), 0, 0.03, 0.2, g).castShadow = false; // 바닥 매트
+    box(4.8, 3.5, 0.12, shell, 0, 1.75, -1.08, g); // 배경 막을 세운 판
+    const bd = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 3.3), boothBg.mat); bd.position.set(0, 1.7, -1.0); g.add(bd);
+    box(0.12, 3.5, 1.3, shell, -2.4, 1.75, -0.45, g); box(0.12, 3.5, 1.3, shell, 2.4, 1.75, -0.45, g); // 옆 날개
+    box(4.92, 0.12, 1.3, shell, 0, 3.5, -0.45, g); box(4.92, 0.08, 0.08, mats.gold, 0, 3.44, 0.2, g); // 지붕 · 커튼 봉
+    box(0.5, 2.5, 0.06, pink, -2.1, 2.15, 0.2, g); box(0.5, 2.5, 0.06, pink, 2.1, 2.15, 0.2, g); // 걷어 둔 커튼
+    for (const sx of [-2.9, 2.9]) { cyl(0.03, 0.03, 2.3, mats.gold, sx, 1.15, 1.2, 8, g); const sb = box(0.7, 0.7, 0.12, M(0xffffff, {emissive: 0xfff3e0, emissiveIntensity: 0.9}), sx, 2.4, 1.2, g); sb.rotation.y = sx < 0 ? 0.6 : -0.6; } // 조명 스탠드
+    const sign = neon('📸 인생네컷', '#ff8fb1', 2.8); sign.position.set(0, 4.05, 0.1); g.add(sign); z.sign = sign;
+    const lamp = new THREE.PointLight(0xfff0f5, 0.8, 6, 2); lamp.position.set(0, 2.8, 1.2); g.add(lamp);
+    registerClick(g, z);
+  })();
   // 화분 · 스탠드 조명 장식
   function plant(x, z, s = 1) { cyl(0.32 * s, 0.25 * s, 0.6 * s, mats.pot, x, 0.3 * s, z, 20); for (let i = 0; i < 5; i++) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.38 * s, 16, 12), mats.plant); l.position.set(x + Math.cos(i * 1.3) * 0.22 * s, (0.95 + (i % 3) * 0.22) * s, z + Math.sin(i * 1.3) * 0.22 * s); l.scale.y = 1.3; l.castShadow = true; scene.add(l); } }
   plant(-9.8, -9.8, 1.4); plant(9.6, -9.6, 1.2); plant(-9.8, 9.2, 1.1); plant(3.6, -9.6, 0.9); plant(-3.6, -9.6, 0.9);
@@ -538,6 +555,7 @@
     try { setExpr(me, 'happy'); } catch (e) {} requestAnimationFrame(() => v.classList.add('show')); setTimeout(() => { location.href = url; }, 380); }
   window.addEventListener('pageshow', (e) => { if (e.persisted) { const v = $('veil'); if (v) v.classList.remove('show'); } });
   function goToZone(zone, then) {
+    if (zone.booth) { walkTo(me, zone.pos[0], zone.pos[1] - 0.3, then || (() => openZone(zone))); return sendPose(); } // 📸 부스는 안으로 들어가요
     const [x, z] = zone.pos, toMe = Math.atan2(me.av.position.x - x, me.av.position.z - z);
     const r = zone.main ? 2.8 : zone.party ? 2.6 : 2.3;
     walkTo(me, x + Math.sin(toMe) * r, z + Math.cos(toMe) * r, then || (() => openZone(zone))); sendPose();
@@ -856,6 +874,7 @@
   }
   function openZone(zone) {
     if (zone.door) return openDoor(() => { if (isHome()) goLounge(); else goHome(); me.av.position.set(-9.0, 0, zone.pos[1]); me.target = null; me.av.rotation.y = Math.PI / 2; sendPose(); }); // 문 앞에서 나와요
+    if (zone.booth) return openBooth();
     if (zone.showcase) return openShowcase();
     if (zone.vip) return isVip() ? (switchRoom(null), toast('🏛 라운지로 나왔어요')) : openVip();
     if (zone.closet) return openCloset();
@@ -1409,30 +1428,67 @@
   let boothFrame = 'white';
   const boothEl = document.createElement('div'); boothEl.className = 'booth-ui'; boothEl.hidden = true; document.body.appendChild(boothEl);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // 부스 안에서 찍을 때 뒤에 깔리는 배경 막. 내 화면(= 내 사진)에만 바뀌어요
+  const BOOTH_BGS = [
+    {id: 'pink', name: '핑크', c: ['#ffd9e6', '#ffb3cf'], deco: '💗'},
+    {id: 'sky', name: '하늘', c: ['#d7efff', '#9fd0ff'], deco: '☁️'},
+    {id: 'cream', name: '크림', c: ['#fff6e5', '#ffe2b0'], deco: ''},
+    {id: 'purple', name: '보라 별', c: ['#3b2a7a', '#7660ff'], deco: '✨'},
+    {id: 'night', name: '밤하늘', c: ['#0b1020', '#27336b'], deco: '⭐'},
+  ];
+  const boothZone = ZONES.find((z) => z.booth);
+  let boothBgId = 'pink', boothBadges = true;
+  function setBoothBg(id) {
+    const b = BOOTH_BGS.find((x) => x.id === id) || BOOTH_BGS[0]; boothBgId = b.id;
+    const cv = document.createElement('canvas'); cv.width = 720; cv.height = 528; const x = cv.getContext('2d');
+    const gr = x.createLinearGradient(0, 0, 0, cv.height); gr.addColorStop(0, b.c[0]); gr.addColorStop(1, b.c[1]); x.fillStyle = gr; x.fillRect(0, 0, cv.width, cv.height);
+    if (b.deco) { x.font = '34px sans-serif'; x.textAlign = 'center'; x.globalAlpha = 0.75; for (let i = 0; i < 26; i++) x.fillText(b.deco, 40 + ((i * 197) % 640), 50 + ((i * 131) % 440)); } // 늘 같은 자리에 흩뿌려요
+    const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding; if (boothBg.mat.map) boothBg.mat.map.dispose(); boothBg.mat.map = t; boothBg.mat.color.set(0xffffff); boothBg.mat.needsUpdate = true;
+  }
+  setBoothBg(boothBgId);
+  const inBooth = () => !isHome() && Math.hypot(me.av.position.x - boothZone.pos[0], me.av.position.z - (boothZone.pos[1] - 0.3)) < 1.7;
+  const myBadges = () => (loggedIn() ? (st().badges || []).filter((b) => BADGES[b]) : []); // 서버가 계산해 준 내 뱃지
+  function boothExtraHtml() {
+    const mine = myBadges();
+    const bg = inBooth()
+      ? `<div class="booth-label">배경</div><div class="booth-bgs" id="boothBgs">${BOOTH_BGS.map((b) => `<button data-bg="${b.id}" class="${b.id === boothBgId ? 'on' : ''}" style="background:linear-gradient(180deg,${b.c[0]},${b.c[1]})"><i>${b.deco}</i><small>${esc(b.name)}</small></button>`).join('')}</div>`
+      : (isHome() ? '' : '<button class="btn ghost booth-go" id="boothEnter" style="margin-bottom:10px">🚪 부스에 들어가서 찍기 · 배경 고르기</button>');
+    const badge = mine.length
+      ? `<label class="booth-opt"><input type="checkbox" id="boothBadge" ${boothBadges ? 'checked' : ''}> 🏅 내 뱃지 달고 찍기 <span>${mine.map((b) => BADGES[b].e).join('')}</span></label>`
+      : '<p class="booth-tip" style="margin:-2px 0 12px">🏅 뱃지를 모으면 사진에 달고 찍을 수 있어요.</p>';
+    return bg + badge + '<div class="booth-label">프레임</div>';
+  }
+  function bindBoothExtra() {
+    if ($('boothBgs')) $('boothBgs').onclick = (e) => { const b = e.target.closest('[data-bg]'); if (!b) return; setBoothBg(b.dataset.bg); for (const x of $('boothBgs').children) x.classList.toggle('on', x === b); };
+    if ($('boothEnter')) $('boothEnter').onclick = () => { closeSheet(); goToZone(boothZone); };
+    if ($('boothBadge')) $('boothBadge').onchange = (e) => { boothBadges = e.target.checked; };
+  }
   function boothAim() { // 나와 가까이(3칸 안) 서 있는 사람들이 한 화면에 들어오게
     const near = [...players.values()].filter((p) => p === me || p.av.position.distanceTo(me.av.position) < 3).slice(0, 6), c = new THREE.Vector3();
     for (const p of near) c.add(p.av.position); c.multiplyScalar(1 / near.length);
-    const keep = {dist: camState.dist, pitch: camState.pitch}; camState.dist = 18; // 확대·축소 여유가 양쪽으로 생기게 가운데 값에서 시작해요(끝나면 keep 으로 되돌려요)
-    return {center: c, yaw: camState.yaw, dist: 4.4 + 0.9 * (near.length - 1), yaw0: camState.yaw, dist0: 18, pitch0: camState.pitch, keep};
+    const studio = inBooth(), keep = {dist: camState.dist, pitch: camState.pitch, yaw: camState.yaw}; if (studio) camState.yaw = 0; camState.dist = 18; // 확대·축소 여유가 양쪽으로 생기게 가운데 값에서 시작해요(끝나면 keep 으로 되돌려요)
+    return {center: c, yaw: camState.yaw, dist: 4.4 + (studio ? 0.35 : 0.9) * (near.length - 1), yaw0: camState.yaw, dist0: 18, pitch0: camState.pitch, keep};
   }
   function boothCamera() { // 평소 시점 조작(camState)이 바뀐 만큼 부스 카메라도 돌리고·기울이고·당겨요
     const b = booth, yaw = b.yaw + (camState.yaw - b.yaw0), d = Math.max(2.6, Math.min(13, b.dist * Math.pow(camState.dist / b.dist0, 1.6))), h = Math.max(0.7, Math.min(5, 1.55 + (camState.pitch - b.pitch0) * 3));
     me.av.rotation.y = yaw; // 내 캐릭터는 늘 카메라를 봐요
-    camera.position.set(b.center.x + Math.sin(yaw) * d, h, b.center.z + Math.cos(yaw) * d); camera.lookAt(b.center.x, 1.15, b.center.z); }
+    camera.position.set(b.center.x + Math.sin(yaw) * d, h, b.center.z + Math.cos(yaw) * d); camera.lookAt(b.center.x, 1.32, b.center.z); } // 머리 위가 잘리지 않게 가슴보다 조금 위를 봐요
   function boothShot() { // 화면 크기와 상관없이 4:3 한 장을 그려서 돌려줘요. 같은 틱 안에서 그리고 바로 복사해야 빈 화면이 안 찍혀요
-    const pr = renderer.getPixelRatio(), fov = camera.fov;
+    const pr = renderer.getPixelRatio(), fov = camera.fov, zoom = camState.dist; // resize() 가 확대 값을 기본으로 되돌리므로 기억해 뒀다가 다시 넣어요
     renderer.setPixelRatio(1); renderer.setSize(BOOTH.W, BOOTH.H, false); camera.clearViewOffset(); camera.aspect = BOOTH.W / BOOTH.H; camera.fov = 34; camera.updateProjectionMatrix();
     boothCamera(); renderer.render(scene, camera);
     const c = document.createElement('canvas'); c.width = BOOTH.W; c.height = BOOTH.H; c.getContext('2d').drawImage(renderer.domElement, 0, 0, BOOTH.W, BOOTH.H);
-    renderer.setPixelRatio(pr); camera.fov = fov; camState.offY = null; resize();
+    renderer.setPixelRatio(pr); camera.fov = fov; camState.offY = null; resize(); camState.dist = zoom;
     return c;
   }
-  function boothStrip(shots, frameId) {
+  function boothStrip(shots, frameId, badges = []) {
     const f = BOOTH_FRAMES.find((x) => x.id === frameId) || BOOTH_FRAMES[0], {cellW, cellH, pad, gap, foot} = BOOTH, n = shots.length;
     const c = document.createElement('canvas'); c.width = cellW + pad * 2; c.height = pad + n * cellH + (n - 1) * gap + foot; const g = c.getContext('2d');
     const grad = g.createLinearGradient(0, 0, 0, c.height); grad.addColorStop(0, f.bg[0]); grad.addColorStop(1, f.bg[1]); g.fillStyle = grad; g.fillRect(0, 0, c.width, c.height);
     if (f.deco) { g.globalAlpha = 0.5; g.font = '26px sans-serif'; g.textAlign = 'center'; g.fillStyle = f.ink; for (let y = 22; y < c.height; y += 96) { g.fillText(f.deco, 20, y + 10); g.fillText(f.deco, c.width - 20, y + 58); } g.globalAlpha = 1; }
     shots.forEach((s, i) => g.drawImage(s, pad, pad + i * (cellH + gap), cellW, cellH));
+    if (badges.length) { const txt = badges.slice(0, 6).join(' '); g.font = '30px sans-serif'; g.textAlign = 'left'; const w = g.measureText(txt).width + 28; // 컷마다 왼쪽 아래에 내 뱃지
+      shots.forEach((s, i) => { const y = pad + i * (cellH + gap) + cellH - 58; g.fillStyle = 'rgba(12,16,32,.72)'; g.beginPath(); (g.roundRect ? g.roundRect(pad + 12, y, w, 46, 23) : g.rect(pad + 12, y, w, 46)); g.fill(); g.fillStyle = '#fff'; g.fillText(txt, pad + 26, y + 34); }); }
     const y0 = c.height - foot; g.fillStyle = f.ink; g.textAlign = 'center';
     g.font = '900 34px system-ui, sans-serif'; g.fillText('THINKCHIP LOUNGE', c.width / 2, y0 + 58);
     const d = new Date(), p2 = (v) => String(v).padStart(2, '0');
@@ -1442,9 +1498,9 @@
   }
   function openBooth() {
     const btns = BOOTH_FRAMES.map((f) => `<button data-bf="${f.id}" class="booth-frame${f.id === boothFrame ? ' on' : ''}" style="background:linear-gradient(180deg,${f.bg[0]},${f.bg[1]});color:${f.ink}"><b>${esc(f.name)}</b><small>${f.price && !isAdmin() ? `⬡ ${f.price}` : '무료'}</small></button>`).join('');
-    openSheet({kicker: 'PHOTO BOOTH', title: '📸 인생네컷', html: `<p class="booth-tip">3초마다 한 장씩, 네 장을 찍어요. <b>옆에 서 있는 친구도 같이 찍혀요.</b> 찍는 동안 화면을 밀면 시점이 돌고, 두 손가락(또는 마우스 스크롤)으로 확대·축소할 수 있어요. 이모티콘을 누르면 표정도 바뀌어요.</p><div class="booth-frames" id="boothFrames">${btns}</div><button class="btn gold booth-go" id="boothGo">촬영 시작</button>`});
+    openSheet({kicker: 'PHOTO BOOTH', title: '📸 인생네컷', html: `<p class="booth-tip">3초마다 한 장씩, 네 장을 찍어요. <b>옆에 서 있는 친구도 같이 찍혀요.</b> 찍는 동안 화면을 밀면 시점이 돌고, 두 손가락(또는 마우스 스크롤)으로 확대·축소할 수 있어요. 이모티콘을 누르면 표정도 바뀌어요.</p>${boothExtraHtml()}<div class="booth-frames" id="boothFrames">${btns}</div><button class="btn gold booth-go" id="boothGo">촬영 시작</button>`});
     $('boothFrames').onclick = (e) => { const b = e.target.closest('[data-bf]'); if (!b) return; boothFrame = b.dataset.bf; for (const x of $('boothFrames').children) x.classList.toggle('on', x === b); };
-    $('boothGo').onclick = () => startBooth();
+    $('boothGo').onclick = () => startBooth(); bindBoothExtra();
   }
   async function startBooth(fast = false) {
     if (booth) return;
@@ -1465,7 +1521,7 @@
         shots.push(boothShot()); boothEl.innerHTML = '<div class="booth-flash"></div>'; await sleep(fast ? 60 : 380);
       }
     } finally { boothEl.hidden = true; boothEl.innerHTML = ''; me.av.userData.armPose = null; Object.assign(camState, booth.keep); booth = null; placeCamera(true); }
-    const strip = boothStrip(shots, f.id), url = strip.toDataURL('image/jpeg', 0.92);
+    const strip = boothStrip(shots, f.id, boothBadges ? myBadges().map((b) => BADGES[b].e) : []), url = strip.toDataURL('image/jpeg', 0.92);
     openSheet({kicker: 'PHOTO BOOTH', title: '📸 인생네컷 완성!', html: `<div class="booth-result"><img id="boothImg" alt="방금 찍은 인생네컷" src="${url}"></div><p class="booth-tip">저장이 안 되면 사진을 길게 눌러 저장해요.</p><div class="booth-btns"><button class="btn ghost" id="boothAgain">다시 찍기</button><button class="btn gold" id="boothSave">저장 · 공유</button></div>`});
     $('boothAgain').onclick = openBooth;
     $('boothSave').onclick = () => strip.toBlob(async (blob) => { if (!blob) return toast('사진을 만들지 못했어요');
@@ -1621,7 +1677,7 @@
   addEventListener('storage', (e) => { if (e.key === PROFILE_KEY) { renderChips(); drawBoard(); } });
   // 자동 테스트·영상 녹화용 (읽기 + 이동만). 게임 데이터나 칩은 바꾸지 않아요.
   window.__lounge = {
-    booth: {open: openBooth, shoot: (frame, fast = true) => { boothFrame = frame || 'white'; return startBooth(fast); }, frames: BOOTH_FRAMES},
+    booth: {open: openBooth, enter: () => goToZone(boothZone), inside: inBooth, bg: setBoothBg, strip: boothStrip, shoot: (frame, fast = true) => { boothFrame = frame || 'white'; return startBooth(fast); }, frames: BOOTH_FRAMES},
     me: () => ({x: me.av.position.x, z: me.av.position.z, expr: me.av.userData.face.expr, walking: !!me.target}),
     players: () => [...players.values()].map((p) => ({id: p.id, name: p.name, x: p.av.position.x, z: p.av.position.z, expr: p.av.userData.face.expr})),
     screenOf: (x, z, y = 0.9) => { const v = new THREE.Vector3(x, y, z).project(camera); return {x: (v.x + 1) / 2 * innerWidth, y: (1 - v.y) / 2 * innerHeight}; },
