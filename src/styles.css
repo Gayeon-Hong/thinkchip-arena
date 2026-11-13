@@ -442,7 +442,7 @@ a.hero-cta{text-decoration:none}
 @media (max-width:430px){.top-actions [data-action="toggle-theme"]{display:none}}
 
 /* ── 라운지와 같은 색 세계: 남색 벽 · 금색 칩 · 보라 포인트 · 따뜻한 나무 바닥 ── */
-:root,[data-theme="dark"]{--bg:#0b1020;--surface:#121a2f;--surface-2:#18223b;--surface-3:#212d4a;--line:#26324f;--accent:#5b63d6;--accent-hover:#6c74e6;--accent-ink:#aab4ff;--accent-soft:#1f2650;--nav:rgba(11,16,32,.94);--hero:#141c33;--gold:#f7ce55;--focus:#aab4ff}
+:root:not([data-theme="light"]){--bg:#0b1020;--surface:#121a2f;--surface-2:#18223b;--surface-3:#212d4a;--line:#26324f;--accent:#5b63d6;--accent-hover:#6c74e6;--accent-ink:#aab4ff;--accent-soft:#1f2650;--nav:rgba(11,16,32,.94);--hero:#141c33;--gold:#f7ce55;--focus:#aab4ff}
 [data-theme="dark"] .page{background:radial-gradient(130% 60% at 50% 0%,rgba(124,140,255,.10),transparent 60%),linear-gradient(180deg,transparent 70%,rgba(122,90,67,.10))}
 .chip-icon,.reward-icon,.wallet-link .chip-icon{color:var(--gold)}
 .live-stage,.game-stage{background:linear-gradient(180deg,#141c33 0%,#1b2644 52%,#6b4f3b 52.5%,#7a5a43 70%,#5e4433 100%);border-color:rgba(247,206,85,.22)}
