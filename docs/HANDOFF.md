@@ -91,6 +91,7 @@ store-assets/iap/     인앱 상품 이미지 (1024px)
 - 3칸 안에 서 있는 다른 사람도 같이 찍힌다. 촬영을 시작하면 채팅으로 "옆으로 모여요"를 알린다. 내 포즈·표정은 내 화면에만 적용(다른 사람 화면에는 전송 안 함).
 - 프레임: 화이트·블랙 무료, 핑크 하트·씽크칩 네온은 찍을 때마다 ⬡20 (`payChips`, 구매 기록 없음 = 취소 불가). 사진 아래에 `thinkchip-arena.pages.dev` 가 들어가 공유가 곧 홍보.
 - 코드: `public/lounge/lounge.js` 의 `BOOTH_FRAMES`, `startBooth`, `boothShot`(4:3 으로 다시 그려서 복사), `boothStrip`. 테스트 훅 `__lounge.booth.shoot(frameId)`.
+- 관리자(ADMIN_PIDS)는 모든 프레임 무료. 촬영 중에도 시점 조작 가능: 화면을 밀면 회전·기울이기, 두 손가락·휠로 확대·축소(`boothCamera` 가 camState 변화량을 따라감). 촬영 중에는 탭해도 걷지 않는다.
 - 확인 못 한 것: 토스 WebView 안에서의 저장·공유, 여러 명이 실제로 같이 찍히는 화면.
 
 ### 게임
@@ -103,6 +104,10 @@ store-assets/iap/     인앱 상품 이미지 (1024px)
 - 토스: 인앱 상품 4개 등록·노출 ON. 버전 20261112-7 검토 중(이 빌드엔 광고 그룹 ID 없음). 광고가 들어간 새 AIT 빌드를 올려야 함 → 통과 후 **출시하기**.
 - 결제 검증(토스 mTLS) · MS 제한 · 광고 그룹 ID 모두 main 에 반영, 서버 배포 완료.
 - 사업·할 일 메모(사용자용 문서): https://claude.ai/artifact/VMD58T32vjQNGkRVdUrVvY
+
+### 웹 충전 안내 (2026-11-13 추가)
+- 웹 브라우저에는 결제 수단이 없어서, 지갑의 충전소 자리에 "Microsoft Store 앱에서 충전" 안내와 링크(`MS_STORE_URL`, src/main.js)를 보여 준다. 조건은 `TOSS_CONFIG.target!=='toss'` 이고 상품 목록이 비었을 때. **토스 빌드에는 나오지 않는다**(외부 결제 유도 금지).
+- 토스 미니앱으로 보내는 링크는 출시 전이라 넣지 않았다. 출시 후 `intoss://thinkchip-arena` 를 추가할 수 있다.
 
 ## 6. 남은 일 / 알려진 한계
 

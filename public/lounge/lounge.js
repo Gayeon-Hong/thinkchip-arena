@@ -517,6 +517,7 @@
   canvas.addEventListener('pointerup', up); canvas.addEventListener('pointercancel', (e) => { pointers.delete(e.pointerId); drag = null; });
   canvas.addEventListener('wheel', (e) => { e.preventDefault(); camState.dist = Math.max(9, Math.min(34, camState.dist + e.deltaY * 0.01)); }, {passive: false});
   function onTap(cx, cy) {
+    if (booth) return; // 📸 촬영 중에는 걸어가지 않아요(시점만 바꿔요)
     hideHint(); if (me.hs) endHandshake();
     ndc.set((cx / innerWidth) * 2 - 1, -(cy / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
     // 다른 캐릭터를 누르면: 다가가서 하트·박수·야유 같은 리액션을 보낼 수 있어요
@@ -1411,9 +1412,13 @@
   function boothAim() { // 나와 가까이(3칸 안) 서 있는 사람들이 한 화면에 들어오게
     const near = [...players.values()].filter((p) => p === me || p.av.position.distanceTo(me.av.position) < 3).slice(0, 6), c = new THREE.Vector3();
     for (const p of near) c.add(p.av.position); c.multiplyScalar(1 / near.length);
-    return {center: c, yaw: camState.yaw, dist: 4.4 + 0.9 * (near.length - 1)};
+    const keep = {dist: camState.dist, pitch: camState.pitch}; camState.dist = 18; // 확대·축소 여유가 양쪽으로 생기게 가운데 값에서 시작해요(끝나면 keep 으로 되돌려요)
+    return {center: c, yaw: camState.yaw, dist: 4.4 + 0.9 * (near.length - 1), yaw0: camState.yaw, dist0: 18, pitch0: camState.pitch, keep};
   }
-  function boothCamera() { const b = booth; camera.position.set(b.center.x + Math.sin(b.yaw) * b.dist, 1.55, b.center.z + Math.cos(b.yaw) * b.dist); camera.lookAt(b.center.x, 1.15, b.center.z); }
+  function boothCamera() { // 평소 시점 조작(camState)이 바뀐 만큼 부스 카메라도 돌리고·기울이고·당겨요
+    const b = booth, yaw = b.yaw + (camState.yaw - b.yaw0), d = Math.max(2.6, Math.min(13, b.dist * Math.pow(camState.dist / b.dist0, 1.6))), h = Math.max(0.7, Math.min(5, 1.55 + (camState.pitch - b.pitch0) * 3));
+    me.av.rotation.y = yaw; // 내 캐릭터는 늘 카메라를 봐요
+    camera.position.set(b.center.x + Math.sin(yaw) * d, h, b.center.z + Math.cos(yaw) * d); camera.lookAt(b.center.x, 1.15, b.center.z); }
   function boothShot() { // 화면 크기와 상관없이 4:3 한 장을 그려서 돌려줘요. 같은 틱 안에서 그리고 바로 복사해야 빈 화면이 안 찍혀요
     const pr = renderer.getPixelRatio(), fov = camera.fov;
     renderer.setPixelRatio(1); renderer.setSize(BOOTH.W, BOOTH.H, false); camera.clearViewOffset(); camera.aspect = BOOTH.W / BOOTH.H; camera.fov = 34; camera.updateProjectionMatrix();
@@ -1436,15 +1441,15 @@
     return c;
   }
   function openBooth() {
-    const btns = BOOTH_FRAMES.map((f) => `<button data-bf="${f.id}" class="booth-frame${f.id === boothFrame ? ' on' : ''}" style="background:linear-gradient(180deg,${f.bg[0]},${f.bg[1]});color:${f.ink}"><b>${esc(f.name)}</b><small>${f.price ? `⬡ ${f.price}` : '무료'}</small></button>`).join('');
-    openSheet({kicker: 'PHOTO BOOTH', title: '📸 인생네컷', html: `<p class="booth-tip">3초마다 한 장씩, 네 장을 찍어요. <b>옆에 서 있는 친구도 같이 찍혀요.</b> 찍는 동안 이모티콘을 누르면 표정이 바뀌어요.</p><div class="booth-frames" id="boothFrames">${btns}</div><button class="btn gold booth-go" id="boothGo">촬영 시작</button>`});
+    const btns = BOOTH_FRAMES.map((f) => `<button data-bf="${f.id}" class="booth-frame${f.id === boothFrame ? ' on' : ''}" style="background:linear-gradient(180deg,${f.bg[0]},${f.bg[1]});color:${f.ink}"><b>${esc(f.name)}</b><small>${f.price && !isAdmin() ? `⬡ ${f.price}` : '무료'}</small></button>`).join('');
+    openSheet({kicker: 'PHOTO BOOTH', title: '📸 인생네컷', html: `<p class="booth-tip">3초마다 한 장씩, 네 장을 찍어요. <b>옆에 서 있는 친구도 같이 찍혀요.</b> 찍는 동안 화면을 밀면 시점이 돌고, 두 손가락(또는 마우스 스크롤)으로 확대·축소할 수 있어요. 이모티콘을 누르면 표정도 바뀌어요.</p><div class="booth-frames" id="boothFrames">${btns}</div><button class="btn gold booth-go" id="boothGo">촬영 시작</button>`});
     $('boothFrames').onclick = (e) => { const b = e.target.closest('[data-bf]'); if (!b) return; boothFrame = b.dataset.bf; for (const x of $('boothFrames').children) x.classList.toggle('on', x === b); };
     $('boothGo').onclick = () => startBooth();
   }
   async function startBooth(fast = false) {
     if (booth) return;
     const f = BOOTH_FRAMES.find((x) => x.id === boothFrame) || BOOTH_FRAMES[0];
-    if (f.price) {
+    if (f.price && !isAdmin()) { // 관리자는 모든 프레임 무료
       if (acctOn() && !loggedIn()) return openLogin('스페셜 프레임을 쓰려면 ');
       if (myChips() < f.price) return toast(`씽크칩이 ⬡${fmt(f.price - myChips())} 부족해요`);
       if (!(await confirmBuy({title: `'${f.name}' 프레임으로 찍을까요?`, desc: '스페셜 프레임은 찍을 때마다 칩을 써요.', price: f.price, note: '촬영을 시작하면 취소할 수 없어요', cta: '찍기'}))) return;
@@ -1456,10 +1461,10 @@
     try {
       for (let i = 0; i < BOOTH_POSES.length; i++) {
         const pose = BOOTH_POSES[i]; setExpr(me, pose.expr, 4500); me.av.userData.armPose = pose.arms;
-        for (let s = 3; s > 0; s--) { boothEl.hidden = false; boothEl.innerHTML = `<div class="booth-count"><small>${i + 1} / ${BOOTH_POSES.length}</small><b>${s}</b></div>`; await sleep(fast ? 120 : 1000); }
+        for (let s = 3; s > 0; s--) { boothEl.hidden = false; boothEl.innerHTML = `<div class="booth-count"><small>${i + 1} / ${BOOTH_POSES.length}</small><b>${s}</b><em>화면을 밀어 돌리고, 두 손가락·스크롤로 확대·축소</em></div>`; await sleep(fast ? 120 : 1000); }
         shots.push(boothShot()); boothEl.innerHTML = '<div class="booth-flash"></div>'; await sleep(fast ? 60 : 380);
       }
-    } finally { boothEl.hidden = true; boothEl.innerHTML = ''; me.av.userData.armPose = null; booth = null; placeCamera(true); }
+    } finally { boothEl.hidden = true; boothEl.innerHTML = ''; me.av.userData.armPose = null; Object.assign(camState, booth.keep); booth = null; placeCamera(true); }
     const strip = boothStrip(shots, f.id), url = strip.toDataURL('image/jpeg', 0.92);
     openSheet({kicker: 'PHOTO BOOTH', title: '📸 인생네컷 완성!', html: `<div class="booth-result"><img id="boothImg" alt="방금 찍은 인생네컷" src="${url}"></div><p class="booth-tip">저장이 안 되면 사진을 길게 눌러 저장해요.</p><div class="booth-btns"><button class="btn ghost" id="boothAgain">다시 찍기</button><button class="btn gold" id="boothSave">저장 · 공유</button></div>`});
     $('boothAgain').onclick = openBooth;
