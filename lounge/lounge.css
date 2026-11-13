@@ -223,3 +223,4 @@ button.online{cursor:pointer;font:inherit;font-size:11.5px}.online em{font-style
 .booth-opt{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin:0 0 12px}
 .booth-opt input{width:18px;height:18px;accent-color:var(--gold)}
 .booth-opt span{margin-left:auto;font-size:16px}
+.booth-frames{grid-template-columns:repeat(3,1fr)}.booth-bgs{grid-template-columns:repeat(4,1fr)}

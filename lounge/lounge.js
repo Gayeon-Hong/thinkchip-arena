@@ -1415,6 +1415,8 @@
   const BOOTH_FRAMES = [
     {id: 'white', name: '화이트', bg: ['#ffffff', '#ffffff'], ink: '#1b2440', price: 0},
     {id: 'black', name: '블랙', bg: ['#14161f', '#14161f'], ink: '#ffffff', price: 0},
+    {id: 'mate', name: '칩 친구들', bg: ['#cfe8ff', '#9fcbff'], ink: '#274472', price: 0, art: 'mate'},
+    {id: 'party', name: '게임 파티', bg: ['#fff7e8', '#ffe2b8'], ink: '#5a3d1e', price: 30, art: 'party'},
     {id: 'heart', name: '핑크 하트', bg: ['#ffd9e6', '#ffb3cf'], ink: '#8a1c4a', price: 20, deco: '💗'},
     {id: 'chip', name: '씽크칩 네온', bg: ['#2a1f6b', '#7660ff'], ink: '#ffffff', price: 20, deco: '⬡'},
   ];
@@ -1435,6 +1437,9 @@
     {id: 'cream', name: '크림', c: ['#fff6e5', '#ffe2b0'], deco: ''},
     {id: 'purple', name: '보라 별', c: ['#3b2a7a', '#7660ff'], deco: '✨'},
     {id: 'night', name: '밤하늘', c: ['#0b1020', '#27336b'], deco: '⭐'},
+    {id: 'cards', name: '카드 게임', c: ['#7a1f3d', '#b13a5c'], icon: '🃏', draw: 'cards'},
+    {id: 'detective', name: '숫자 탐정', c: ['#16213e', '#2b4a86'], icon: '🔍', draw: 'detective'},
+    {id: 'chips', name: '칩 경매', c: ['#fff0bf', '#f7ce55'], icon: '⬡', draw: 'chips'},
   ];
   const boothZone = ZONES.find((z) => z.booth);
   let boothBgId = 'pink', boothBadges = true;
@@ -1442,7 +1447,7 @@
     const b = BOOTH_BGS.find((x) => x.id === id) || BOOTH_BGS[0]; boothBgId = b.id;
     const cv = document.createElement('canvas'); cv.width = 720; cv.height = 528; const x = cv.getContext('2d');
     const gr = x.createLinearGradient(0, 0, 0, cv.height); gr.addColorStop(0, b.c[0]); gr.addColorStop(1, b.c[1]); x.fillStyle = gr; x.fillRect(0, 0, cv.width, cv.height);
-    if (b.deco) { x.font = '34px sans-serif'; x.textAlign = 'center'; x.globalAlpha = 0.75; for (let i = 0; i < 26; i++) x.fillText(b.deco, 40 + ((i * 197) % 640), 50 + ((i * 131) % 440)); } // 늘 같은 자리에 흩뿌려요
+    if (b.draw) BOOTH_BG_ART[b.draw](x, cv.width, cv.height); else if (b.deco) { x.font = '34px sans-serif'; x.textAlign = 'center'; x.globalAlpha = 0.75; for (let i = 0; i < 26; i++) x.fillText(b.deco, 40 + ((i * 197) % 640), 50 + ((i * 131) % 440)); } // 늘 같은 자리에 흩뿌려요
     const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding; if (boothBg.mat.map) boothBg.mat.map.dispose(); boothBg.mat.map = t; boothBg.mat.color.set(0xffffff); boothBg.mat.needsUpdate = true;
   }
   setBoothBg(boothBgId);
@@ -1451,7 +1456,7 @@
   function boothExtraHtml() {
     const mine = myBadges();
     const bg = inBooth()
-      ? `<div class="booth-label">배경</div><div class="booth-bgs" id="boothBgs">${BOOTH_BGS.map((b) => `<button data-bg="${b.id}" class="${b.id === boothBgId ? 'on' : ''}" style="background:linear-gradient(180deg,${b.c[0]},${b.c[1]})"><i>${b.deco}</i><small>${esc(b.name)}</small></button>`).join('')}</div>`
+      ? `<div class="booth-label">배경</div><div class="booth-bgs" id="boothBgs">${BOOTH_BGS.map((b) => `<button data-bg="${b.id}" class="${b.id === boothBgId ? 'on' : ''}" style="background:linear-gradient(180deg,${b.c[0]},${b.c[1]})"><i>${b.icon || b.deco}</i><small>${esc(b.name)}</small></button>`).join('')}</div>`
       : (isHome() ? '' : '<button class="btn ghost booth-go" id="boothEnter" style="margin-bottom:10px">🚪 부스에 들어가서 찍기 · 배경 고르기</button>');
     const badge = mine.length
       ? `<label class="booth-opt"><input type="checkbox" id="boothBadge" ${boothBadges ? 'checked' : ''}> 🏅 내 뱃지 달고 찍기 <span>${mine.map((b) => BADGES[b].e).join('')}</span></label>`
@@ -1481,14 +1486,68 @@
     renderer.setPixelRatio(pr); camera.fov = fov; camState.offY = null; resize(); camState.dist = zoom;
     return c;
   }
+  // ───────── 인생네컷 그림: 그림 파일 없이 캔버스에 직접 그려요 ─────────
+  // 마스코트 '칩이': 씽크칩(육각형)에 얼굴과 팔다리를 붙인 캐릭터. (x, y) = 가운데, r = 크기
+  function chipMate(g, x, y, r, o = {}) {
+    g.save(); g.translate(x, y); g.rotate(o.tilt || 0); g.lineCap = 'round'; g.lineJoin = 'round';
+    const hex = (rr) => { g.beginPath(); for (let i = 0; i < 6; i++) { const a = Math.PI / 6 + i * Math.PI / 3; g[i ? 'lineTo' : 'moveTo'](Math.cos(a) * rr, Math.sin(a) * rr); } g.closePath(); };
+    const limb = o.limb || '#4a57c9', dark = '#2b2f55';
+    g.fillStyle = limb; for (const s of [-1, 1]) { g.beginPath(); g.ellipse(s * r * 0.36, r * 0.98, r * 0.22, r * 0.13, 0, 0, 7); g.fill(); } // 발
+    g.strokeStyle = limb; g.lineWidth = r * 0.17; // 팔 (wave = 왼팔 들기, cheer = 오른팔 들기)
+    g.beginPath(); g.moveTo(-r * 0.84, r * 0.12); g.lineTo(-r * 1.2, o.wave ? -r * 0.5 : r * 0.42); g.stroke();
+    g.beginPath(); g.moveTo(r * 0.84, r * 0.12); g.lineTo(r * 1.2, o.cheer ? -r * 0.5 : r * 0.42); g.stroke();
+    const gr = g.createLinearGradient(-r, -r, r, r); gr.addColorStop(0, o.c1 || '#6f9bff'); gr.addColorStop(1, o.c2 || '#a06bff');
+    hex(r * 1.09); g.fillStyle = '#fff'; g.fill(); g.lineWidth = r * 0.05; g.strokeStyle = dark; g.stroke(); // 스티커처럼 흰 테두리
+    hex(r * 0.93); g.fillStyle = gr; g.fill();
+    g.fillStyle = dark; // 눈
+    g.beginPath(); g.ellipse(-r * 0.32, -r * 0.08, r * 0.09, r * 0.13, 0, 0, 7); g.fill();
+    if (o.wink) { g.lineWidth = r * 0.07; g.strokeStyle = dark; g.beginPath(); g.arc(r * 0.32, -r * 0.04, r * 0.11, Math.PI * 1.1, Math.PI * 1.9); g.stroke(); }
+    else { g.beginPath(); g.ellipse(r * 0.32, -r * 0.08, r * 0.09, r * 0.13, 0, 0, 7); g.fill(); }
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(-r * 0.35, -r * 0.13, r * 0.035, 0, 7); g.fill(); if (!o.wink) { g.beginPath(); g.arc(r * 0.29, -r * 0.13, r * 0.035, 0, 7); g.fill(); }
+    g.fillStyle = 'rgba(255,150,180,.75)'; for (const s of [-1, 1]) { g.beginPath(); g.ellipse(s * r * 0.54, r * 0.2, r * 0.13, r * 0.08, 0, 0, 7); g.fill(); } // 볼
+    g.strokeStyle = dark; g.lineWidth = r * 0.06; g.beginPath(); g.arc(0, r * 0.12, r * 0.15, Math.PI * 0.15, Math.PI * 0.85); g.stroke(); // 입
+    if (o.hat) { g.fillStyle = o.hat; g.beginPath(); g.ellipse(0, -r * 0.74, r * 0.6, r * 0.44, 0, Math.PI, 0); g.fill(); g.fillStyle = '#fff'; g.beginPath(); (g.roundRect ? g.roundRect(-r * 0.66, -r * 0.82, r * 1.32, r * 0.2, r * 0.1) : g.rect(-r * 0.66, -r * 0.82, r * 1.32, r * 0.2)); g.fill(); g.beginPath(); g.arc(0, -r * 1.22, r * 0.15, 0, 7); g.fill(); } // 털모자
+    if (o.crown) { g.font = `${r * 0.8}px sans-serif`; g.textAlign = 'center'; g.fillText('👑', 0, -r * 0.82); }
+    g.restore();
+  }
+  const boothBubble = (g, text, x, y, ink) => { g.font = '800 21px system-ui, sans-serif'; g.textAlign = 'center'; const w = g.measureText(text).width + 30; // 말풍선
+    g.fillStyle = '#fff'; g.strokeStyle = ink; g.lineWidth = 2.5; g.beginPath(); (g.roundRect ? g.roundRect(x - w / 2, y - 22, w, 40, 20) : g.rect(x - w / 2, y - 22, w, 40)); g.fill(); g.stroke(); g.fillStyle = ink; g.fillText(text, x, y + 6); };
+  const boothScallop = (g, k, color) => { g.fillStyle = color; const r = 12, step = 21; // 사진 둘레의 구름 모양 테두리
+    for (let x = k.x; x <= k.x + k.w; x += step) for (const y of [k.y, k.y + k.h]) { g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+    for (let y = k.y; y <= k.y + k.h; y += step) for (const x of [k.x, k.x + k.w]) { g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+    g.fillRect(k.x, k.y, k.w, k.h); };
+  const BOOTH_ART = {
+    mate: { // 칩 친구들: 눈 내리는 하늘색 + 컷마다 빼꼼 나온 칩이와 말풍선
+      under(g, c, cells) { g.fillStyle = 'rgba(255,255,255,.85)'; for (let i = 0; i < 70; i++) { g.beginPath(); g.arc((i * 137) % c.width, (i * 271) % c.height, 2.5 + (i % 4), 0, 7); g.fill(); } for (const k of cells) boothScallop(g, k, '#fff'); },
+      over(g, c, cells, f) { const hats = ['#ff8fb1', '#ffd166', '#7ed6a5', '#ff9f6b'], says = ['오늘도 한 판!', '내가 1등~', '찰칵!', '또 놀자 ♡'];
+        cells.forEach((k, i) => { const left = i % 2 === 0; chipMate(g, left ? k.x + 44 : k.x + k.w - 44, k.y + k.h - 40, 40, {hat: hats[i % 4], wave: left, cheer: !left, wink: i === 2, tilt: left ? -0.12 : 0.12}); boothBubble(g, says[i % 4], left ? k.x + k.w - 96 : k.x + 96, k.y + 34, f.ink); });
+        chipMate(g, 84, c.height - 70, 46, {hat: '#ff8fb1', wave: true}); chipMate(g, c.width - 84, c.height - 70, 46, {hat: '#ffd166', cheer: true, c1: '#ff9fc4', c2: '#ff7aa8', limb: '#d9548a'}); } },
+    party: { // 게임 파티: 가랜드·풍선·게임 소품 스티커 + 왕관 쓴 칩이
+      under(g, c, cells) { const cols = ['#ff8fb1', '#ffd166', '#7cc4ff', '#b79cff', '#ff9f6b']; for (let i = 0; i < 17; i++) { const x = 8 + i * 40; g.fillStyle = cols[i % 5]; g.beginPath(); g.moveTo(x, 6); g.lineTo(x + 34, 6); g.lineTo(x + 17, 34); g.closePath(); g.fill(); } for (const k of cells) boothScallop(g, k, '#fff'); },
+      over(g, c, cells, f) { const stick = [['🃏', '🎲'], ['🧩', '⭐'], ['🔢', '🎈'], ['🏆', '💎']], says = ['블러핑 성공!', '숫자 탐정 출동', '마지막 한 개…!', '우승은 나야!'];
+        const put = (e, x, y, rot) => { g.save(); g.translate(x, y); g.rotate(rot); g.font = '46px sans-serif'; g.textAlign = 'center'; g.fillText(e, 0, 16); g.restore(); };
+        cells.forEach((k, i) => { const left = i % 2 === 0; put(stick[i % 4][0], left ? k.x + 30 : k.x + k.w - 30, k.y + 26, left ? -0.25 : 0.25); put(stick[i % 4][1], left ? k.x + k.w - 28 : k.x + 28, k.y + k.h - 30, left ? 0.2 : -0.2); boothBubble(g, says[i % 4], left ? k.x + k.w - 110 : k.x + 110, k.y + 34, f.ink); });
+        chipMate(g, c.width - 84, c.height - 62, 44, {crown: true, cheer: true, wink: true}); chipMate(g, 84, c.height - 66, 44, {wave: true, c1: '#ffd166', c2: '#ff9f6b', limb: '#c9742e'}); } },
+  };
+  // 게임 테마 배경 (부스 뒤 배경 막에 그려요)
+  const BOOTH_BG_ART = {
+    cards(x, w, h) { x.textAlign = 'center'; const suits = ['♠', '♥', '♦', '♣']; x.font = '64px sans-serif'; x.fillStyle = 'rgba(255,255,255,.22)'; for (let i = 0; i < 24; i++) x.fillText(suits[i % 4], 50 + (i % 6) * 124, 80 + Math.floor(i / 6) * 120);
+      [[110, 150, -0.3, '♥', '#e0314b'], [600, 130, 0.25, '♠', '#1b2440'], [640, 380, -0.15, '♦', '#e0314b'], [90, 390, 0.2, '♣', '#1b2440']].forEach(([cx, cy, r, s, col]) => { x.save(); x.translate(cx, cy); x.rotate(r); x.fillStyle = '#fff'; x.beginPath(); (x.roundRect ? x.roundRect(-46, -64, 92, 128, 12) : x.rect(-46, -64, 92, 128)); x.fill(); x.fillStyle = col; x.font = '60px sans-serif'; x.fillText(s, 0, 22); x.restore(); }); },
+    detective(x, w, h) { x.textAlign = 'center'; x.fillStyle = 'rgba(255,255,255,.5)'; const t = ['3', '7', '?', '1', '9', 'S', 'B', '5', '2', '?', '8', '4']; for (let i = 0; i < 30; i++) { x.font = `800 ${34 + (i % 4) * 16}px system-ui, sans-serif`; x.save(); x.translate(40 + ((i * 173) % 650), 60 + ((i * 97) % 430)); x.rotate(((i % 5) - 2) * 0.12); x.fillText(t[i % 12], 0, 0); x.restore(); } x.font = '90px sans-serif'; x.fillText('🔍', w - 110, 120); },
+    chips(x, w, h) { const hex = (cx, cy, r) => { x.beginPath(); for (let i = 0; i < 6; i++) { const a = Math.PI / 6 + i * Math.PI / 3; x[i ? 'lineTo' : 'moveTo'](cx + Math.cos(a) * r, cy + Math.sin(a) * r); } x.closePath(); };
+      for (let i = 0; i < 26; i++) { const r = 22 + (i % 3) * 10, cx = 40 + ((i * 151) % 660), cy = 50 + ((i * 113) % 440); hex(cx, cy, r); x.fillStyle = i % 2 ? 'rgba(255,255,255,.55)' : 'rgba(214,160,30,.45)'; x.fill(); x.lineWidth = 3; x.strokeStyle = 'rgba(160,110,10,.5)'; x.stroke(); } },
+  };
   function boothStrip(shots, frameId, badges = []) {
     const f = BOOTH_FRAMES.find((x) => x.id === frameId) || BOOTH_FRAMES[0], {cellW, cellH, pad, gap, foot} = BOOTH, n = shots.length;
     const c = document.createElement('canvas'); c.width = cellW + pad * 2; c.height = pad + n * cellH + (n - 1) * gap + foot; const g = c.getContext('2d');
     const grad = g.createLinearGradient(0, 0, 0, c.height); grad.addColorStop(0, f.bg[0]); grad.addColorStop(1, f.bg[1]); g.fillStyle = grad; g.fillRect(0, 0, c.width, c.height);
     if (f.deco) { g.globalAlpha = 0.5; g.font = '26px sans-serif'; g.textAlign = 'center'; g.fillStyle = f.ink; for (let y = 22; y < c.height; y += 96) { g.fillText(f.deco, 20, y + 10); g.fillText(f.deco, c.width - 20, y + 58); } g.globalAlpha = 1; }
-    shots.forEach((s, i) => g.drawImage(s, pad, pad + i * (cellH + gap), cellW, cellH));
-    if (badges.length) { const txt = badges.slice(0, 6).join(' '); g.font = '30px sans-serif'; g.textAlign = 'left'; const w = g.measureText(txt).width + 28; // 컷마다 왼쪽 아래에 내 뱃지
-      shots.forEach((s, i) => { const y = pad + i * (cellH + gap) + cellH - 58; g.fillStyle = 'rgba(12,16,32,.72)'; g.beginPath(); (g.roundRect ? g.roundRect(pad + 12, y, w, 46, 23) : g.rect(pad + 12, y, w, 46)); g.fill(); g.fillStyle = '#fff'; g.fillText(txt, pad + 26, y + 34); }); }
+    const cells = shots.map((s, i) => ({x: pad, y: pad + i * (cellH + gap), w: cellW, h: cellH})), art = f.art && BOOTH_ART[f.art];
+    if (art) art.under(g, c, cells, f);
+    shots.forEach((s, i) => { const k = cells[i]; if (!art) return g.drawImage(s, k.x, k.y, k.w, k.h); g.save(); g.beginPath(); (g.roundRect ? g.roundRect(k.x, k.y, k.w, k.h, 26) : g.rect(k.x, k.y, k.w, k.h)); g.clip(); g.drawImage(s, k.x, k.y, k.w, k.h); g.restore(); });
+    if (badges.length) { const txt = badges.slice(0, 6).join(' '); g.font = '30px sans-serif'; g.textAlign = 'left'; const w = g.measureText(txt).width + 28, bx = art ? pad + (cellW - w) / 2 : pad + 12; // 컷마다 아래쪽에 내 뱃지 (그림 프레임은 모서리에 캐릭터가 있어서 가운데)
+      shots.forEach((s, i) => { const y = pad + i * (cellH + gap) + cellH - 58; g.fillStyle = 'rgba(12,16,32,.72)'; g.beginPath(); (g.roundRect ? g.roundRect(bx, y, w, 46, 23) : g.rect(bx, y, w, 46)); g.fill(); g.fillStyle = '#fff'; g.fillText(txt, bx + 14, y + 34); }); }
+    if (art) art.over(g, c, cells, f);
     const y0 = c.height - foot; g.fillStyle = f.ink; g.textAlign = 'center';
     g.font = '900 34px system-ui, sans-serif'; g.fillText('THINKCHIP LOUNGE', c.width / 2, y0 + 58);
     const d = new Date(), p2 = (v) => String(v).padStart(2, '0');
