@@ -540,6 +540,7 @@
     // 다른 캐릭터를 누르면: 다가가서 하트·박수·야유 같은 리액션을 보낼 수 있어요
     const others = [...players.values()].filter((p) => p !== me), ph = ray.intersectObjects(others.map((p) => p.av), true)[0];
     if (ph) { let o = ph.object; while (o && !others.some((p) => p.av === o)) o = o.parent; const who = others.find((p) => p.av === o); if (who) { approachFor(who); return; } }
+    if (homeSec && myHome() && ray.intersectObject(homeSec, true)[0]) return openDesk(); // 내 방에 서 있는 비서를 누르면 라운지까지 안 가도 비서 데스크가 열려요
     hideRx(); camState.pan.set(0, 0, 0); // 걸어가면 다시 내 캐릭터 중심으로 (손인사 중에 바닥을 누르면 멈추고 걸어가요)
     const hit = ray.intersectObjects(clickables.filter((o) => o.userData.zone.group?.visible !== false), false)[0];
     if (hit) { const zz = hit.object.userData.zone; if (!zz.furn) { goToZone(zz); return; } if (!placingSc) return openFurniture(zz.furn); }
